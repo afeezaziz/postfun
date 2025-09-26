@@ -6,6 +6,29 @@ function pfGetCookie(name) {
   return null;
 }
 
+// SSE: in-app toasts for user alert events
+function pfInitAlertsSSE() {
+  if (typeof EventSource === 'undefined') return;
+  try {
+    const es = new EventSource('/sse/alerts');
+    es.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        const { symbol, condition, threshold, price } = data;
+        const msg = `${symbol} ${String(condition || '').replaceAll('_',' ')}: price ${Number(price||0).toFixed(6)} threshold ${Number(threshold||0).toFixed(6)}`;
+        pfToast(msg, 'info', 5000);
+      } catch (e) {
+        // ignore parse errors
+      }
+    };
+    es.onerror = () => {
+      // Likely unauthenticated or network issue; let browser handle retries silently
+    };
+  } catch (e) {
+    // ignore
+  }
+}
+
 async function pfNostrLogin() {
   try {
     if (!window.nostr || !window.nostr.getPublicKey || !window.nostr.signEvent) {
@@ -223,6 +246,7 @@ window.addEventListener('DOMContentLoaded', () => {
   pfInitTrade();
   pfInitSparklines();
   pfInitPricesSSE();
+  pfInitAlertsSSE();
 });
 
 // Toasts

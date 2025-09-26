@@ -26,6 +26,21 @@
         <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Go to Pool</a>
         {% if not current_user %}
           <button class="retro-button" onclick="pfNostrLogin()">Login to Trade</button>
+        {% else %}
+          <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+            {% if watchlisted %}
+              <form method="POST" action="{{ url_for('web.watchlist_remove', symbol=token.symbol, next=request.path) }}">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                <button class="retro-button" type="submit">Remove from Watchlist</button>
+              </form>
+            {% else %}
+              <form method="POST" action="{{ url_for('web.watchlist_add', symbol=token.symbol, next=request.path) }}">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                <button class="retro-button" type="submit">Add to Watchlist</button>
+              </form>
+            {% endif %}
+            <a class="retro-button" href="{{ url_for('web.watchlist') }}">View Watchlist</a>
+          </div>
         {% endif %}
       </div>
     </div>

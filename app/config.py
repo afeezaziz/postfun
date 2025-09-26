@@ -46,3 +46,13 @@ class Config:
 
     # CSRF (Flask-SeaSurf uses cookie 'csrf_token' by default)
     CSRF_COOKIE_NAME = os.getenv("CSRF_COOKIE_NAME", "csrf_token")
+
+    # Lightning (LNbits provider)
+    LNBITS_API_URL = os.getenv("LNBITS_API_URL", "")  # e.g. https://legend.lnbits.com
+    # Use invoice/read key to create invoices, admin key to pay invoices.
+    LNBITS_INVOICE_KEY = os.getenv("LNBITS_INVOICE_KEY", "")
+    LNBITS_ADMIN_KEY = os.getenv("LNBITS_ADMIN_KEY", "")
+    LNBITS_DEFAULT_MEMO = os.getenv("LNBITS_DEFAULT_MEMO", "Postfun deposit")
+    # Optional fee cap for withdrawals
+    LNBITS_MAX_FEE_SATS = int(os.getenv("LNBITS_MAX_FEE_SATS", "20"))
+

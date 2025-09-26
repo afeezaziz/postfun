@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block title %}Alerts | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Alerts</h1>
+    <form method="POST" action="{{ url_for('web.alerts_create') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end;">
+      <div>
+        <label>Token</label>
+        <select class="retro-input" name="symbol">
+          {% for t in tokens %}
+            <option value="{{ t.symbol }}">{{ t.symbol }} — {{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Condition</label>
+        <select class="retro-input" name="condition">
+          <option value="price_above">Price above</option>
+          <option value="price_below">Price below</option>
+          <option value="market_cap_above">Market cap above</option>
+          <option value="market_cap_below">Market cap below</option>
+          <option value="pct_change_above">24h change above (%)</option>
+          <option value="pct_change_below">24h change below (%)</option>
+        </select>
+      </div>
+      <div>
+        <label>Threshold</label>
+        <input class="retro-input" type="text" name="threshold" placeholder="e.g. 100.00" />
+      </div>
+      <div>
+        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+        <button class="retro-button" type="submit">Create Alert</button>
+      </div>
+    </form>
+    <p style="margin-top:8px; color: var(--dim-green); font-size: 14px;">Thresholds accept decimals. Percent-change thresholds use raw percent values, e.g. 5 for +5%.</p>
+  </section>
+
+  <section class="card">
+    <h2>Your Rules</h2>
+    {% if not rules %}
+      <div>No alert rules yet.</div>
+    {% else %}
+      <div class="pf-grid">
+        {% for r in rules %}
+          <div class="card">
+            <div><strong>{{ r.token.symbol }}</strong> — {{ r.token.name }}</div>
+            <div>Condition: <span class="pf-green">{{ r.condition }}</span></div>
+            <div>Threshold: <span class="pf-green">{{ '%.6f'|format(r.threshold or 0) }}</span></div>
+            <div>Active: <span class="pf-green">{{ 'Yes' if r.active else 'No' }}</span></div>
+            <div>Last Triggered: <span class="pf-green">{{ r.last_triggered_at or '—' }}</span></div>
+            <form method="POST" action="{{ url_for('web.alerts_delete', rule_id=r.id) }}" style="margin-top:8px;">
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+              <button class="retro-button" type="submit">Delete</button>
+            </form>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Recent Events</h2>
+    {% if not events %}
+      <div>No events.</div>
+    {% else %}
+      <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+        {% for e in events %}
+          <div class="card">
+            <div><strong>{{ e.rule.token.symbol }}</strong> — {{ e.rule.token.name }}</div>
+            <div>At: <span class="pf-green">{{ e.triggered_at }}</span></div>
+            <div>Price: <span class="pf-green">{{ '%.6f'|format(e.price or 0) }}</span></div>
+            <div>Condition: <span class="pf-green">{{ e.rule.condition }}</span></div>
+            <div>Threshold: <span class="pf-green">{{ '%.6f'|format(e.rule.threshold or 0) }}</span></div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Admin · Audit Logs | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Audit Logs</h1>
+    <form method="GET" action="{{ url_for('admin.audit') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; margin-bottom: 12px; gap: 8px;">
+      <div>
+        <label>User ID</label>
+        <input class="retro-input" type="text" name="user_id" value="{{ user_id }}" />
+      </div>
+      <div>
+        <label>Action contains</label>
+        <input class="retro-input" type="text" name="action" value="{{ action }}" />
+      </div>
+      <div>
+        <label>Start</label>
+        <input class="retro-input" type="datetime-local" name="start" value="{{ start }}" />
+      </div>
+      <div>
+        <label>End</label>
+        <input class="retro-input" type="datetime-local" name="end" value="{{ end }}" />
+      </div>
+      <div>
+        <label>Per Page</label>
+        <select class="retro-input" name="per">
+          {% for n in [25, 50, 100, 200, 500] %}
+            <option value="{{ n }}" {% if request.args.get('per', type=int) == n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:flex; gap:8px; align-items: center;">
+        <button class="retro-button" type="submit">Filter</button>
+        <a class="retro-button" href="{{ url_for('admin.audit_export', user_id=user_id, action=action, start=start, end=end) }}">Export CSV</a>
+      </div>
+    </form>
+    {% if not logs_p.items %}
+      <div>No audit entries.</div>
+    {% else %}
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Meta</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in logs_p.items %}
+              <tr>
+                <td>{{ log.id }}</td>
+                <td>{{ log.user_id or '—' }}</td>
+                <td>{{ log.action }}</td>
+                <td><code style="white-space: pre-wrap;">{{ log.meta or '—' }}</code></td>
+                <td>{{ log.created_at }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="pf-pagination">
+        {% set prev_url = url_for('admin.audit', page=logs_p.prev_num, user_id=user_id, action=action, start=start, end=end, per=request.args.get('per')) if logs_p.has_prev else None %}
+        {% set next_url = url_for('admin.audit', page=logs_p.next_num, user_id=user_id, action=action, start=start, end=end, per=request.args.get('per')) if logs_p.has_next else None %}
+        <div>Page {{ logs_p.page }} / {{ logs_p.pages or 1 }}</div>
+        <div style="display:flex; gap:8px;">
+          <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
+          <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

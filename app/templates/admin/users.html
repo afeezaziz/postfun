@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}Admin · Users | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Users</h1>
+    <form method="GET" action="{{ url_for('admin.users') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; margin-bottom: 12px;">
+      <div>
+        <label>Search</label>
+        <input class="retro-input" type="text" name="q" value="{{ q }}" placeholder="npub, pubkey, display name" />
+      </div>
+      <div>
+        <label>Per Page</label>
+        <select class="retro-input" name="per">
+          {% for n in [25, 50, 100, 200] %}
+            <option value="{{ n }}" {% if request.args.get('per', type=int) == n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <button class="retro-button" type="submit">Search</button>
+      </div>
+    </form>
+    {% if not users_p.items %}
+      <div>No users found.</div>
+    {% else %}
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>npub</th>
+              <th>pubkey_hex</th>
+              <th>Name</th>
+              <th>Admin</th>
+              <th>Created</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users_p.items %}
+              <tr>
+                <td>{{ u.id }}</td>
+                <td>{{ u.npub or '—' }}</td>
+                <td><code>{{ u.pubkey_hex }}</code></td>
+                <td>{{ u.display_name or '—' }}</td>
+                <td>{{ 'Yes' if u.is_admin else 'No' }}</td>
+                <td>{{ u.created_at }}</td>
+                <td>
+                  <form method="POST" action="{{ url_for('admin.users_toggle_admin', user_id=u.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                    <button class="retro-button" type="submit">{{ 'Revoke admin' if u.is_admin else 'Make admin' }}</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="pf-pagination">
+        {% set prev_url = url_for('admin.users', page=users_p.prev_num, q=q, per=request.args.get('per')) if users_p.has_prev else None %}
+        {% set next_url = url_for('admin.users', page=users_p.next_num, q=q, per=request.args.get('per')) if users_p.has_next else None %}
+        <div>Page {{ users_p.page }} / {{ users_p.pages or 1 }}</div>
+        <div style="display:flex; gap:8px;">
+          <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
+          <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

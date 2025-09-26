@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% block title %}Admin · Alerts | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Alert Rules</h1>
+    <form method="GET" action="{{ url_for('admin.alerts_admin') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; margin-bottom: 12px;">
+      <div>
+        <label>Per Page (rules)</label>
+        <select class="retro-input" name="per">
+          {% for n in [25, 50, 100, 200] %}
+            <option value="{{ n }}" {% if request.args.get('per', type=int) == n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <input type="hidden" name="e_page" value="{{ request.args.get('e_page', 1) }}" />
+        <input type="hidden" name="e_per" value="{{ request.args.get('e_per', 50) }}" />
+        <button class="retro-button" type="submit">Apply</button>
+      </div>
+    </form>
+    {% if not rules_p.items %}
+      <div>No rules.</div>
+    {% else %}
+      <form method="POST" action="{{ url_for('admin.alerts_bulk') }}">
+        <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center;">
+          <select class="retro-input" name="op" required>
+            <option value="" disabled selected>Bulk action…</option>
+            <option value="enable">Enable</option>
+            <option value="disable">Disable</option>
+            <option value="delete">Delete</option>
+          </select>
+          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+          <button class="retro-button" type="submit">Apply</button>
+        </div>
+        <div class="pf-table-wrap">
+          <table class="pf-table">
+          <thead>
+            <tr>
+              <th style="width:28px;">Sel</th>
+              <th>ID</th>
+              <th>User</th>
+              <th>Token</th>
+              <th>Condition</th>
+              <th>Threshold</th>
+              <th>Active</th>
+              <th>Last Triggered</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rules_p.items %}
+              <tr>
+                <td><input type="checkbox" name="rule_ids" value="{{ r.id }}" /></td>
+                <td>{{ r.id }}</td>
+                <td>{{ r.user_id }}</td>
+                <td>{{ r.token.symbol }}</td>
+                <td>{{ r.condition }}</td>
+                <td>{{ '%.6f'|format(r.threshold or 0) }}</td>
+                <td>{{ 'Yes' if r.active else 'No' }}</td>
+                <td>{{ r.last_triggered_at or '—' }}</td>
+                <td>
+                  <button class="retro-button" type="submit" formmethod="POST" formaction="{{ url_for('admin.alerts_toggle', rule_id=r.id) }}">{{ 'Disable' if r.active else 'Enable' }}</button>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          </table>
+        </div>
+      </form>
+      <div class="pf-pagination">
+        {% set prev_url = url_for('admin.alerts_admin', page=rules_p.prev_num, per=request.args.get('per'), e_page=request.args.get('e_page'), e_per=request.args.get('e_per')) if rules_p.has_prev else None %}
+        {% set next_url = url_for('admin.alerts_admin', page=rules_p.next_num, per=request.args.get('per'), e_page=request.args.get('e_page'), e_per=request.args.get('e_per')) if rules_p.has_next else None %}
+        <div>Rules Page {{ rules_p.page }} / {{ rules_p.pages or 1 }}</div>
+        <div style="display:flex; gap:8px;">
+          <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
+          <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Recent Events</h2>
+    <form method="GET" action="{{ url_for('admin.alerts_admin') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; margin-bottom: 12px;">
+      <div>
+        <label>Per Page (events)</label>
+        <select class="retro-input" name="e_per">
+          {% for n in [25, 50, 100, 200] %}
+            <option value="{{ n }}" {% if request.args.get('e_per', type=int) == n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <input type="hidden" name="page" value="{{ request.args.get('page', 1) }}" />
+        <input type="hidden" name="per" value="{{ request.args.get('per', 50) }}" />
+        <button class="retro-button" type="submit">Apply</button>
+      </div>
+    </form>
+    {% if not events_p.items %}
+      <div>No events.</div>
+    {% else %}
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Rule</th>
+              <th>User</th>
+              <th>Token</th>
+              <th>Price</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in events_p.items %}
+              <tr>
+                <td>{{ e.id }}</td>
+                <td>{{ e.rule_id }}</td>
+                <td>{{ e.rule.user_id }}</td>
+                <td>{{ e.rule.token.symbol }}</td>
+                <td>{{ '%.6f'|format(e.price or 0) }}</td>
+                <td>{{ e.triggered_at }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="pf-pagination">
+        {% set prev_url = url_for('admin.alerts_admin', e_page=events_p.prev_num, e_per=request.args.get('e_per'), page=request.args.get('page'), per=request.args.get('per')) if events_p.has_prev else None %}
+        {% set next_url = url_for('admin.alerts_admin', e_page=events_p.next_num, e_per=request.args.get('e_per'), page=request.args.get('page'), per=request.args.get('per')) if events_p.has_next else None %}
+        <div>Events Page {{ events_p.page }} / {{ events_p.pages or 1 }}</div>
+        <div style="display:flex; gap:8px;">
+          <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
+          <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

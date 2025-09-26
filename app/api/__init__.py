@@ -1,8 +1,28 @@
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, abort
-from ..models import Token
-from ..extensions import cache
+from flask import Blueprint, jsonify, abort, request, g, current_app
+from ..models import (
+    Token,
+    TokenInfo,
+    WatchlistItem,
+    AlertRule,
+    AlertEvent,
+    AccountBalance,
+    LedgerEntry,
+    LightningInvoice,
+    LightningWithdrawal,
+    User,
+    TokenBalance,
+    SwapPool,
+    SwapTrade,
+    BurnEvent,
+)
+from ..extensions import cache, db, limiter, csrf
+from ..utils.jwt_utils import require_auth
+from ..services.lightning import LNBitsClient
+from datetime import datetime
+from decimal import Decimal
+from ..services.amm import quote_swap, execute_swap
 
 api_bp = Blueprint("api", __name__)
 
@@ -21,3 +41,910 @@ def get_token(symbol: str):
     if not token:
         abort(404)
     return jsonify(token.to_dict())
+
+
+# ---- Lightning: Balance / Deposit / Withdraw ----
+
+def _get_user_from_jwt() -> User | None:
+    payload = getattr(g, "jwt_payload", {}) or {}
+    uid = payload.get("uid")
+    sub = payload.get("sub")
+    user = None
+    if isinstance(uid, int):
+        user = db.session.get(User, uid)
+    if not user and isinstance(sub, str):
+        user = User.query.filter_by(pubkey_hex=sub.lower()).first()
+    return user
+
+
+def _get_or_create_balance(user_id: int, asset: str = "BTC") -> AccountBalance:
+    bal = AccountBalance.query.filter_by(user_id=user_id, asset=asset).with_for_update().first()
+    if not bal:
+        bal = AccountBalance(user_id=user_id, asset=asset, balance_sats=0)
+        db.session.add(bal)
+        db.session.flush()
+    return bal
+
+
+def _is_admin(user: User | None) -> bool:
+    return bool(user and getattr(user, "is_admin", False))
+
+
+def _parse_decimal(val) -> Decimal:
+    try:
+        return Decimal(str(val))
+    except Exception:
+        raise ValueError("invalid_decimal")
+
+
+# ---- Tokens: Launch, Details, Trending ----
+
+
+@api_bp.post("/tokens/launch")
+@require_auth
+@csrf.exempt
+def tokens_launch():
+    """Permissionless token launch with optional initial AMM pool against gUSD.
+
+    Body:
+      - symbol (str, required, A-Z0-9, 3..12)
+      - name (str, required)
+      - description, logo_url, website, twitter, telegram, discord (optional)
+      - total_supply (decimal, optional)
+      - initial_price_usd (decimal, optional)
+      - initial_liquidity_usd (decimal, optional) -> used with initial_price_usd to size pool
+      - create_pool (bool, default true)
+      - fee_bps_base (int, default 30)
+      - stage1_threshold, stage2_threshold, stage3_threshold (decimals, optional)
+      - burn_token_symbol (optional) and burn_stage{1..4}_amount (decimals, optional)
+    """
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+
+    data = request.get_json(force=True)
+    symbol = (data.get("symbol") or "").strip().upper()
+    name = (data.get("name") or "").strip()
+    if not symbol or not name:
+        return jsonify({"error": "symbol_and_name_required"}), 400
+    if not (3 <= len(symbol) <= 12) or not symbol.replace("_", "").isalnum():
+        return jsonify({"error": "invalid_symbol"}), 400
+    reserved = {"GUSD", "GBTC", "PFUN"}
+    if symbol in reserved or symbol.startswith("LP-"):
+        return jsonify({"error": "reserved_symbol"}), 400
+    if Token.query.filter_by(symbol=symbol).first():
+        return jsonify({"error": "symbol_taken"}), 400
+
+    # Create token
+    tok = Token(symbol=symbol, name=name)
+    db.session.add(tok)
+    db.session.flush()  # get tok.id
+
+    # Save metadata
+    info = TokenInfo(
+        token_id=tok.id,
+        description=(data.get("description") or None),
+        logo_url=(data.get("logo_url") or None),
+        website=(data.get("website") or None),
+        twitter=(data.get("twitter") or None),
+        telegram=(data.get("telegram") or None),
+        discord=(data.get("discord") or None),
+        total_supply=_parse_decimal(data.get("total_supply")) if data.get("total_supply") is not None else None,
+        launch_user_id=user.id,
+        launch_at=datetime.utcnow(),
+    )
+    db.session.add(info)
+
+    # Optionally create AMM pool against gUSD using initial price/liquidity
+    pool_obj = None
+    create_pool = bool(data.get("create_pool", True))
+    if create_pool:
+        gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+        if not gusd:
+            db.session.rollback()
+            return jsonify({"error": "gusd_not_found"}), 400
+
+        fee_bps_base = int(data.get("fee_bps_base", 30))
+        s1 = data.get("stage1_threshold")
+        s2 = data.get("stage2_threshold")
+        s3 = data.get("stage3_threshold")
+        burn_symbol = data.get("burn_token_symbol")
+        burn_token = Token.query.filter_by(symbol=burn_symbol).first() if isinstance(burn_symbol, str) else None
+
+        initial_price = data.get("initial_price_usd")
+        initial_liq_usd = data.get("initial_liquidity_usd")
+        if initial_price is not None and initial_liq_usd is not None:
+            try:
+                p = _parse_decimal(initial_price)
+                L = _parse_decimal(initial_liq_usd)
+            except Exception:
+                return jsonify({"error": "invalid_initial_price_or_liquidity"}), 400
+            if p <= 0 or L <= 0:
+                return jsonify({"error": "initial_price_and_liquidity_must_be_positive"}), 400
+            # Use half liquidity on each side: reserve_b (gUSD) = L/2; reserve_a (new token) = (L/2)/p
+            reserve_b = (L / Decimal(2)).quantize(Decimal("1.000000000000000000"))
+            reserve_a = (reserve_b / p).quantize(Decimal("1.000000000000000000"))
+        else:
+            # Fallback: very small virtual reserves
+            reserve_a = Decimal("1000")
+            reserve_b = Decimal("1000")
+
+        pool_obj = SwapPool(
+            token_a_id=tok.id,
+            token_b_id=gusd.id,
+            reserve_a=reserve_a,
+            reserve_b=reserve_b,
+            fee_bps_base=fee_bps_base,
+            stage=1,
+            stage1_threshold=_parse_decimal(s1) if s1 is not None else None,
+            stage2_threshold=_parse_decimal(s2) if s2 is not None else None,
+            stage3_threshold=_parse_decimal(s3) if s3 is not None else None,
+            burn_token_id=burn_token.id if burn_token else None,
+            burn_stage1_amount=_parse_decimal(data.get("burn_stage1_amount")) if data.get("burn_stage1_amount") is not None else None,
+            burn_stage2_amount=_parse_decimal(data.get("burn_stage2_amount")) if data.get("burn_stage2_amount") is not None else None,
+            burn_stage3_amount=_parse_decimal(data.get("burn_stage3_amount")) if data.get("burn_stage3_amount") is not None else None,
+            burn_stage4_amount=_parse_decimal(data.get("burn_stage4_amount")) if data.get("burn_stage4_amount") is not None else None,
+        )
+        db.session.add(pool_obj)
+
+    db.session.commit()
+
+    out = {"token": tok.to_dict(), "info": info.to_dict()}
+    if pool_obj:
+        out["pool"] = pool_obj.to_dict()
+    return jsonify(out), 201
+
+
+@api_bp.get("/tokens/<symbol>/full")
+def tokens_full(symbol: str):
+    tok = Token.query.filter_by(symbol=symbol).first()
+    if not tok:
+        return jsonify({"error": "token_not_found"}), 404
+    info = TokenInfo.query.filter_by(token_id=tok.id).first()
+    # Prefer pool with gUSD pairing if present
+    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    pool = None
+    if gusd:
+        pool = SwapPool.query.filter(
+            ((SwapPool.token_a_id == tok.id) & (SwapPool.token_b_id == gusd.id))
+            | ((SwapPool.token_b_id == tok.id) & (SwapPool.token_a_id == gusd.id))
+        ).first()
+    if not pool:
+        pool = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).first()
+    return jsonify({
+        "token": tok.to_dict(),
+        "info": info.to_dict() if info else None,
+        "pool": pool.to_dict() if pool else None,
+    })
+
+
+@api_bp.get("/tokens/trending")
+def tokens_trending():
+    """Return tokens ranked by 24h trade volume (approx), along with pool and price.
+    For now, measure volume as sum of amount_in (token A units) for pools with gUSD pairing.
+    """
+    from datetime import timedelta as _td
+
+    since = datetime.utcnow() - _td(days=1)
+    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    q = db.session.query(SwapPool).order_by(SwapPool.id.asc())
+    pools = q.all()
+    items = []
+    for p in pools:
+        # Restrict to pools that involve gUSD to approximate USD pricing
+        if not gusd or (p.token_a_id != gusd.id and p.token_b_id != gusd.id):
+            continue
+        vol = (
+            db.session.query(SwapTrade)
+            .filter(SwapTrade.pool_id == p.id, SwapTrade.created_at >= since)
+            .with_entities(db.func.coalesce(db.func.sum(SwapTrade.amount_in), 0))
+            .scalar()
+        )
+        token_id = p.token_a_id if p.token_b_id == gusd.id else p.token_b_id
+        tok = db.session.get(Token, token_id)
+        if not tok:
+            continue
+        # Approx price in USD from reserves (gUSD/token)
+        if p.token_b_id == gusd.id:
+            price = (Decimal(p.reserve_b) / Decimal(p.reserve_a)) if p.reserve_a and p.reserve_b else None
+        else:
+            price = (Decimal(p.reserve_a) / Decimal(p.reserve_b)) if p.reserve_a and p.reserve_b else None
+        items.append({
+            "symbol": tok.symbol,
+            "name": tok.name,
+            "token_id": tok.id,
+            "pool_id": p.id,
+            "stage": int(p.stage or 1),
+            "fee_bps": p.current_fee_bps(),
+            "price_usd": float(price) if price is not None else None,
+            "volume_24h": float(vol or 0),
+        })
+    # Sort by 24h volume desc
+    items.sort(key=lambda x: x["volume_24h"], reverse=True)
+    return jsonify({"items": items})
+
+
+@api_bp.get("/tokens/<symbol>/holders")
+def tokens_holders(symbol: str):
+    tok = Token.query.filter_by(symbol=symbol).first()
+    if not tok:
+        return jsonify({"error": "token_not_found"}), 404
+    # Holders: users with amount > 0
+    q = (
+        db.session.query(TokenBalance)
+        .filter(TokenBalance.token_id == tok.id, (TokenBalance.amount > 0))
+        .order_by(TokenBalance.amount.desc())
+    )
+    limit = max(1, min(500, request.args.get("limit", default=50, type=int)))
+    rows = q.limit(limit).all()
+    holders_count = db.session.query(db.func.count(TokenBalance.id)).filter(
+        TokenBalance.token_id == tok.id, (TokenBalance.amount > 0)
+    ).scalar()
+    items = []
+    for r in rows:
+        items.append({
+            "user_id": r.user_id,
+            "amount": float(r.amount or 0),
+        })
+    return jsonify({
+        "token_id": tok.id,
+        "symbol": tok.symbol,
+        "holders_count": int(holders_count or 0),
+        "top_holders": items,
+    })
+
+
+@api_bp.get("/tokens/<symbol>/trades")
+def tokens_trades(symbol: str):
+    tok = Token.query.filter_by(symbol=symbol).first()
+    if not tok:
+        return jsonify({"error": "token_not_found"}), 404
+    pools = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).all()
+    pool_ids = [p.id for p in pools]
+    if not pool_ids:
+        return jsonify({"items": []})
+    limit = max(1, min(500, request.args.get("limit", default=100, type=int)))
+    rows = (
+        SwapTrade.query.filter(SwapTrade.pool_id.in_(pool_ids))
+        .order_by(SwapTrade.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return jsonify({"items": [t.to_dict() for t in rows]})
+
+
+@api_bp.get("/lightning/balance")
+@require_auth
+def lightning_balance():
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    bal = _get_or_create_balance(user.id)
+    return jsonify(bal.to_dict())
+
+
+@api_bp.post("/lightning/deposit")
+@require_auth
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_DEFAULT", "100 per hour"))
+@csrf.exempt
+def lightning_deposit_create():
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    amount_sats = data.get("amount_sats")
+    memo = data.get("memo") or current_app.config.get("LNBITS_DEFAULT_MEMO", "Deposit")
+    try:
+        amount_sats = int(amount_sats)
+    except Exception:
+        return jsonify({"error": "invalid_amount"}), 400
+    if amount_sats <= 0:
+        return jsonify({"error": "amount_must_be_positive"}), 400
+
+    try:
+        client = LNBitsClient()
+    except Exception as e:
+        return jsonify({"error": "lightning_not_configured", "detail": str(e)}), 500
+
+    ok, res = client.create_invoice(amount_sats=amount_sats, memo=memo)
+    if not ok:
+        return jsonify({"error": "lnbits_error", "detail": res}), 502
+
+    payment_request = res.get("payment_request") or res.get("pay_request")
+    payment_hash = res.get("payment_hash")
+    checking_id = res.get("checking_id")
+    if not payment_request or not payment_hash:
+        return jsonify({"error": "lnbits_bad_response"}), 502
+
+    inv = LightningInvoice(
+        user_id=user.id,
+        amount_sats=amount_sats,
+        memo=memo,
+        payment_request=payment_request,
+        payment_hash=payment_hash,
+        checking_id=checking_id,
+        status="pending",
+        provider="lnbits",
+    )
+    db.session.add(inv)
+    db.session.commit()
+
+    return jsonify(inv.to_dict()), 201
+
+
+@api_bp.get("/lightning/invoices/<invoice_id>")
+@require_auth
+def lightning_invoice_status(invoice_id: str):
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    inv = db.session.get(LightningInvoice, invoice_id)
+    if not inv or inv.user_id != user.id:
+        return jsonify({"error": "invoice_not_found"}), 404
+
+    # If already paid and credited, just return
+    if inv.status in ("paid", "expired", "cancelled") and inv.credited:
+        return jsonify(inv.to_dict())
+
+    # Poll provider for status
+    try:
+        client = LNBitsClient()
+        ok, res = client.get_payment_status(inv.payment_hash)
+    except Exception as e:
+        ok, res = False, {"error": str(e)}
+
+    if ok:
+        # LNbits returns { "paid": bool, ... }
+        paid = bool(res.get("paid"))
+        if paid and inv.status != "paid":
+            inv.status = "paid"
+            inv.paid_at = datetime.utcnow()
+        # If paid and not credited, credit user's balance and write ledger
+        if paid and not inv.credited:
+            bal = _get_or_create_balance(user.id)
+            bal.balance_sats = int(bal.balance_sats) + int(inv.amount_sats)
+            db.session.add(bal)
+            le = LedgerEntry(
+                user_id=user.id,
+                entry_type="deposit",
+                delta_sats=int(inv.amount_sats),
+                ref_type="invoice",
+                ref_id=inv.id,
+            )
+            db.session.add(le)
+            inv.credited = True
+            db.session.add(inv)
+            db.session.commit()
+    else:
+        # keep as pending; optionally return provider error
+        pass
+
+    return jsonify(inv.to_dict())
+
+
+@api_bp.post("/lightning/withdraw")
+@require_auth
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_DEFAULT", "100 per hour"))
+@csrf.exempt
+def lightning_withdraw():
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    data = request.get_json(force=True)
+    bolt11 = data.get("bolt11")
+    amount_sats = data.get("amount_sats")  # optional; try to decode if missing
+    if not isinstance(bolt11, str) or not bolt11:
+        return jsonify({"error": "invalid_bolt11"}), 400
+
+    # Try to derive amount if not provided (best-effort)
+    if amount_sats is None:
+        amount_sats = data.get("amount")
+    if amount_sats is None:
+        # could call LNbits decode here if available; for now, require client-provided
+        return jsonify({"error": "amount_required"}), 400
+    try:
+        amount_sats = int(amount_sats)
+    except Exception:
+        return jsonify({"error": "invalid_amount"}), 400
+    if amount_sats <= 0:
+        return jsonify({"error": "amount_must_be_positive"}), 400
+
+    max_fee = int(current_app.config.get("LNBITS_MAX_FEE_SATS", 20))
+
+    # Reserve funds: deduct amount now; add fee later when known; refund on failure
+    bal = _get_or_create_balance(user.id)
+    if bal.balance_sats < amount_sats:
+        return jsonify({"error": "insufficient_funds", "balance_sats": int(bal.balance_sats)}), 400
+
+    w = LightningWithdrawal(
+        user_id=user.id,
+        amount_sats=amount_sats,
+        bolt11=bolt11,
+        status="pending",
+        provider="lnbits",
+    )
+    db.session.add(w)
+    # Deduct immediately
+    bal.balance_sats = int(bal.balance_sats) - amount_sats
+    db.session.add(bal)
+    le = LedgerEntry(
+        user_id=user.id,
+        entry_type="withdrawal",
+        delta_sats=-int(amount_sats),
+        ref_type="withdrawal",
+        ref_id=w.id,
+    )
+    db.session.add(le)
+    db.session.commit()
+
+    # Trigger payment with provider
+    try:
+        client = LNBitsClient()
+        ok, res = client.pay_invoice(bolt11=bolt11, max_fee_sats=max_fee)
+        if not ok:
+            raise RuntimeError(str(res))
+        w.payment_hash = res.get("payment_hash") or w.payment_hash
+        w.checking_id = res.get("checking_id") or w.checking_id
+        db.session.add(w)
+        db.session.commit()
+    except Exception as e:
+        # Refund on failure
+        bal = _get_or_create_balance(user.id)
+        bal.balance_sats = int(bal.balance_sats) + amount_sats
+        db.session.add(bal)
+        w.status = "failed"
+        db.session.add(w)
+        db.session.add(LedgerEntry(
+            user_id=user.id,
+            entry_type="adjustment",
+            delta_sats=int(amount_sats),
+            ref_type="withdrawal",
+            ref_id=w.id,
+            meta=f"refund: {e}",
+        ))
+        db.session.commit()
+        return jsonify({"error": "withdraw_failed", "detail": str(e)}), 502
+
+    return jsonify(w.to_dict()), 201
+
+
+@api_bp.get("/lightning/withdrawals/<withdraw_id>")
+@require_auth
+def lightning_withdraw_status(withdraw_id: str):
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    w = db.session.get(LightningWithdrawal, withdraw_id)
+    if not w or w.user_id != user.id:
+        return jsonify({"error": "withdrawal_not_found"}), 404
+
+    if w.status in ("confirmed", "failed"):
+        return jsonify(w.to_dict())
+
+
+# ---- AMM: Pools, Quotes, Swaps, Balances ----
+
+
+@api_bp.post("/amm/pools")
+@require_auth
+@csrf.exempt
+def amm_create_pool():
+    user = _get_user_from_jwt()
+    if not _is_admin(user):
+        return jsonify({"error": "forbidden"}), 403
+    data = request.get_json(force=True)
+
+    # Identify tokens by id or symbol
+    token_a_id = data.get("token_a_id")
+    token_b_id = data.get("token_b_id")
+    symbol_a = data.get("symbol_a")
+    symbol_b = data.get("symbol_b")
+
+    if not token_a_id and isinstance(symbol_a, str):
+        t = Token.query.filter_by(symbol=symbol_a).first()
+        if not t:
+            return jsonify({"error": "token_a_not_found"}), 404
+        token_a_id = t.id
+    if not token_b_id and isinstance(symbol_b, str):
+        t = Token.query.filter_by(symbol=symbol_b).first()
+        if not t:
+            return jsonify({"error": "token_b_not_found"}), 404
+        token_b_id = t.id
+    if not token_a_id or not token_b_id:
+        return jsonify({"error": "token_ids_required"}), 400
+
+    reserve_a = _parse_decimal(data.get("reserve_a", 0))
+    reserve_b = _parse_decimal(data.get("reserve_b", 0))
+    fee_bps_base = int(data.get("fee_bps_base", 30))
+    stage1_threshold = data.get("stage1_threshold")
+    stage2_threshold = data.get("stage2_threshold")
+    stage3_threshold = data.get("stage3_threshold")
+    burn_token_id = data.get("burn_token_id")
+    burn_stage1_amount = data.get("burn_stage1_amount")
+    burn_stage2_amount = data.get("burn_stage2_amount")
+    burn_stage3_amount = data.get("burn_stage3_amount")
+    burn_stage4_amount = data.get("burn_stage4_amount")
+
+    pool = SwapPool(
+        token_a_id=int(token_a_id),
+        token_b_id=int(token_b_id),
+        reserve_a=reserve_a,
+        reserve_b=reserve_b,
+        fee_bps_base=fee_bps_base,
+        stage=1,
+        stage1_threshold=_parse_decimal(stage1_threshold) if stage1_threshold is not None else None,
+        stage2_threshold=_parse_decimal(stage2_threshold) if stage2_threshold is not None else None,
+        stage3_threshold=_parse_decimal(stage3_threshold) if stage3_threshold is not None else None,
+        burn_token_id=int(burn_token_id) if burn_token_id else None,
+        burn_stage1_amount=_parse_decimal(burn_stage1_amount) if burn_stage1_amount is not None else None,
+        burn_stage2_amount=_parse_decimal(burn_stage2_amount) if burn_stage2_amount is not None else None,
+        burn_stage3_amount=_parse_decimal(burn_stage3_amount) if burn_stage3_amount is not None else None,
+        burn_stage4_amount=_parse_decimal(burn_stage4_amount) if burn_stage4_amount is not None else None,
+    )
+    db.session.add(pool)
+    db.session.commit()
+    return jsonify(pool.to_dict()), 201
+
+
+@api_bp.get("/amm/pools")
+def amm_list_pools():
+    pools = SwapPool.query.order_by(SwapPool.id.asc()).all()
+    return jsonify({"items": [p.to_dict() for p in pools]})
+
+
+@api_bp.get("/amm/pools/<int:pool_id>")
+def amm_get_pool(pool_id: int):
+    pool = db.session.get(SwapPool, pool_id)
+    if not pool:
+        return jsonify({"error": "pool_not_found"}), 404
+    return jsonify(pool.to_dict())
+
+
+@api_bp.post("/amm/quote")
+@require_auth
+@csrf.exempt
+def amm_quote():
+    data = request.get_json(force=True)
+    pool_id = data.get("pool_id")
+    side = data.get("side")
+    amount_in_raw = data.get("amount_in")
+    try:
+        amount_in = _parse_decimal(amount_in_raw)
+    except Exception:
+        return jsonify({"error": "invalid_amount_in"}), 400
+    pool = db.session.get(SwapPool, int(pool_id)) if pool_id else None
+    if not pool:
+        return jsonify({"error": "pool_not_found"}), 404
+    try:
+        q = quote_swap(pool, side, amount_in)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({
+        "pool_id": pool.id,
+        "side": side,
+        "amount_in": float(amount_in),
+        "amount_out": float(q.amount_out),
+        "fee_bps": q.fee_bps,
+        "fee_amount": float(q.fee_amount),
+        "effective_in": float(q.effective_in),
+    })
+
+
+@api_bp.post("/amm/swap")
+@require_auth
+@csrf.exempt
+def amm_swap():
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    data = request.get_json(force=True)
+    pool_id = data.get("pool_id")
+    side = data.get("side")
+    amount_in_raw = data.get("amount_in")
+    if not pool_id or not side:
+        return jsonify({"error": "missing_params"}), 400
+    try:
+        amount_in = _parse_decimal(amount_in_raw)
+    except Exception:
+        return jsonify({"error": "invalid_amount_in"}), 400
+    try:
+        trade, q, pool = execute_swap(db.session, int(pool_id), user.id, side, amount_in)
+        db.session.commit()
+        return jsonify({
+            "trade": trade.to_dict(),
+            "pool": pool.to_dict(),
+            "quote": {
+                "amount_out": float(q.amount_out),
+                "fee_bps": q.fee_bps,
+                "fee_amount": float(q.fee_amount),
+                "effective_in": float(q.effective_in),
+            },
+        }), 201
+    except ValueError as ve:
+        db.session.rollback()
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "swap_failed", "detail": str(e)}), 500
+
+
+@api_bp.get("/amm/balances")
+@require_auth
+def amm_balances():
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    rows = (
+        db.session.query(TokenBalance, Token)
+        .join(Token, Token.id == TokenBalance.token_id)
+        .filter(TokenBalance.user_id == user.id)
+        .all()
+    )
+    items = []
+    for bal, tok in rows:
+        items.append({
+            "token_id": tok.id,
+            "symbol": tok.symbol,
+            "name": tok.name,
+            "amount": float(bal.amount or 0),
+        })
+    return jsonify({"items": items})
+
+
+def _get_or_create_token_balance(user_id: int, token_id: int) -> TokenBalance:
+    row = (
+        TokenBalance.query.filter_by(user_id=user_id, token_id=token_id)
+        .with_for_update()
+        .first()
+    )
+    if not row:
+        row = TokenBalance(user_id=user_id, token_id=token_id, amount=Decimal("0"))
+        db.session.add(row)
+        db.session.flush()
+    return row
+
+
+@api_bp.post("/amm/airdrop")
+@require_auth
+@csrf.exempt
+def amm_airdrop():
+    """Admin: credit a user's token balance for testing."""
+    actor = _get_user_from_jwt()
+    if not _is_admin(actor):
+        return jsonify({"error": "forbidden"}), 403
+    data = request.get_json(force=True)
+
+    target_user_id = data.get("target_user_id")
+    target_pubkey = data.get("target_pubkey")
+    target_npub = data.get("target_npub")
+    token_id = data.get("token_id")
+    symbol = data.get("symbol")
+    amount_raw = data.get("amount")
+
+    # Resolve user
+    target_user: User | None = None
+    if isinstance(target_user_id, int):
+        target_user = db.session.get(User, target_user_id)
+    if not target_user and isinstance(target_pubkey, str):
+        target_user = User.query.filter_by(pubkey_hex=target_pubkey.lower()).first()
+    if not target_user and isinstance(target_npub, str):
+        target_user = User.query.filter_by(npub=target_npub).first()
+    if not target_user:
+        return jsonify({"error": "target_user_not_found"}), 404
+
+    # Resolve token
+    tok: Token | None = None
+    if isinstance(token_id, int):
+        tok = db.session.get(Token, token_id)
+    if not tok and isinstance(symbol, str):
+        tok = Token.query.filter_by(symbol=symbol).first()
+    if not tok:
+        return jsonify({"error": "token_not_found"}), 404
+
+    # Parse amount
+    try:
+        amount = _parse_decimal(amount_raw)
+    except Exception:
+        return jsonify({"error": "invalid_amount"}), 400
+    if amount <= 0:
+        return jsonify({"error": "amount_must_be_positive"}), 400
+
+    bal = _get_or_create_token_balance(target_user.id, tok.id)
+    bal.amount = (bal.amount or Decimal("0")) + amount
+    db.session.add(bal)
+    db.session.commit()
+    return jsonify({
+        "user_id": target_user.id,
+        "token_id": tok.id,
+        "symbol": tok.symbol,
+        "amount": float(bal.amount),
+    }), 201
+
+
+@api_bp.get("/amm/pools/<int:pool_id>/trades")
+def amm_pool_trades(pool_id: int):
+    limit = max(1, min(500, request.args.get("limit", default=100, type=int)))
+    rows = (
+        SwapTrade.query.filter_by(pool_id=pool_id)
+        .order_by(SwapTrade.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return jsonify({"items": [t.to_dict() for t in rows]})
+
+
+@api_bp.get("/amm/pools/<int:pool_id>/burns")
+def amm_pool_burns(pool_id: int):
+    limit = max(1, min(500, request.args.get("limit", default=100, type=int)))
+    rows = (
+        BurnEvent.query.filter_by(pool_id=pool_id)
+        .order_by(BurnEvent.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return jsonify({"items": [b.to_dict() for b in rows]})
+
+
+# ---- Watchlist ----
+
+
+@api_bp.get("/watchlist")
+@require_auth
+def watchlist_list():
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    rows = (
+        db.session.query(WatchlistItem, Token)
+        .join(Token, Token.id == WatchlistItem.token_id)
+        .filter(WatchlistItem.user_id == user.id)
+        .order_by(Token.symbol.asc())
+        .all()
+    )
+    items = []
+    for wl, tok in rows:
+        items.append({
+            "token_id": tok.id,
+            "symbol": tok.symbol,
+            "name": tok.name,
+        })
+    return jsonify({"items": items})
+
+
+@api_bp.post("/watchlist")
+@require_auth
+@csrf.exempt
+def watchlist_add():
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    data = request.get_json(force=True)
+    token_id = data.get("token_id")
+    symbol = data.get("symbol")
+    tok = db.session.get(Token, int(token_id)) if token_id else None
+    if not tok and isinstance(symbol, str):
+        tok = Token.query.filter_by(symbol=symbol).first()
+    if not tok:
+        return jsonify({"error": "token_not_found"}), 404
+    exists = WatchlistItem.query.filter_by(user_id=user.id, token_id=tok.id).first()
+    if exists:
+        return jsonify({"ok": True})
+    wl = WatchlistItem(user_id=user.id, token_id=tok.id)
+    db.session.add(wl)
+    db.session.commit()
+    return jsonify({"ok": True}), 201
+
+
+@api_bp.delete("/watchlist")
+@require_auth
+@csrf.exempt
+def watchlist_remove():
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    token_id = data.get("token_id")
+    symbol = data.get("symbol")
+    tok = db.session.get(Token, int(token_id)) if token_id else None
+    if not tok and isinstance(symbol, str):
+        tok = Token.query.filter_by(symbol=symbol).first()
+    if not tok:
+        return jsonify({"error": "token_not_found"}), 404
+    WatchlistItem.query.filter_by(user_id=user.id, token_id=tok.id).delete()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ---- Alerts (price) ----
+
+
+@api_bp.get("/alerts")
+@require_auth
+def alerts_list():
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    rows = (
+        db.session.query(AlertRule, Token)
+        .join(Token, Token.id == AlertRule.token_id)
+        .filter(AlertRule.user_id == user.id)
+        .order_by(AlertRule.created_at.desc())
+        .all()
+    )
+    items = []
+    for r, tok in rows:
+        items.append({
+            "id": r.id,
+            "token_id": tok.id,
+            "symbol": tok.symbol,
+            "condition": r.condition,
+            "threshold": float(r.threshold),
+            "active": bool(r.active),
+            "created_at": r.created_at.isoformat() + "Z",
+            "last_triggered_at": r.last_triggered_at.isoformat() + "Z" if r.last_triggered_at else None,
+        })
+    return jsonify({"items": items})
+
+
+@api_bp.post("/alerts")
+@require_auth
+@csrf.exempt
+def alerts_create():
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    data = request.get_json(force=True)
+    token_id = data.get("token_id")
+    symbol = data.get("symbol")
+    condition = data.get("condition")  # price_above | price_below
+    threshold_raw = data.get("threshold")
+    if condition not in {"price_above", "price_below"}:
+        return jsonify({"error": "invalid_condition"}), 400
+    try:
+        threshold = _parse_decimal(threshold_raw)
+    except Exception:
+        return jsonify({"error": "invalid_threshold"}), 400
+    tok = db.session.get(Token, int(token_id)) if token_id else None
+    if not tok and isinstance(symbol, str):
+        tok = Token.query.filter_by(symbol=symbol).first()
+    if not tok:
+        return jsonify({"error": "token_not_found"}), 404
+    r = AlertRule(user_id=user.id, token_id=tok.id, condition=condition, threshold=threshold, active=True)
+    db.session.add(r)
+    try:
+        db.session.commit()
+        return jsonify({"id": r.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "create_failed", "detail": str(e)}), 400
+
+
+@api_bp.post("/alerts/<int:rule_id>/toggle")
+@require_auth
+@csrf.exempt
+def alerts_toggle(rule_id: int):
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    r = db.session.get(AlertRule, rule_id)
+    if not r or r.user_id != user.id:
+        return jsonify({"error": "alert_not_found"}), 404
+    r.active = not bool(r.active)
+    db.session.add(r)
+    db.session.commit()
+    return jsonify({"ok": True, "active": bool(r.active)})
+
+
+@api_bp.delete("/alerts/<int:rule_id>")
+@require_auth
+@csrf.exempt
+def alerts_delete(rule_id: int):
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+    r = db.session.get(AlertRule, rule_id)
+    if not r or r.user_id != user.id:
+        return jsonify({"error": "alert_not_found"}), 404
+    db.session.delete(r)
+    db.session.commit()
+    return jsonify({"ok": True})

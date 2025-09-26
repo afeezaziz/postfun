@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% block title %}Admin · Tokens | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Tokens</h1>
+    <form method="GET" action="{{ url_for('admin.tokens') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; margin-bottom: 12px;">
+      <div>
+        <label>Search</label>
+        <input class="retro-input" type="text" name="q" value="{{ q }}" placeholder="symbol or name" />
+      </div>
+      <div>
+        <label>Per Page</label>
+        <select class="retro-input" name="per">
+          {% for n in [25, 50, 100, 200, 500] %}
+            <option value="{{ n }}" {% if request.args.get('per', type=int) == n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <button class="retro-button" type="submit">Search</button>
+      </div>
+    </form>
+    <div class="pf-grid" style="grid-template-columns: 1fr; gap: 16px;">
+      <div class="card">
+        <h2>Create / Update</h2>
+        <form method="POST" action="{{ url_for('admin.tokens_save') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end;">
+          <div>
+            <label>Symbol</label>
+            <input class="retro-input" type="text" name="symbol" placeholder="e.g. BTC" required />
+          </div>
+          <div>
+            <label>Name</label>
+            <input class="retro-input" type="text" name="name" placeholder="Bitcoin" required />
+          </div>
+          <div>
+            <label>Price</label>
+            <input class="retro-input" type="text" name="price" placeholder="optional" />
+          </div>
+          <div>
+            <label>Market Cap</label>
+            <input class="retro-input" type="text" name="market_cap" placeholder="optional" />
+          </div>
+          <div>
+            <label>24h Change (%)</label>
+            <input class="retro-input" type="text" name="change_24h" placeholder="optional" />
+          </div>
+          <div>
+            <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+            <button class="retro-button" type="submit">Save Token</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Import CSV</h2>
+        <form method="POST" action="{{ url_for('admin.tokens_import') }}">
+          <p>CSV columns: <code>symbol,name,price,market_cap,change_24h</code>. One row per token.</p>
+          <textarea class="retro-input" name="csv" rows="6" placeholder="symbol,name,price,market_cap,change_24h\nBTC,Bitcoin,65000,1200000000000,2.5"></textarea>
+          <div style="margin-top:8px; display:flex; gap:8px;">
+            <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+            <button class="retro-button" type="submit">Import</button>
+            <a class="retro-button" href="{{ url_for('admin.tokens_export') }}">Export CSV</a>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>All Tokens</h2>
+        {% if not tokens_p.items %}
+          <div>No tokens.</div>
+        {% else %}
+          <div class="pf-table-wrap">
+            <table class="pf-table">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Name</th>
+                  <th>Price</th>
+                  <th>Market Cap</th>
+                  <th>24h</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for t in tokens_p.items %}
+                  <tr>
+                    <td><strong>{{ t.symbol }}</strong></td>
+                    <td>{{ t.name }}</td>
+                    <td>{{ '%.8f'|format(t.price or 0) }}</td>
+                    <td>{{ '%.2f'|format(t.market_cap or 0) }}</td>
+                    <td>{{ '%.4f'|format(t.change_24h or 0) }}%</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="pf-pagination">
+            {% set prev_url = url_for('admin.tokens', page=tokens_p.prev_num, q=q, per=request.args.get('per')) if tokens_p.has_prev else None %}
+            {% set next_url = url_for('admin.tokens', page=tokens_p.next_num, q=q, per=request.args.get('per')) if tokens_p.has_next else None %}
+            <div>Page {{ tokens_p.page }} / {{ tokens_p.pages or 1 }}</div>
+            <div style="display:flex; gap:8px;">
+              <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
+              <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

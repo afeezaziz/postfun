@@ -4,10 +4,11 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from .config import Config
-from .extensions import db, csrf, limiter, cache
+from .extensions import db, csrf, limiter, cache, migrate
 from .auth import auth_bp
 from . import models  # ensure models are imported for db.create_all()
 from .web import web_bp
+from .admin import admin_bp
 from .api import api_bp
 from flask_wtf.csrf import generate_csrf
 
@@ -32,6 +33,7 @@ def create_app(config_class: type = Config) -> Flask:
     db.init_app(app)
     csrf.init_app(app)
     limiter.init_app(app)
+    migrate.init_app(app, db)
     # Cache: Redis if available, else SimpleCache
     cache_config = {}
     redis_url = os.getenv("REDIS_URL") or os.getenv("CACHE_REDIS_URL")
@@ -52,7 +54,14 @@ def create_app(config_class: type = Config) -> Flask:
     # Blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(web_bp)
+    app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp, url_prefix="/api")
+
+    # Template helper: csrf_token() for forms
+    try:
+        app.jinja_env.globals["csrf_token"] = generate_csrf
+    except Exception:
+        pass
 
     @app.route("/health", methods=["GET"])  # simple health check
     def health():

@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}Your Watchlist | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Your Watchlist</h1>
+    <form method="GET" action="{{ url_for('web.watchlist') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; margin-bottom: 12px;">
+      <div>
+        <label>Search</label>
+        <input class="retro-input" type="text" name="q" value="{{ q }}" placeholder="symbol or name" />
+      </div>
+      <div>
+        <label>Sort</label>
+        <select class="retro-input" name="sort">
+          <option value="market_cap" {% if sort=='market_cap' %}selected{% endif %}>Market cap</option>
+          <option value="price" {% if sort=='price' %}selected{% endif %}>Price</option>
+          <option value="change_24h" {% if sort=='change_24h' %}selected{% endif %}>24h change</option>
+          <option value="symbol" {% if sort=='symbol' %}selected{% endif %}>Symbol</option>
+          <option value="name" {% if sort=='name' %}selected{% endif %}>Name</option>
+        </select>
+      </div>
+      <div>
+        <label>Order</label>
+        <select class="retro-input" name="order">
+          <option value="desc" {% if order=='desc' %}selected{% endif %}>Desc</option>
+          <option value="asc" {% if order=='asc' %}selected{% endif %}>Asc</option>
+        </select>
+      </div>
+      <div>
+        <button class="retro-button" type="submit">Apply</button>
+      </div>
+    </form>
+
+    {% if not items %}
+      <div>No tokens in your watchlist yet.</div>
+    {% else %}
+      <div class="pf-grid">
+        {% for it in items %}
+          {% set token = it.token %}
+          <div class="card pf-token-card">
+            <div class="pf-token-header">
+              <span class="badge">{{ token.symbol }}</span>
+              <span>{{ token.name }}</span>
+            </div>
+            <div class="pf-token-body">
+              <div>Price: <span class="pf-green">{{ '%.6f'|format(token.price or 0) }}</span></div>
+              <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
+              <div>24h: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
+            </div>
+            <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ token.price or 0 }}"></div>
+            <div class="pf-card-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
+              <a class="retro-button" href="{{ url_for('web.token_detail', symbol=token.symbol) }}">Details</a>
+              <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Pool</a>
+              <form method="POST" action="{{ url_for('web.watchlist_remove', symbol=token.symbol, next=url_for('web.watchlist')) }}">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                <button class="retro-button" type="submit">Remove</button>
+              </form>
+            </div>
+            <div style="margin-top:8px;">
+              <form method="POST" action="{{ url_for('web.alerts_create') }}" style="display:flex; gap:8px; flex-wrap:wrap; align-items: end;">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                <input type="hidden" name="symbol" value="{{ token.symbol }}" />
+                <div>
+                  <label>Condition</label>
+                  <select class="retro-input" name="condition">
+                    <option value="price_above">Price above</option>
+                    <option value="price_below">Price below</option>
+                    <option value="market_cap_above">Mcap above</option>
+                    <option value="market_cap_below">Mcap below</option>
+                    <option value="pct_change_above">Pct above</option>
+                    <option value="pct_change_below">Pct below</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Threshold</label>
+                  <input class="retro-input" type="text" name="threshold" placeholder="e.g. 100" />
+                </div>
+                <div>
+                  <button class="retro-button" type="submit">Create Alert</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

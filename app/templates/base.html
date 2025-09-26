@@ -17,6 +17,13 @@
         <a href="{{ url_for('web.explore') }}" class="{% if request.endpoint == 'web.explore' %}active{% endif %}" {% if request.endpoint == 'web.explore' %}aria-current="page"{% endif %}>Explore</a>
         <a href="{{ url_for('web.pro') }}" class="{% if request.endpoint == 'web.pro' %}active{% endif %}" {% if request.endpoint == 'web.pro' %}aria-current="page"{% endif %}>Pro</a>
         <a href="{{ url_for('web.portfolio') }}" class="{% if request.endpoint == 'web.portfolio' %}active{% endif %}" {% if request.endpoint == 'web.portfolio' %}aria-current="page"{% endif %}>Portfolio</a>
+        {% if current_user %}
+          <a href="{{ url_for('web.watchlist') }}" class="{% if request.endpoint == 'web.watchlist' %}active{% endif %}" {% if request.endpoint == 'web.watchlist' %}aria-current="page"{% endif %}>Watchlist</a>
+          <a href="{{ url_for('web.alerts') }}" class="{% if request.endpoint == 'web.alerts' %}active{% endif %}" {% if request.endpoint == 'web.alerts' %}aria-current="page"{% endif %}>Alerts</a>
+          {% if current_user.is_admin %}
+            <a href="{{ url_for('admin.dashboard') }}" class="{% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}" {% if request.endpoint and request.endpoint.startswith('admin.') %}aria-current="page"{% endif %}>Admin</a>
+          {% endif %}
+        {% endif %}
         <a href="{{ url_for('web.launchpad') }}" class="{% if request.endpoint == 'web.launchpad' %}active{% endif %}" {% if request.endpoint == 'web.launchpad' %}aria-current="page"{% endif %}>Launchpad</a>
         <a href="{{ url_for('web.dashboard') }}" class="{% if request.endpoint == 'web.dashboard' %}active{% endif %}" {% if request.endpoint == 'web.dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
       </nav>

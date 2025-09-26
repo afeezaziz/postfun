@@ -40,70 +40,54 @@
             </div>
             <div class="pf-tab-content" data-tab-content="swaps">
               <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-                {% for s in swaps %}
+                {% for t in trades %}
                   <div class="card">
-                    <div>{{ s.time }}</div>
-                    <div>Side: <span class="pf-green">{{ s.side }}</span></div>
-                    <div>Amount: <span class="pf-green">{{ '%.4f'|format(s.amount) }}</span></div>
-                    <div>Price: <span class="pf-green">{{ '%.6f'|format(s.price) }}</span></div>
+                    <div>{{ t.created_at }}</div>
+                    <div>Side: <span class="pf-green">{{ t.side }}</span></div>
+                    <div>In: <span class="pf-green">{{ '%.6f'|format(t.amount_in) }}</span></div>
+                    <div>Out: <span class="pf-green">{{ '%.6f'|format(t.amount_out) }}</span></div>
+                    {% if t.price is not none %}
+                      <div>Price: <span class="pf-green">{{ '%.6f'|format(t.price) }}</span></div>
+                    {% endif %}
+                    <div>Stage: <span class="pf-green">{{ t.stage }}</span></div>
                   </div>
                 {% else %}
                   <div>No swaps yet.</div>
                 {% endfor %}
               </div>
             </div>
-          </div>
         </div>
       </div>
 
       <div class="card">
         <h2>Trade {{ token.symbol }}</h2>
-        {% if confirm_trade_preview and trade_form %}
-          <div class="card" style="margin-bottom: 8px;">
-            <h3>Confirm Trade</h3>
-            <div>Side: <strong>{{ trade_form.side }}</strong></div>
-            <div>Amount: <strong>{{ trade_form.amount }}</strong></div>
-            <div>Price: <strong>{{ trade_form.price }}</strong></div>
-            <div>Total: <strong>{{ trade_form.total }}</strong></div>
+        <form method="POST" action="{{ url_for('web.pool_trade', symbol=token.symbol) }}" id="pf-trade-form" data-price="{{ '%.6f'|format((price or 0) if price is not none else (token.price or 0)) }}">
+          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+          <div style="margin-bottom:8px;">
+            <label style="display:inline-flex; align-items:center; gap: 8px;">
+              <input type="radio" name="side" value="buy" checked/> Buy
+            </label>
+            <label style="display:inline-flex; align-items:center; gap: 8px; margin-left: 12px;">
+              <input type="radio" name="side" value="sell"/> Sell
+            </label>
           </div>
-          <form method="POST" action="{{ url_for('web.pool_trade', symbol=token.symbol) }}">
-            <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-            <input type="hidden" name="side" value="{{ trade_form.side }}" />
-            <input type="hidden" name="amount" value="{{ trade_form.amount }}" />
-            <input type="hidden" name="confirm" value="yes" />
-            <button class="retro-button" type="submit">Confirm and Execute</button>
-            <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Back</a>
-          </form>
-        {% else %}
-          <form method="POST" action="{{ url_for('web.pool_trade', symbol=token.symbol) }}" id="pf-trade-form" data-price="{{ token.price or 0 }}">
-            <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-            <div style="margin-bottom:8px;">
-              {% set side_val = (trade_form.side if trade_form and trade_form.side else 'buy') %}
-              <label style="display:inline-flex; align-items:center; gap: 8px;">
-                <input type="radio" name="side" value="buy" {% if side_val == 'buy' %}checked{% endif %}/> Buy
-              </label>
-              <label style="display:inline-flex; align-items:center; gap: 8px; margin-left: 12px;">
-                <input type="radio" name="side" value="sell" {% if side_val == 'sell' %}checked{% endif %}/> Sell
-              </label>
-            </div>
-            <div style="margin-bottom:8px;">
-              <label>Amount</label>
-              <input class="retro-input" type="text" name="amount" value="{{ trade_form.amount if trade_form and trade_form.amount }}" placeholder="e.g. 10" />
-            </div>
-            <div style="margin-bottom:8px;">
-              <label>Quote</label>
-              <div>Price: <span class="pf-green" id="pf-trade-price" data-price-target>{{ '%.6f'|format(token.price or 0) }}</span></div>
-              <div>Total: <span class="pf-green" id="pf-trade-total">0.000000</span></div>
-            </div>
-            <button class="retro-button" type="submit">Review</button>
-          </form>
-        {% endif %}
+          <div style="margin-bottom:8px;">
+            <label>Amount</label>
+            <input class="retro-input" type="text" name="amount" placeholder="e.g. 10" />
+          </div>
+          <div style="margin-bottom:8px;">
+            <label>Quote</label>
+            <div>Price: <span class="pf-green" id="pf-trade-price" data-price-target>{{ '%.6f'|format((price or 0) if price is not none else (token.price or 0)) }}</span></div>
+            <div>Total: <span class="pf-green" id="pf-trade-total">0.000000</span></div>
+          </div>
+          <button class="retro-button" type="submit">Swap</button>
+        </form>
       </div>
     </div>
   </section>
 
   <section class="card">
-    <h2>Overview</h2>
+{{ ... }}
     <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
       <div>Symbol: <strong>{{ token.symbol }}</strong></div>
       <div>Name: <span class="pf-green">{{ token.name }}</span></div>

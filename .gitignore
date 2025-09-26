@@ -10,6 +10,7 @@ wheels/
 .venv/
 env/
 venv/
+.env
 
 # Byte-compiled / optimized / cached files
 *.pyc
