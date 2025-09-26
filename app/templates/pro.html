@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}Pro | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Pro Scanner</h1>
+    <form method="GET" action="{{ url_for('web.pro') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items: end;">
+      <div>
+        <label>Sort</label>
+        <select class="retro-input" name="sort">
+          <option value="market_cap" {% if sort == 'market_cap' %}selected{% endif %}>Market Cap</option>
+          <option value="price" {% if sort == 'price' %}selected{% endif %}>Price</option>
+          <option value="change_24h" {% if sort == 'change_24h' %}selected{% endif %}>24h Change</option>
+          <option value="twitterScore" {% if sort == 'twitterScore' %}selected{% endif %}>Twitter Score</option>
+          <option value="mentions" {% if sort == 'mentions' %}selected{% endif %}>Mentions</option>
+          <option value="sentiment" {% if sort == 'sentiment' %}selected{% endif %}>Sentiment</option>
+          <option value="vol_24h" {% if sort == 'vol_24h' %}selected{% endif %}>24h Volume</option>
+          <option value="risk" {% if sort == 'risk' %}selected{% endif %}>Risk</option>
+          <option value="trending" {% if sort == 'trending' %}selected{% endif %}>Trending</option>
+        </select>
+      </div>
+      <div>
+        <label>Order</label>
+        <select class="retro-input" name="order">
+          <option value="desc" {% if order == 'desc' %}selected{% endif %}>Desc</option>
+          <option value="asc" {% if order == 'asc' %}selected{% endif %}>Asc</option>
+        </select>
+      </div>
+      <div>
+        <label>Risk</label>
+        <select class="retro-input" name="risk">
+          <option value="all" {% if risk == 'all' %}selected{% endif %}>All</option>
+          <option value="low" {% if risk == 'low' %}selected{% endif %}>Low</option>
+          <option value="medium" {% if risk == 'medium' %}selected{% endif %}>Medium</option>
+          <option value="high" {% if risk == 'high' %}selected{% endif %}>High</option>
+        </select>
+      </div>
+      <div>
+        <label>Trending Only</label>
+        <div>
+          <label style="display:inline-flex; align-items:center; gap:6px;">
+            <input type="checkbox" name="trending" value="1" {% if trending == '1' %}checked{% endif %}/>
+            <span>Yes</span>
+          </label>
+        </div>
+      </div>
+      <div>
+        <button class="retro-button" type="submit">Apply</button>
+      </div>
+      <div style="align-self:center;">
+        <a class="retro-button" href="{{ url_for('web.export_pro_csv', sort=sort, order=order, risk=risk, trending=trending) }}">Export CSV</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Scanner Results</h2>
+    <div class="pf-grid">
+      {% for it in items %}
+        {% set token = it.token %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ token.symbol }}</span>
+            <span>{{ token.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Price: <span class="pf-green">{{ '%.4f'|format(token.price or 0) }}</span></div>
+            <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
+            <div>24h: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
+            <div>24h Vol: <span class="pf-green">{{ '%.2f'|format(it.vol_24h or 0) }}</span></div>
+            <div>TwitterScore: <span class="pf-green">{{ it.twitterScore }}</span></div>
+            <div>Mentions: <span class="pf-green">{{ it.mentions }}</span></div>
+            <div>Sentiment: <span class="pf-green">{{ '%.2f'|format(it.sentiment or 0) }}</span></div>
+            <div>Risk: <span class="pf-green">{{ it.risk }}</span></div>
+            <div>Trending: <span class="pf-green">{{ 'Yes' if it.trending else 'No' }}</span></div>
+          </div>
+          <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ token.price or 0 }}"></div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=token.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Pool</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No items.</div>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

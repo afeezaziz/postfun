@@ -1,0 +1,136 @@
+/* Retro computer style based on docs/old/STYLE.md */
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+:root {
+  --green: #00ff00;
+  --dim-green: #00cc00;
+  --dark-green: #006600;
+  --black: #000000;
+  --gray-dark: #1a1a1a;
+  --gray-mid: #333333;
+  --red: #ff0000;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; padding: 0; background: var(--black); color: var(--green);
+  font-family: 'VT323', monospace; font-size: 16px;
+}
+
+.pf-container { width: 100%; max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+/* Header */
+.pf-header { border-bottom: 1px solid var(--green); background: #000; position: sticky; top: 0; z-index: 10; }
+.pf-header-inner { display: flex; align-items: center; justify-content: space-between; }
+.pf-brand { color: var(--green); text-decoration: none; font-size: 20px; }
+.pf-nav a { color: var(--green); text-decoration: none; margin: 0 8px; }
+.pf-nav a.active { text-decoration: underline; }
+.pf-auth { display: flex; align-items: center; gap: 8px; }
+.pf-npub { color: var(--dim-green); }
+
+/* Footer */
+.pf-footer { border-top: 1px solid var(--green); padding: 12px 0; margin-top: 40px; }
+
+/* Buttons */
+.retro-button {
+  background-color: #000000;
+  border: 2px solid #00ff00;
+  color: #00ff00;
+  font-family: 'VT323', monospace;
+  padding: 4px 8px;
+  box-shadow: inset -2px -2px 0 0 #006600, inset 2px 2px 0 0 #00ff00;
+  cursor: pointer;
+}
+.retro-button:hover { background-color: #001a00; }
+.retro-button:active {
+  box-shadow: inset 2px 2px 0 0 #006600, inset -2px -2px 0 0 #00ff00;
+  background-color: #003300;
+}
+
+.retro-input {
+  background-color: #000000;
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-family: 'VT323', monospace;
+  padding: 4px;
+  box-shadow: inset 2px 2px 0 0 #000000, inset -2px -2px 0 0 #006600;
+}
+
+.retro-input:focus {
+  outline: 1px solid var(--green);
+  background-color: #001a00;
+}
+
+/* Cards */
+.card { background: var(--black); border: 1px solid var(--green); padding: 12px; box-shadow: inset 2px 2px 0 0 #000000, inset -2px -2px 0 0 #006600; margin-bottom: 16px; }
+
+/* Badges */
+.badge { display: inline-flex; align-items: center; padding: 2px 4px; font-size: 12px; border: 1px solid var(--green); color: var(--green); background: var(--black); }
+
+/* Grid */
+.pf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+
+/* Sections */
+.pf-section h2 { margin-top: 0; }
+
+/* Token cards */
+.pf-token-card { text-decoration: none; color: var(--green); display: block; }
+.pf-token-card:hover { background: #001a00; }
+.pf-token-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.pf-token-body { color: var(--dim-green); }
+.pf-card-actions { display: flex; gap: 6px; margin-top: 8px; }
+.pf-token-detail .pf-token-panel { min-height: 160px; }
+
+/* Dashboard */
+.pf-dash-panel { min-height: 120px; }
+
+/* Utility */
+.pf-green { color: var(--dim-green); }
+
+/* Flashes */
+.pf-flashes { margin-bottom: 12px; }
+.pf-flash { border: 1px solid var(--green); padding: 8px; margin-bottom: 6px; }
+.pf-flash-success { color: var(--green); }
+.pf-flash-error { color: var(--red); border-color: var(--red); }
+
+/* Pagination */
+.pf-pagination { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+.pf-pagination-controls { display: flex; gap: 8px; }
+
+/* Field errors */
+.pf-field-error { color: var(--red); margin-top: 4px; font-size: 14px; }
+
+/* Tabs (Pool page) */
+.pf-tab-list { display: flex; gap: 6px; border-bottom: 1px solid var(--green); margin-bottom: 8px; }
+.pf-tab {
+  background: #000;
+  color: var(--green);
+  border: 1px solid var(--green);
+  border-bottom: none;
+  padding: 4px 8px;
+  font-family: 'VT323', monospace;
+  cursor: pointer;
+}
+.pf-tab.pf-tab-active { background: #001a00; box-shadow: inset 2px 2px 0 0 #003300; }
+.pf-tab-content { display: none; }
+.pf-tab-content.pf-tab-content-active { display: block; }
+
+/* Chart */
+.pf-chart { color: var(--green); }
+.pf-chart-svg { display: block; width: 100%; height: 160px; }
+.pf-chart-path { stroke: var(--green); fill: none; }
+
+/* Sparklines */
+.pf-spark { color: var(--green); height: 40px; }
+.pf-spark-svg { display: block; width: 100%; height: 40px; }
+.pf-spark-path { stroke: var(--dim-green); fill: none; }
+
+/* Toasts */
+.pf-toast-container { position: fixed; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; }
+.pf-toast { background: #001a00; border: 1px solid var(--green); color: var(--green); padding: 8px 10px; box-shadow: 0 0 0 1px #003300 inset; }
+.pf-toast-success { border-color: var(--green); }
+.pf-toast-error { border-color: var(--red); color: var(--red); }
+.pf-toast-info { border-color: var(--dim-green); color: var(--dim-green); }
+
+/* Focus styles for keyboard accessibility */
+:focus-visible { outline: 2px dashed var(--green); outline-offset: 2px; }

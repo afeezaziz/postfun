@@ -1,0 +1,80 @@
+import os
+from datetime import timedelta
+from flask import Flask, jsonify
+from flask_cors import CORS
+from dotenv import load_dotenv
+from .config import Config
+from .extensions import db, csrf, limiter, cache
+from .auth import auth_bp
+from . import models  # ensure models are imported for db.create_all()
+from .web import web_bp
+from .api import api_bp
+
+
+def create_app(config_class: type = Config) -> Flask:
+    # Load environment variables from .env if present
+    load_dotenv()
+    app = Flask(__name__)
+    app.config.from_object(config_class)
+
+    # CORS
+    CORS(
+        app,
+        resources={r"/*": {"origins": app.config.get("CORS_ORIGINS", "*")}},
+        supports_credentials=True,
+    )
+
+    # Extensions
+    db.init_app(app)
+    csrf.init_app(app)
+    limiter.init_app(app, default_limits=[app.config.get("RATE_LIMIT_DEFAULT", "100 per hour")])
+    # Cache: Redis if available, else SimpleCache
+    cache_config = {}
+    redis_url = os.getenv("REDIS_URL") or os.getenv("CACHE_REDIS_URL")
+    if redis_url:
+        cache_config.update({
+            "CACHE_TYPE": "RedisCache",
+            "CACHE_REDIS_URL": redis_url,
+        })
+    else:
+        cache_config.update({
+            "CACHE_TYPE": os.getenv("CACHE_TYPE", "SimpleCache"),
+        })
+    default_timeout = int(os.getenv("CACHE_DEFAULT_TIMEOUT", str(60)))
+    cache_config["CACHE_DEFAULT_TIMEOUT"] = default_timeout
+    app.config.update(cache_config)
+    cache.init_app(app)
+
+    # Blueprints
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(web_bp)
+    app.register_blueprint(api_bp, url_prefix="/api")
+
+    @app.route("/health", methods=["GET"])  # simple health check
+    def health():
+        return jsonify({"status": "ok"})
+
+    # Auto-create tables in dev (SQLite fallback) to keep onboarding simple
+    with app.app_context():
+        try:
+            db.create_all()
+            # Seed tokens if none exist
+            try:
+                from .models import Token
+                if Token.query.count() == 0:
+                    from decimal import Decimal
+                    samples = [
+                        Token(symbol="gBTC", name="Gateway BTC", price=Decimal("65000.00"), market_cap=Decimal("100000000.00"), change_24h=Decimal("1.23")),
+                        Token(symbol="gUSD", name="Gateway USD", price=Decimal("1.00"), market_cap=Decimal("5000000.00"), change_24h=Decimal("0.02")),
+                        Token(symbol="LP-gBTC-gUSD", name="LP gBTC/gUSD", price=Decimal("10.00"), market_cap=Decimal("250000.00"), change_24h=Decimal("-0.50")),
+                        Token(symbol="PFUN", name="Postfun", price=Decimal("0.10"), market_cap=Decimal("1000000.00"), change_24h=Decimal("5.00")),
+                    ]
+                    db.session.add_all(samples)
+                    db.session.commit()
+            except Exception as seed_err:
+                app.logger.warning(f"Token seed skipped: {seed_err}")
+        except Exception as e:
+            # On MariaDB without schema privileges, skip auto-create
+            app.logger.warning(f"DB create_all skipped: {e}")
+
+    return app

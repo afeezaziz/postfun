@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Download | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Download</h1>
+    <p>This is a server-rendered demo. There is no separate desktop or mobile app. You can clone the repo and run it locally using uv + Flask.</p>
+    <pre class="card"><code>uv venv
+source .venv/bin/activate
+uv pip install -e .
+uv run python -m flask --app wsgi run --debug --host 0.0.0.0 --port 8000</code></pre>
+  </section>
+{% endblock %}

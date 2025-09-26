@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}User {{ user.id }} | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>User Profile</h1>
+    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+      <div class="card">
+        <div>ID: <span class="pf-green">{{ user.id }}</span></div>
+        <div>npub: <span class="pf-green">{{ user.npub or '—' }}</span></div>
+        <div>pubkey: <span class="pf-green">{{ user.pubkey_hex }}</span></div>
+        <div>display: <span class="pf-green">{{ user.display_name or '—' }}</span></div>
+        <div>joined: <span class="pf-green">{{ user.created_at.strftime('%Y-%m-%d') }}</span></div>
+      </div>
+      <div class="card">
+        <h3>Actions</h3>
+        <a class="retro-button" href="{{ url_for('web.portfolio') }}">View Portfolio</a>
+      </div>
+    </div>
+  </section>
+{% endblock %}

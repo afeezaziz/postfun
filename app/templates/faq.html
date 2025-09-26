@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}FAQ | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>FAQ</h1>
+    <h3>Is this real trading?</h3>
+    <p>No. The app uses mock data for charts, holders, and swaps. The trade button adjusts price slightly and shows a success message.</p>
+
+    <h3>How do I login?</h3>
+    <p>Click "Login with Nostr" in the header. Your NIP-07 extension signs an auth event. The server verifies, sets an HttpOnly cookie, and the template renders your user.</p>
+
+    <h3>Where is my data stored?</h3>
+    <p>Users and tokens are stored in the configured database (MariaDB/SQLite fallback). JWT cookies are HttpOnly and not accessible via JS.</p>
+  </section>
+{% endblock %}

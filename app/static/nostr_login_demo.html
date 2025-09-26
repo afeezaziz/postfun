@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Postfun Nostr Login Demo</title>
+  <style>
+    body { background: #000; color: #0f0; font-family: monospace; padding: 16px; }
+    button { background: #000; color: #0f0; border: 2px solid #0f0; padding: 8px 12px; cursor: pointer; }
+    button:hover { background: #001a00; }
+    pre { background: #000; border: 1px solid #0f0; padding: 8px; white-space: pre-wrap; }
+    .row { margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <h1>Postfun Nostr Login Demo</h1>
+  <div class="row">
+    <button onclick="nostrLogin()">Login with Nostr (NIP-07)</button>
+  </div>
+  <div class="row">
+    <button onclick="getMe()">Call /auth/me</button>
+  </div>
+  <div class="row">
+    <pre id="log"></pre>
+  </div>
+
+  <script>
+    const logEl = document.getElementById('log');
+    function log(...args) {
+      logEl.textContent += args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ') + "\n";
+    }
+
+    async function nostrLogin() {
+      try {
+        if (!window.nostr || !window.nostr.getPublicKey || !window.nostr.signEvent) {
+          log('NIP-07 provider not found. Install a Nostr extension (e.g., Alby).');
+          return;
+        }
+        // 1) Fetch challenge
+        const chRes = await fetch('/auth/challenge', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const ch = await chRes.json();
+        log('Challenge:', ch);
+
+        // 2) Build NIP-01 event
+        const pubkey = await window.nostr.getPublicKey();
+        const content = JSON.stringify({
+          challenge_id: ch.challenge_id,
+          challenge: ch.challenge,
+          domain: 'postfun',
+          exp: Math.floor(Date.now() / 1000) + 10 * 60
+        });
+        const evt = {
+          kind: 1,
+          content,
+          tags: [],
+          created_at: Math.floor(Date.now() / 1000),
+          pubkey,
+        };
+
+        // 3) Sign and verify
+        const signed = await window.nostr.signEvent(evt);
+        const vRes = await fetch('/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: signed })
+        });
+        const out = await vRes.json();
+        log('Verify:', out);
+        if (out.token) {
+          localStorage.setItem('postfun_jwt', out.token);
+          log('JWT stored in localStorage as postfun_jwt');
+        }
+      } catch (e) {
+        log('Error:', e);
+      }
+    }
+
+    async function getMe() {
+      try {
+        const jwt = localStorage.getItem('postfun_jwt');
+        if (!jwt) {
+          log('No JWT found. Login first.');
+          return;
+        }
+        const res = await fetch('/auth/me', { headers: { 'Authorization': 'Bearer ' + jwt } });
+        const data = await res.json();
+        log('Me:', data);
+      } catch (e) {
+        log('Error:', e);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Token – {{ token.symbol }} | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Token: <span class="badge">{{ token.symbol }}</span></h1>
+    <div class="pf-grid pf-token-detail">
+      <div class="card pf-token-panel">
+        <h2>Overview</h2>
+        <div>Symbol: <strong>{{ token.symbol }}</strong></div>
+        <div>Name: <span class="pf-green">{{ token.name }}</span></div>
+        <div>Price: <span class="pf-green">{{ '%.4f'|format(token.price or 0) }}</span></div>
+        <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
+        <div>24h Change: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
+      </div>
+      <div class="card pf-token-panel">
+        <h2>Activity</h2>
+        <div>Recent trades</div>
+        <ul>
+          <li>—</li>
+          <li>—</li>
+          <li>—</li>
+        </ul>
+      </div>
+      <div class="card pf-token-panel">
+        <h2>Actions</h2>
+        <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Go to Pool</a>
+        {% if not current_user %}
+          <button class="retro-button" onclick="pfNostrLogin()">Login to Trade</button>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

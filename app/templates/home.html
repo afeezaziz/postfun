@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Postfun — Home{% endblock %}
+{% block content %}
+  <section class="pf-hero card">
+    <h1>Welcome to Postfun</h1>
+    <p>The retro social-finance playground. Connect your Nostr wallet and have fun.</p>
+    <div class="pf-hero-actions">
+      {% if current_user %}
+        <a class="retro-button" href="{{ url_for('web.dashboard') }}">Go to Dashboard</a>
+      {% else %}
+        <button class="retro-button" onclick="pfNostrLogin()">Login with Nostr</button>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="pf-section">
+    <h2>Trending Tokens</h2>
+    <div class="pf-grid">
+      {% for token in tokens %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ token.symbol }}</span>
+            <span>{{ token.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Price: <span class="pf-green">{{ '%.4f'|format(token.price or 0) }}</span></div>
+            <div>24h: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
+          </div>
+          <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ token.price or 0 }}"></div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=token.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Pool</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No tokens yet.</div>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

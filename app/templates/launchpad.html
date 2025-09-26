@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Launchpad | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Launchpad</h1>
+    <p>Create or update a token. This demo is CSRF-protected and requires login.</p>
+
+    {% if confirm_preview %}
+      <div class="card" style="margin-bottom: 12px;">
+        <h2>Confirm Details</h2>
+        <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+          <div>Symbol: <strong>{{ form.symbol }}</strong></div>
+          <div>Name: <strong>{{ form.name }}</strong></div>
+          <div>Price: <strong>{{ form.price or '—' }}</strong></div>
+          <div>Market Cap: <strong>{{ form.market_cap or '—' }}</strong></div>
+        </div>
+      </div>
+      <form method="POST" action="{{ url_for('web.launchpad') }}" style="display:flex; gap: 8px; align-items:center;">
+        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+        <input type="hidden" name="symbol" value="{{ form.symbol }}" />
+        <input type="hidden" name="name" value="{{ form.name }}" />
+        <input type="hidden" name="price" value="{{ form.price }}" />
+        <input type="hidden" name="market_cap" value="{{ form.market_cap }}" />
+        <input type="hidden" name="confirm" value="yes" />
+        <button class="retro-button" type="submit">Confirm and Save</button>
+        <a class="retro-button" href="{{ url_for('web.launchpad') }}">Back to Edit</a>
+      </form>
+    {% else %}
+      <form method="POST" action="{{ url_for('web.launchpad') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
+        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+
+        <div>
+          <label>Symbol</label>
+          <input class="retro-input" type="text" name="symbol" maxlength="32" value="{{ form.symbol }}" placeholder="e.g. PFUN" required />
+          {% if errors.symbol %}<div class="pf-field-error">{{ errors.symbol }}</div>{% endif %}
+        </div>
+        <div>
+          <label>Name</label>
+          <input class="retro-input" type="text" name="name" value="{{ form.name }}" placeholder="e.g. Postfun" required />
+          {% if errors.name %}<div class="pf-field-error">{{ errors.name }}</div>{% endif %}
+        </div>
+        <div>
+          <label>Price</label>
+          <input class="retro-input" type="text" name="price" value="{{ form.price }}" placeholder="e.g. 0.10" />
+          {% if errors.price %}<div class="pf-field-error">{{ errors.price }}</div>{% endif %}
+        </div>
+        <div>
+          <label>Market Cap</label>
+          <input class="retro-input" type="text" name="market_cap" value="{{ form.market_cap }}" placeholder="e.g. 1000000" />
+          {% if errors.market_cap %}<div class="pf-field-error">{{ errors.market_cap }}</div>{% endif %}
+        </div>
+        <div>
+          <button class="retro-button" type="submit">Review</button>
+        </div>
+      </form>
+    {% endif %}
+  </section>
+{% endblock %}

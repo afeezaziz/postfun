@@ -1,0 +1,38 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Byte-compiled / optimized / cached files
+*.pyc
+__pycache__/
+
+# Instance folder (contains configuration not meant for version control)
+instance/
+
+# Test-related files
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# IDE-specific files (examples for common IDEs)
+.idea/
+.vscode/
+
+# Other temporary files
+*.log
+*.DS_Store
+*.sqlite3 # If using SQLite for development

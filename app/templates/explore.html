@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% block title %}Explore | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Explore</h1>
+    <form method="GET" action="{{ url_for('web.explore') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items: end;">
+      <div>
+        <label>Search</label>
+        <input class="retro-input" type="text" name="q" value="{{ q }}" placeholder="symbol or name" />
+      </div>
+      <div>
+        <label>Filter</label>
+        <select class="retro-input" name="filter">
+          <option value="all" {% if filt == 'all' %}selected{% endif %}>All</option>
+          <option value="gainers" {% if filt == 'gainers' %}selected{% endif %}>Gainers</option>
+          <option value="losers" {% if filt == 'losers' %}selected{% endif %}>Losers</option>
+        </select>
+      </div>
+      <div>
+        <label>Sort</label>
+        <select class="retro-input" name="sort">
+          <option value="market_cap" {% if sort == 'market_cap' %}selected{% endif %}>Market Cap</option>
+          <option value="price" {% if sort == 'price' %}selected{% endif %}>Price</option>
+          <option value="change_24h" {% if sort == 'change_24h' %}selected{% endif %}>24h Change</option>
+        </select>
+      </div>
+      <div>
+        <label>Order</label>
+        <select class="retro-input" name="order">
+          <option value="desc" {% if order == 'desc' %}selected{% endif %}>Desc</option>
+          <option value="asc" {% if order == 'asc' %}selected{% endif %}>Asc</option>
+        </select>
+      </div>
+      <div>
+        <label>Price Min</label>
+        <input class="retro-input" type="text" name="price_min" value="{{ price_min }}" placeholder="0" />
+      </div>
+      <div>
+        <label>Price Max</label>
+        <input class="retro-input" type="text" name="price_max" value="{{ price_max }}" placeholder="" />
+      </div>
+      <div>
+        <label>% Change Min</label>
+        <input class="retro-input" type="text" name="change_min" value="{{ change_min }}" placeholder="-5" />
+      </div>
+      <div>
+        <label>% Change Max</label>
+        <input class="retro-input" type="text" name="change_max" value="{{ change_max }}" placeholder="5" />
+      </div>
+      <div>
+        <label>Per Page</label>
+        <select class="retro-input" name="per">
+          {% for n in [8,12,16,24] %}
+            <option value="{{ n }}" {% if per == n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <button class="retro-button" type="submit">Apply</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Results</h2>
+    <div class="pf-grid">
+      {% for token in tokens %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ token.symbol }}</span>
+            <span>{{ token.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Price: <span class="pf-green">{{ '%.4f'|format(token.price or 0) }}</span></div>
+            <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
+            <div>24h: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
+          </div>
+          <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ token.price or 0 }}"></div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=token.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Pool</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No results.</div>
+      {% endfor %}
+    </div>
+    <div class="pf-pagination">
+      <div>Page {{ page }} of {{ pages }} ({{ total }} results)</div>
+      <div class="pf-pagination-controls">
+        {% set args = request.args.to_dict() %}
+        <a class="retro-button" href="{{ url_for('web.export_explore_csv', **args) }}">Export CSV</a>
+        {% if page > 1 %}
+          {% set prev_args = args.copy() %}
+          {% set _ = prev_args.update({'page': page - 1}) %}
+          <a class="retro-button" href="{{ url_for('web.explore', **prev_args) }}">Prev</a>
+        {% endif %}
+        {% if page < pages %}
+          {% set next_args = args.copy() %}
+          {% set _ = next_args.update({'page': page + 1}) %}
+          <a class="retro-button" href="{{ url_for('web.explore', **next_args) }}">Next</a>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

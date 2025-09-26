@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block title %}404 Not Found | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>404 — Page not found</h1>
+    <p>The page you requested could not be found.</p>
+    <p><a class="retro-button" href="{{ url_for('web.home') }}">Go Home</a> <a class="retro-button" href="{{ url_for('web.explore') }}">Explore</a></p>
+  </section>
+{% endblock %}

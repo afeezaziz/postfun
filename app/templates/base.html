@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Postfun{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
+</head>
+<body>
+  <header class="pf-header">
+    <div class="pf-container pf-header-inner">
+      <a href="{{ url_for('web.home') }}" class="pf-brand">Postfun</a>
+      <nav class="pf-nav">
+        <a href="{{ url_for('web.home') }}" class="{% if request.endpoint == 'web.home' %}active{% endif %}" {% if request.endpoint == 'web.home' %}aria-current="page"{% endif %}>Home</a>
+        <a href="{{ url_for('web.tokens_list') }}" class="{% if request.endpoint == 'web.tokens_list' %}active{% endif %}" {% if request.endpoint == 'web.tokens_list' %}aria-current="page"{% endif %}>Tokens</a>
+        <a href="{{ url_for('web.explore') }}" class="{% if request.endpoint == 'web.explore' %}active{% endif %}" {% if request.endpoint == 'web.explore' %}aria-current="page"{% endif %}>Explore</a>
+        <a href="{{ url_for('web.pro') }}" class="{% if request.endpoint == 'web.pro' %}active{% endif %}" {% if request.endpoint == 'web.pro' %}aria-current="page"{% endif %}>Pro</a>
+        <a href="{{ url_for('web.portfolio') }}" class="{% if request.endpoint == 'web.portfolio' %}active{% endif %}" {% if request.endpoint == 'web.portfolio' %}aria-current="page"{% endif %}>Portfolio</a>
+        <a href="{{ url_for('web.launchpad') }}" class="{% if request.endpoint == 'web.launchpad' %}active{% endif %}" {% if request.endpoint == 'web.launchpad' %}aria-current="page"{% endif %}>Launchpad</a>
+        <a href="{{ url_for('web.dashboard') }}" class="{% if request.endpoint == 'web.dashboard' %}active{% endif %}" {% if request.endpoint == 'web.dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
+      </nav>
+      <div class="pf-auth">
+        {% if current_user %}
+          <span class="pf-npub">{{ current_user.npub or current_user.pubkey_hex }}</span>
+          <button class="retro-button" onclick="pfLogout()">Logout</button>
+        {% else %}
+          <button class="retro-button" onclick="pfNostrLogin()">Login with Nostr</button>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <main class="pf-container pf-main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="pf-flashes">
+          {% for category, message in messages %}
+            <div class="pf-flash pf-flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="pf-footer">
+    <div class="pf-container">
+      <span>© {{ 2025 }} Postfun</span>
+      <span style="margin-left: 12px;">
+        <a href="{{ url_for('web.about') }}">About</a> ·
+        <a href="{{ url_for('web.stats') }}">Stats</a> ·
+        <a href="{{ url_for('web.faq') }}">FAQ</a> ·
+        <a href="{{ url_for('web.download') }}">Download</a>
+      </span>
+    </div>
+  </footer>
+</body>
+</html>

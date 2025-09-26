@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}Portfolio | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Your Portfolio</h1>
+    {% if user %}
+      <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+        <div class="card">
+          <h3>User</h3>
+          <div>npub: <span class="pf-green">{{ user.npub or '—' }}</span></div>
+          <div>pubkey: <span class="pf-green">{{ user.pubkey_hex }}</span></div>
+          <div>display: <span class="pf-green">{{ user.display_name or '—' }}</span></div>
+        </div>
+        <div class="card">
+          <h3>Summary</h3>
+          <div>Total Value: <span class="pf-green">—</span></div>
+          <div>Positions: <span class="pf-green">{{ holdings|length }}</span></div>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Holdings</h2>
+    <div class="pf-grid">
+      {% for h in holdings %}
+        {% set token = h.token %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ token.symbol }}</span>
+            <span>{{ token.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Amount: <span class="pf-green">{{ '%.4f'|format(h.amount or 0) }}</span></div>
+            <div>Value: <span class="pf-green">{{ '%.2f'|format(h.value or 0) }}</span></div>
+            <div>Price: <span class="pf-green">{{ '%.4f'|format(token.price or 0) }}</span></div>
+            <div>24h: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
+          </div>
+          <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ token.price or 0 }}"></div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=token.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Pool</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No holdings yet.</div>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}
