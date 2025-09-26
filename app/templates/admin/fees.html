@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}Admin · Fees | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Protocol Fees</h1>
+    <p>Manage fee distribution rules and payouts per pool.</p>
+    {% if not pools %}
+      <div>No pools found.</div>
+    {% else %}
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr>
+              <th>Pool ID</th>
+              <th>Pair</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in pools %}
+              <tr>
+                <td><code>{{ p.id }}</code></td>
+                <td><strong>{{ p.token_a }}</strong> / <strong>{{ p.token_b }}</strong></td>
+                <td>
+                  <a class="retro-button" href="{{ url_for('admin.fees_detail', pool_id=p.id) }}">View</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

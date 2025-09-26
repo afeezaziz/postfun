@@ -153,8 +153,8 @@
         <div class="card">
           <div>Creator: <span class="pf-green">{{ u.npub }}</span></div>
           <div>Launches: <span class="pf-green">{{ u.count }}</span></div>
-          <div style="margin-top:8px;">
-            <a class="retro-button" href="{{ url_for('web.dashboard') }}">Follow</a>
+          <div style="margin-top:8px; display:flex; gap:8px;">
+            <a class="retro-button" href="{{ url_for('web.creator_profile', user_id=u.user_id) }}">Profile</a>
           </div>
         </div>
       {% else %}

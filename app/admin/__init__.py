@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, abort, flash, g
 
 from ..extensions import db
-from ..models import User, Token, AlertRule, AlertEvent, AuditLog
+from ..models import User, Token, AlertRule, AlertEvent, AuditLog, SwapPool, FeeDistributionRule, FeePayout
 from ..web import get_jwt_from_cookie
 from ..services.audit import log_action
 from sqlalchemy import select, or_, case
@@ -50,6 +50,143 @@ def dashboard():
         events_count=events_count,
         audit_count=audit_count,
     )
+
+
+@admin_bp.route("/fees")
+@require_admin
+def fees():
+    pools = (
+        SwapPool.query
+        .order_by(SwapPool.id.asc())
+        .all()
+    )
+    # Attach token symbols for display
+    items = []
+    for p in pools:
+        ta = Token.query.get(p.token_a_id)
+        tb = Token.query.get(p.token_b_id)
+        items.append({
+            "id": p.id,
+            "token_a": ta.symbol if ta else p.token_a_id,
+            "token_b": tb.symbol if tb else p.token_b_id,
+        })
+    return render_template("admin/fees.html", pools=items)
+
+
+@admin_bp.route("/fees/<int:pool_id>", methods=["GET", "POST"])
+@require_admin
+def fees_detail(pool_id: int):
+    from decimal import Decimal
+
+    pool = db.session.get(SwapPool, pool_id)
+    if not pool:
+        abort(404)
+    # Get tokens
+    ta = db.session.get(Token, pool.token_a_id)
+    tb = db.session.get(Token, pool.token_b_id)
+    # Current rule
+    rule = FeeDistributionRule.query.filter_by(pool_id=pool.id).first()
+
+    if request.method == "POST":
+        op = (request.form.get("op") or "").strip().lower()
+        if op == "save_rule":
+            try:
+                bps_creator = int(request.form.get("bps_creator", 5000))
+                bps_minter = int(request.form.get("bps_minter", 3000))
+                bps_treasury = int(request.form.get("bps_treasury", 2000))
+                if bps_creator < 0 or bps_minter < 0 or bps_treasury < 0 or (bps_creator + bps_minter + bps_treasury) != 10000:
+                    raise ValueError("bps must sum to 10000")
+                creator_user_id = request.form.get("creator_user_id")
+                minter_user_id = request.form.get("minter_user_id")
+                treasury_account = request.form.get("treasury_account")
+                if not rule:
+                    rule = FeeDistributionRule(pool_id=pool.id)
+                    db.session.add(rule)
+                rule.creator_user_id = int(creator_user_id) if creator_user_id else None
+                rule.minter_user_id = int(minter_user_id) if minter_user_id else None
+                rule.treasury_account = treasury_account or None
+                rule.bps_creator = bps_creator
+                rule.bps_minter = bps_minter
+                rule.bps_treasury = bps_treasury
+                db.session.add(rule)
+                db.session.commit()
+                flash("Fee rule saved", "success")
+            except Exception as e:
+                db.session.rollback()
+                flash(f"Failed to save rule: {e}", "error")
+            return redirect(url_for("admin.fees_detail", pool_id=pool.id))
+
+        if op == "payout":
+            try:
+                entity = request.form.get("entity")
+                asset = request.form.get("asset")
+                amount_s = request.form.get("amount")
+                if entity not in {"creator", "minter", "treasury"} or asset not in {"A", "B"}:
+                    raise ValueError("invalid payout params")
+                amount = Decimal(str(amount_s))
+                if amount <= 0:
+                    raise ValueError("amount must be positive")
+                # compute pending
+                bps_c = int(rule.bps_creator if rule else 5000)
+                bps_m = int(rule.bps_minter if rule else 3000)
+                bps_t = int(rule.bps_treasury if rule else 2000)
+                fa = Decimal(pool.fee_accum_a or 0)
+                fb = Decimal(pool.fee_accum_b or 0)
+                def allocs(bps: int):
+                    return {"A": (fa * Decimal(bps) / Decimal(10000)), "B": (fb * Decimal(bps) / Decimal(10000))}
+                def paid(ent: str):
+                    rows = FeePayout.query.filter_by(pool_id=pool.id, entity=ent).all()
+                    totA = Decimal("0"); totB = Decimal("0")
+                    for p in rows:
+                        if p.asset == "A": totA += Decimal(p.amount or 0)
+                        elif p.asset == "B": totB += Decimal(p.amount or 0)
+                    return {"A": totA, "B": totB}
+                bps_map = {"creator": bps_c, "minter": bps_m, "treasury": bps_t}
+                a = allocs(bps_map[entity])
+                p = paid(entity)
+                pending = a[asset] - p[asset]
+                if amount > pending:
+                    raise ValueError(f"amount exceeds pending ({float(pending):.8f})")
+                payout = FeePayout(pool_id=pool.id, entity=entity, asset=asset, amount=amount, note=(request.form.get("note") or None))
+                db.session.add(payout)
+                db.session.commit()
+                flash("Payout recorded", "success")
+            except Exception as e:
+                db.session.rollback()
+                flash(f"Failed to payout: {e}", "error")
+            return redirect(url_for("admin.fees_detail", pool_id=pool.id))
+
+    # Compute summary (alloc, paid, pending) for display
+    def _summary_for(pool: SwapPool, rule: FeeDistributionRule | None):
+        bps_c = int(rule.bps_creator if rule else 5000)
+        bps_m = int(rule.bps_minter if rule else 3000)
+        bps_t = int(rule.bps_treasury if rule else 2000)
+        fa = Decimal(pool.fee_accum_a or 0)
+        fb = Decimal(pool.fee_accum_b or 0)
+        def allocs(bps: int):
+            return {"A": (fa * Decimal(bps) / Decimal(10000)), "B": (fb * Decimal(bps) / Decimal(10000))}
+        def paid(entity: str):
+            rows = FeePayout.query.filter_by(pool_id=pool.id, entity=entity).all()
+            totA = Decimal("0"); totB = Decimal("0")
+            for p in rows:
+                if p.asset == "A": totA += Decimal(p.amount or 0)
+                elif p.asset == "B": totB += Decimal(p.amount or 0)
+            return {"A": totA, "B": totB}
+        out = {}
+        for entity, bps in (("creator", bps_c), ("minter", bps_m), ("treasury", bps_t)):
+            a = allocs(bps)
+            p = paid(entity)
+            out[entity] = {
+                "alloc": {"A": float(a["A"]), "B": float(a["B"])},
+                "paid": {"A": float(p["A"]), "B": float(p["B"])},
+                "pending": {"A": float(max(Decimal("0"), a["A"] - p["A"])), "B": float(max(Decimal("0"), a["B"] - p["B"]))},
+            }
+        return out
+
+    summary = _summary_for(pool, rule)
+
+    # Render detail
+    return render_template("admin/fee_detail.html", pool=pool, token_a=ta, token_b=tb, rule=rule, summary=summary)
 
 
 @admin_bp.route("/users")

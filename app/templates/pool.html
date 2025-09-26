@@ -111,6 +111,46 @@
       <div>Price: <span class="pf-green" data-price-target>{{ '%.6f'|format((price or 0) if price is not none else (token.price or 0)) }}</span></div>
       <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
       <div>24h Change: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
+      {% if launcher %}
+      <div>Creator: <a class="pf-green" href="{{ url_for('web.creator_profile', user_id=launcher.id) }}">{{ launcher.npub or launcher.pubkey_hex }}</a></div>
+      {% endif %}
     </div>
   </section>
+
+  {% if fee_summary %}
+  <section class="card">
+    <h2>Protocol Fee Summary</h2>
+    <div class="pf-table-wrap">
+      <table class="pf-table">
+        <thead>
+          <tr>
+            <th>Entity</th>
+            <th>Alloc A</th>
+            <th>Alloc B</th>
+            <th>Paid A</th>
+            <th>Paid B</th>
+            <th>Pending A</th>
+            <th>Pending B</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key in ['creator','minter','treasury'] %}
+            {% set row = fee_summary.get(key) %}
+            {% if row %}
+            <tr>
+              <td><strong>{{ key|capitalize }}</strong></td>
+              <td>{{ '%.8f'|format(row.alloc['A'] or 0) }}</td>
+              <td>{{ '%.8f'|format(row.alloc['B'] or 0) }}</td>
+              <td>{{ '%.8f'|format(row.paid['A'] or 0) }}</td>
+              <td>{{ '%.8f'|format(row.paid['B'] or 0) }}</td>
+              <td>{{ '%.8f'|format(row.pending['A'] or 0) }}</td>
+              <td>{{ '%.8f'|format(row.pending['B'] or 0) }}</td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
 {% endblock %}

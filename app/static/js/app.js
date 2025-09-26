@@ -277,6 +277,34 @@ function pfInitAlertsSSE() {
   }
 }
 
+// SSE: follower notifications (creator launches and stage changes)
+function pfInitFollowSSE() {
+  if (typeof EventSource === 'undefined') return;
+  // Only initialize for logged-in users (header renders npub span when authed)
+  if (!document.querySelector('.pf-npub')) return;
+  try {
+    pfSSEWithBackoff('/sse/follow', (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (!data || !data.type) return;
+        if (data.type === 'launch') {
+          const sym = data.symbol || '?';
+          const cr = data.creator || 'Creator';
+          pfToast(`${cr} launched ${sym} 🚀`, 'success', 6000);
+        } else if (data.type === 'stage') {
+          const sym = data.symbol || '?';
+          const st = Number(data.stage || 0);
+          pfToast(`${sym} progressed to stage ${st}`, 'info', 5000);
+        }
+      } catch (e) {
+        // ignore parse errors
+      }
+    }, 'follow');
+  } catch (e) {
+    // ignore
+  }
+}
+
 async function pfNostrLogin() {
   try {
     if (!window.nostr || !window.nostr.getPublicKey || !window.nostr.signEvent) {
@@ -518,6 +546,7 @@ window.addEventListener('DOMContentLoaded', () => {
   pfInitProgressBars();
   pfInitPricesSSE();
   pfInitAlertsSSE();
+  pfInitFollowSSE();
   pfInitTicker();
   pfInitTradesSSE();
   pfInitTokenize();

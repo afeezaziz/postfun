@@ -17,6 +17,9 @@
         <div>Price: <span class="pf-green" data-price-target>{{ '%.4f'|format(price or 0) }}</span></div>
         <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
         <div>24h Change: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
+        {% if launcher %}
+        <div>Creator: <a class="pf-green" href="{{ url_for('web.creator_profile', user_id=launcher.id) }}">{{ launcher.npub or launcher.pubkey_hex }}</a></div>
+        {% endif %}
       </div>
       <div class="card pf-token-panel">
         <h2>Activity</h2>

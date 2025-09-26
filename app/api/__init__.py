@@ -813,6 +813,13 @@ def amm_swap():
     try:
         trade, q, pool = execute_swap(db.session, int(pool_id), user.id, side, amount_in)
         db.session.commit()
+        # Invalidate hot caches affected by trades
+        try:
+            from ..web import _cached_trending_items, _cached_stats
+            cache.delete_memoized(_cached_trending_items)
+            cache.delete_memoized(_cached_stats)
+        except Exception:
+            pass
         return jsonify({
             "trade": trade.to_dict(),
             "pool": pool.to_dict(),

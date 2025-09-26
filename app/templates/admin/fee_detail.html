@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% block title %}Admin · Pool Fees | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <a class="retro-button" href="{{ url_for('admin.fees') }}" style="float:right;">← Back</a>
+    <h1>Pool Fees</h1>
+    <div>Pool ID: <code>{{ pool.id }}</code></div>
+    <div>Pair: <strong>{{ token_a.symbol if token_a else pool.token_a_id }}</strong> / <strong>{{ token_b.symbol if token_b else pool.token_b_id }}</strong></div>
+  </section>
+
+  <section class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+    <div class="card">
+      <h2>Distribution Rule</h2>
+      <form method="POST" action="{{ url_for('admin.fees_detail', pool_id=pool.id) }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items:end;">
+        <input type="hidden" name="op" value="save_rule" />
+        <div>
+          <label>Creator User ID</label>
+          <input class="retro-input" type="text" name="creator_user_id" value="{{ rule.creator_user_id if rule else '' }}" placeholder="optional" />
+        </div>
+        <div>
+          <label>Minter User ID</label>
+          <input class="retro-input" type="text" name="minter_user_id" value="{{ rule.minter_user_id if rule else '' }}" placeholder="optional" />
+        </div>
+        <div>
+          <label>Treasury Account</label>
+          <input class="retro-input" type="text" name="treasury_account" value="{{ rule.treasury_account if rule else '' }}" placeholder="optional" />
+        </div>
+        <div>
+          <label>BPS (Creator)</label>
+          <input class="retro-input" type="number" name="bps_creator" value="{{ rule.bps_creator if rule else 5000 }}" min="0" max="10000" />
+        </div>
+        <div>
+          <label>BPS (Minter)</label>
+          <input class="retro-input" type="number" name="bps_minter" value="{{ rule.bps_minter if rule else 3000 }}" min="0" max="10000" />
+        </div>
+        <div>
+          <label>BPS (Treasury)</label>
+          <input class="retro-input" type="number" name="bps_treasury" value="{{ rule.bps_treasury if rule else 2000 }}" min="0" max="10000" />
+        </div>
+        <div>
+          <div style="color:var(--dim-green); font-size:12px;">BPS must sum to 10000</div>
+          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+          <button class="retro-button" type="submit">Save Rule</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Payout</h2>
+      <form method="POST" action="{{ url_for('admin.fees_detail', pool_id=pool.id) }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items:end;">
+        <input type="hidden" name="op" value="payout" />
+        <div>
+          <label>Entity</label>
+          <select class="retro-input" name="entity">
+            <option value="creator">Creator</option>
+            <option value="minter">Minter</option>
+            <option value="treasury">Treasury</option>
+          </select>
+        </div>
+        <div>
+          <label>Asset</label>
+          <select class="retro-input" name="asset">
+            <option value="A">Token A</option>
+            <option value="B">Token B</option>
+          </select>
+        </div>
+        <div>
+          <label>Amount</label>
+          <input class="retro-input" type="text" name="amount" placeholder="e.g. 12.345" />
+        </div>
+        <div>
+          <label>Note</label>
+          <input class="retro-input" type="text" name="note" placeholder="optional" />
+        </div>
+        <div>
+          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+          <button class="retro-button" type="submit">Record Payout</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Summary</h2>
+    <div class="pf-table-wrap">
+      <table class="pf-table">
+        <thead>
+          <tr>
+            <th>Entity</th>
+            <th>Alloc A</th>
+            <th>Alloc B</th>
+            <th>Paid A</th>
+            <th>Paid B</th>
+            <th>Pending A</th>
+            <th>Pending B</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key in ['creator','minter','treasury'] %}
+            {% set row = summary[key] %}
+            <tr>
+              <td><strong>{{ key|capitalize }}</strong></td>
+              <td>{{ '%.8f'|format(row.alloc.A or 0) }}</td>
+              <td>{{ '%.8f'|format(row.alloc.B or 0) }}</td>
+              <td>{{ '%.8f'|format(row.paid.A or 0) }}</td>
+              <td>{{ '%.8f'|format(row.paid.B or 0) }}</td>
+              <td>{{ '%.8f'|format(row.pending.A or 0) }}</td>
+              <td>{{ '%.8f'|format(row.pending.B or 0) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

@@ -52,4 +52,58 @@
       </div>
     </div>
   </section>
+
+  {% if creator_fee_summary %}
+  <section class="card">
+    <h2>Fees (Creator Share)</h2>
+    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+      <div class="card">
+        <h3>Total</h3>
+        <div>Alloc A: <span class="pf-green">{{ '%.8f'|format(creator_fee_summary.total.allocA or 0) }}</span></div>
+        <div>Alloc B: <span class="pf-green">{{ '%.8f'|format(creator_fee_summary.total.allocB or 0) }}</span></div>
+        <div>Paid A: <span class="pf-green">{{ '%.8f'|format(creator_fee_summary.total.paidA or 0) }}</span></div>
+        <div>Paid B: <span class="pf-green">{{ '%.8f'|format(creator_fee_summary.total.paidB or 0) }}</span></div>
+        <div>Pending A: <span class="pf-green">{{ '%.8f'|format(creator_fee_summary.total.pendingA or 0) }}</span></div>
+        <div>Pending B: <span class="pf-green">{{ '%.8f'|format(creator_fee_summary.total.pendingB or 0) }}</span></div>
+      </div>
+      <div class="card" style="grid-column: 1 / -1;">
+        <h3>By Pool</h3>
+        {% if creator_fee_summary.items and creator_fee_summary.items|length > 0 %}
+          <div class="pf-table-wrap">
+            <table class="pf-table">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Pool</th>
+                  <th>Alloc A</th>
+                  <th>Alloc B</th>
+                  <th>Paid A</th>
+                  <th>Paid B</th>
+                  <th>Pending A</th>
+                  <th>Pending B</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for it in creator_fee_summary.items %}
+                  <tr>
+                    <td><span class="badge">{{ it.symbol }}</span></td>
+                    <td>#{{ it.pool_id }}</td>
+                    <td>{{ '%.8f'|format(it.allocA or 0) }}</td>
+                    <td>{{ '%.8f'|format(it.allocB or 0) }}</td>
+                    <td>{{ '%.8f'|format(it.paidA or 0) }}</td>
+                    <td>{{ '%.8f'|format(it.paidB or 0) }}</td>
+                    <td>{{ '%.8f'|format(it.pendingA or 0) }}</td>
+                    <td>{{ '%.8f'|format(it.pendingB or 0) }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div>No fee data yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+  {% endif %}
 {% endblock %}

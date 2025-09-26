@@ -162,6 +162,11 @@ class TokenInfo(db.Model):
     token = db.relationship("Token")
     launcher = db.relationship("User")
 
+    __table_args__ = (
+        db.Index('ix_token_infos_launch_user', 'launch_user_id'),
+        db.Index('ix_token_infos_launch_at', 'launch_at'),
+    )
+
     def to_dict(self):
         return {
             "token_id": self.token_id,
@@ -414,6 +419,11 @@ class BurnEvent(db.Model):
     pool = db.relationship("SwapPool")
     token = db.relationship("Token")
 
+    __table_args__ = (
+        db.Index('ix_burn_events_created', 'created_at'),
+        db.Index('ix_burn_events_pool_created', 'pool_id', 'created_at'),
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -472,3 +482,7 @@ class FeePayout(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     pool = db.relationship("SwapPool")
+
+    __table_args__ = (
+        db.Index('ix_fee_payouts_pool_entity_asset_created', 'pool_id', 'entity', 'asset', 'created_at'),
+    )

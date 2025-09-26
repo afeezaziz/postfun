@@ -12,7 +12,21 @@ from urllib.parse import urlsplit
 
 from ..utils.jwt_utils import verify_jwt
 from ..extensions import db, cache
-from ..models import User, Token, WatchlistItem, AlertRule, AlertEvent, SwapPool, SwapTrade, TokenBalance, TokenInfo, CreatorFollow
+from ..models import (
+    User,
+    Token,
+    WatchlistItem,
+    AlertRule,
+    AlertEvent,
+    SwapPool,
+    SwapTrade,
+    TokenBalance,
+    TokenInfo,
+    CreatorFollow,
+    FeeDistributionRule,
+    FeePayout,
+    BurnEvent,
+)
 from ..services.amm import execute_swap, quote_swap
 from sqlalchemy import case
 
@@ -372,6 +386,12 @@ def token_detail(symbol: str):
 
     # Token info (for SEO)
     info = TokenInfo.query.filter_by(token_id=token.id).first()
+    launcher = None
+    try:
+        if info and info.launch_user_id:
+            launcher = db.session.get(User, int(info.launch_user_id))
+    except Exception:
+        launcher = None
     meta_title = f"{token.symbol} – {token.name} | Postfun"
     meta_description = (info.description if info and info.description else "From posts to markets. Turn vibes into value on Postfun.")
     meta_image = info.logo_url if (info and info.logo_url) else None
@@ -405,6 +425,7 @@ def token_detail(symbol: str):
         token=token,
         watchlisted=watchlisted,
         price=price,
+        launcher=launcher,
         meta_title=meta_title,
         meta_description=meta_description,
         meta_image=meta_image,
@@ -715,6 +736,19 @@ def launchpad():
         if mcap_val is not None:
             token.market_cap = mcap_val
         try:
+            # Ensure TokenInfo exists and stamp launcher
+            # Flush to assign token.id if new
+            db.session.flush()
+            info = TokenInfo.query.filter_by(token_id=token.id).first()
+            payload = g.jwt_payload
+            uid = payload.get("uid") if payload else None
+            if not info:
+                info = TokenInfo(token_id=token.id)
+                db.session.add(info)
+            if isinstance(uid, int) and not info.launch_user_id:
+                info.launch_user_id = uid
+                info.launch_at = datetime.utcnow()
+            db.session.add(info)
             db.session.commit()
             # Invalidate caches affected by launches/edits
             try:
@@ -1191,6 +1225,40 @@ def pool(symbol: str):
                 WatchlistItem.query.filter_by(user_id=user.id, token_id=token.id).first() is not None
             )
 
+    # Creator (launcher) for this token
+    launcher = None
+    info = TokenInfo.query.filter_by(token_id=token.id).first()
+    if info and info.launch_user_id:
+        launcher = db.session.get(User, int(info.launch_user_id))
+
+    # Fee summary for this pool (if exists)
+    summary = None
+    if pool:
+        from decimal import Decimal as _D
+        rule = FeeDistributionRule.query.filter_by(pool_id=pool.id).first()
+        bps_c = int(rule.bps_creator if rule else 5000)
+        bps_m = int(rule.bps_minter if rule else 3000)
+        bps_t = int(rule.bps_treasury if rule else 2000)
+        fa = _D(pool.fee_accum_a or 0)
+        fb = _D(pool.fee_accum_b or 0)
+        def _allocs(bps: int):
+            return {"A": (fa * _D(bps) / _D(10000)), "B": (fb * _D(bps) / _D(10000))}
+        def _paid(entity: str):
+            rows = FeePayout.query.filter_by(pool_id=pool.id, entity=entity).all()
+            totA = _D("0"); totB = _D("0")
+            for p in rows:
+                if p.asset == "A": totA += _D(p.amount or 0)
+                elif p.asset == "B": totB += _D(p.amount or 0)
+            return {"A": totA, "B": totB}
+        summary = {}
+        for ent, bps in (("creator", bps_c), ("minter", bps_m), ("treasury", bps_t)):
+            a = _allocs(bps); p = _paid(ent)
+            summary[ent] = {
+                "alloc": {"A": float(a["A"]), "B": float(a["B"])},
+                "paid": {"A": float(p["A"]), "B": float(p["B"])},
+                "pending": {"A": float(max(_D("0"), a["A"] - p["A"])), "B": float(max(_D("0"), a["B"] - p["B"]))},
+            }
+
     return render_template(
         "pool.html",
         token=token,
@@ -1202,6 +1270,8 @@ def pool(symbol: str):
         watchlisted=watchlisted,
         confirm_trade_preview=False,
         trade_form=None,
+        fee_summary=summary,
+        launcher=launcher,
     )
 
 
@@ -1331,6 +1401,48 @@ def creator_profile(user_id: int):
         me = db.session.get(User, int(payload.get("uid")))
         if me:
             is_following = CreatorFollow.query.filter_by(follower_user_id=me.id, creator_user_id=user.id).first() is not None
+
+    # Aggregate fee summary for this creator (based on rules assigning creator_user_id)
+    from decimal import Decimal as _D
+    rules = FeeDistributionRule.query.filter_by(creator_user_id=user.id).all()
+    total = {"allocA": 0.0, "allocB": 0.0, "paidA": 0.0, "paidB": 0.0, "pendingA": 0.0, "pendingB": 0.0}
+    items = []
+    gusd = _get_gusd_token()
+    for r in rules:
+        pool = db.session.get(SwapPool, r.pool_id)
+        if not pool:
+            continue
+        fa = _D(pool.fee_accum_a or 0); fb = _D(pool.fee_accum_b or 0)
+        bps = int(r.bps_creator or 0)
+        allocA = fa * _D(bps) / _D(10000)
+        allocB = fb * _D(bps) / _D(10000)
+        # paid for creator entity
+        rows = FeePayout.query.filter_by(pool_id=pool.id, entity="creator").all()
+        paidA = _D("0"); paidB = _D("0")
+        for p in rows:
+            if p.asset == "A": paidA += _D(p.amount or 0)
+            elif p.asset == "B": paidB += _D(p.amount or 0)
+        pendA = max(_D("0"), allocA - paidA)
+        pendB = max(_D("0"), allocB - paidB)
+        # Figure display symbol (prefer non-gUSD token)
+        tokA = db.session.get(Token, pool.token_a_id)
+        tokB = db.session.get(Token, pool.token_b_id)
+        disp_token = tokA
+        if gusd and tokA and tokA.id == (gusd.id if gusd else -1):
+            disp_token = tokB
+        elif gusd and tokB and tokB.id == (gusd.id if gusd else -1):
+            disp_token = tokA
+        items.append({
+            "pool_id": pool.id,
+            "symbol": disp_token.symbol if disp_token else (tokA.symbol if tokA else '?'),
+            "allocA": float(allocA), "allocB": float(allocB),
+            "paidA": float(paidA), "paidB": float(paidB),
+            "pendingA": float(pendA), "pendingB": float(pendB),
+        })
+        total["allocA"] += float(allocA); total["allocB"] += float(allocB)
+        total["paidA"] += float(paidA); total["paidB"] += float(paidB)
+        total["pendingA"] += float(pendA); total["pendingB"] += float(pendB)
+
     meta_title = f"Creator — {user.npub or user.pubkey_hex} | Postfun"
     meta_url = url_for("web.creator_profile", user_id=user.id, _external=True)
     return render_template(
@@ -1341,6 +1453,7 @@ def creator_profile(user_id: int):
         follower_count=follower_count,
         is_following=is_following,
         price_by_symbol=price_by_symbol,
+        creator_fee_summary={"total": total, "items": items},
         meta_title=meta_title,
         meta_description="Creator profile on Postfun.",
         meta_url=meta_url,
@@ -1445,6 +1558,14 @@ def sitemap_xml():
     ).all():
         urls.append(url_for("web.token_detail", symbol=t.symbol, _external=True))
         urls.append(url_for("web.pool", symbol=t.symbol, _external=True))
+    # Creator profile pages (based on token launches)
+    creator_ids = (
+        db.session.query(db.func.distinct(TokenInfo.launch_user_id))
+        .filter(TokenInfo.launch_user_id != None)  # noqa: E711
+        .all()
+    )
+    for (cid,) in creator_ids:
+        urls.append(url_for("web.creator_profile", user_id=int(cid), _external=True))
     items = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
     xml = f"<?xml version='1.0' encoding='UTF-8'?><urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>{items}</urlset>"
     return Response(xml, mimetype="application/xml", headers={"Cache-Control": "public, max-age=3600"})
@@ -1461,12 +1582,16 @@ def sse_prices():
 
     def event_stream(sym: str):
         while True:
-            t = Token.query.filter_by(symbol=sym).first()
-            # Use AMM-computed price when available for consistency
-            amm_price = _amm_price_for_token(t) if t else None
-            price = float(amm_price) if amm_price is not None else (float(t.price or 0) if t and t.price is not None else 0.0)
-            data = json.dumps({"symbol": sym, "price": price})
-            yield f"data: {data}\n\n"
+            try:
+                t = Token.query.filter_by(symbol=sym).first()
+                # Use AMM-computed price when available for consistency
+                amm_price = _amm_price_for_token(t) if t else None
+                price = float(amm_price) if amm_price is not None else (float(t.price or 0) if t and t.price is not None else 0.0)
+                data = json.dumps({"symbol": sym, "price": price})
+                yield f"data: {data}\n\n"
+            except Exception:
+                # Heartbeat on errors to keep connection alive
+                yield ": keep-alive\n\n"
             time.sleep(5)
 
     return Response(event_stream(symbol), mimetype="text/event-stream", headers={
@@ -1481,43 +1606,46 @@ def sse_trades():
     def event_stream():
         last_ts = datetime.utcnow() - timedelta(minutes=10)
         while True:
-            rows = (
-                SwapTrade.query
-                .filter(SwapTrade.created_at > last_ts)
-                .order_by(SwapTrade.created_at.asc())
-                .limit(100)
-                .all()
-            )
-            if rows:
-                for t in rows:
-                    last_ts = max(last_ts, t.created_at)
-                    pool = db.session.get(SwapPool, t.pool_id)
-                    if not pool:
-                        continue
-                    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
-                    token_id = None
-                    if gusd:
-                        token_id = pool.token_a_id if pool.token_b_id == gusd.id else pool.token_b_id
-                    tok = db.session.get(Token, token_id) if token_id else None
-                    if not tok:
-                        tok = db.session.get(Token, pool.token_a_id)
-                    recv_token_id = pool.token_b_id if t.side == "AtoB" else pool.token_a_id
-                    kind = "buy" if (tok and recv_token_id == tok.id) else "sell"
-                    pr = None
-                    if gusd:
-                        if pool.token_b_id == gusd.id:
-                            pr = (t.amount_out / t.amount_in) if (t.side == "AtoB" and t.amount_in and t.amount_out) else ((t.amount_in / t.amount_out) if (t.amount_in and t.amount_out) else None)
-                        elif pool.token_a_id == gusd.id:
-                            pr = (t.amount_in / t.amount_out) if (t.side == "AtoB" and t.amount_in and t.amount_out) else ((t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None)
-                    data = json.dumps({
-                        "symbol": tok.symbol if tok else "?",
-                        "side": kind,
-                        "price": float(pr) if pr is not None else None,
-                        "time": t.created_at.isoformat() + "Z",
-                    })
-                    yield f"data: {data}\n\n"
-            else:
-                # Heartbeat to keep connection alive
+            try:
+                rows = (
+                    SwapTrade.query
+                    .filter(SwapTrade.created_at > last_ts)
+                    .order_by(SwapTrade.created_at.asc())
+                    .limit(100)
+                    .all()
+                )
+                if rows:
+                    for t in rows:
+                        last_ts = max(last_ts, t.created_at)
+                        pool = db.session.get(SwapPool, t.pool_id)
+                        if not pool:
+                            continue
+                        gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+                        token_id = None
+                        if gusd:
+                            token_id = pool.token_a_id if pool.token_b_id == gusd.id else pool.token_b_id
+                        tok = db.session.get(Token, token_id) if token_id else None
+                        if not tok:
+                            tok = db.session.get(Token, pool.token_a_id)
+                        recv_token_id = pool.token_b_id if t.side == "AtoB" else pool.token_a_id
+                        kind = "buy" if (tok and recv_token_id == tok.id) else "sell"
+                        pr = None
+                        if gusd:
+                            if pool.token_b_id == gusd.id:
+                                pr = (t.amount_out / t.amount_in) if (t.side == "AtoB" and t.amount_in and t.amount_out) else ((t.amount_in / t.amount_out) if (t.amount_in and t.amount_out) else None)
+                            elif pool.token_a_id == gusd.id:
+                                pr = (t.amount_in / t.amount_out) if (t.side == "AtoB" and t.amount_in and t.amount_out) else ((t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None)
+                        data = json.dumps({
+                            "symbol": tok.symbol if tok else "?",
+                            "side": kind,
+                            "price": float(pr) if pr is not None else None,
+                            "time": t.created_at.isoformat() + "Z",
+                        })
+                        yield f"data: {data}\n\n"
+                else:
+                    # Heartbeat to keep connection alive
+                    yield ": keep-alive\n\n"
+            except Exception:
                 yield ": keep-alive\n\n"
             time.sleep(5)
 
@@ -1538,28 +1666,125 @@ def sse_alerts():
     def event_stream(user_id: int):
         last_ts = datetime.utcnow() - timedelta(minutes=5)
         while True:
-            # stream recent events for this user
-            evs = (
-                AlertEvent.query.join(AlertRule, AlertEvent.rule_id == AlertRule.id)
-                .join(Token, AlertRule.token_id == Token.id)
-                .filter(AlertRule.user_id == user_id, AlertEvent.triggered_at > last_ts)
-                .order_by(AlertEvent.triggered_at.asc())
-                .limit(20)
-                .all()
-            )
-            if evs:
-                for ev in evs:
-                    last_ts = max(last_ts, ev.triggered_at)
+            try:
+                # stream recent events for this user
+                evs = (
+                    AlertEvent.query.join(AlertRule, AlertEvent.rule_id == AlertRule.id)
+                    .join(Token, AlertRule.token_id == Token.id)
+                    .filter(AlertRule.user_id == user_id, AlertEvent.triggered_at > last_ts)
+                    .order_by(AlertEvent.triggered_at.asc())
+                    .limit(20)
+                    .all()
+                )
+                if evs:
+                    for ev in evs:
+                        last_ts = max(last_ts, ev.triggered_at)
+                        data = json.dumps({
+                            "symbol": ev.rule.token.symbol,
+                            "name": ev.rule.token.name,
+                            "condition": ev.rule.condition,
+                            "threshold": float(ev.rule.threshold or 0),
+                            "price": float(ev.price or 0),
+                            "time": ev.triggered_at.isoformat() + "Z",
+                        })
+                        yield f"data: {data}\n\n"
+                else:
+                    yield ": keep-alive\n\n"
+            except Exception:
+                yield ": keep-alive\n\n"
+            time.sleep(5)
+
+    return Response(event_stream(uid), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
+
+
+@web_bp.route("/sse/follow")
+def sse_follow():
+    payload = get_jwt_from_cookie()
+    if not payload or not isinstance(payload.get("uid"), int):
+        abort(401)
+    uid = int(payload["uid"])
+
+    def event_stream(me_id: int):
+        last_ts = datetime.utcnow() - timedelta(minutes=10)
+        # Cache followed creators and derived token_ids, refresh periodically to reduce DB load
+        followed = []
+        token_ids = []
+        last_follow_refresh = datetime.utcnow() - timedelta(minutes=10)
+        refresh_interval = timedelta(seconds=60)
+        while True:
+            try:
+                # creators I follow (refresh every 60s)
+                now = datetime.utcnow()
+                if (now - last_follow_refresh) > refresh_interval:
+                    followed = [row.creator_user_id for row in CreatorFollow.query.filter_by(follower_user_id=me_id).all()]
+                    # Derive token_ids for followed creators (refresh with followed)
+                    token_ids = [row[0] for row in db.session.query(TokenInfo.token_id).filter(TokenInfo.launch_user_id.in_(followed)).all()] if followed else []
+                    last_follow_refresh = now
+                if not followed:
+                    yield ": keep-alive\n\n"
+                    time.sleep(5)
+                    continue
+                emitted = False
+                # New launches by followed creators
+                launches = (
+                    TokenInfo.query
+                    .filter(TokenInfo.launch_user_id.in_(followed), TokenInfo.launch_at != None, TokenInfo.launch_at > last_ts)  # noqa: E711
+                    .order_by(TokenInfo.launch_at.asc())
+                    .limit(50)
+                    .all()
+                )
+                for info in launches:
+                    t = db.session.get(Token, info.token_id)
+                    creator = db.session.get(User, info.launch_user_id) if info.launch_user_id else None
                     data = json.dumps({
-                        "symbol": ev.rule.token.symbol,
-                        "name": ev.rule.token.name,
-                        "condition": ev.rule.condition,
-                        "threshold": float(ev.rule.threshold or 0),
-                        "price": float(ev.price or 0),
-                        "time": ev.triggered_at.isoformat() + "Z",
+                        "type": "launch",
+                        "symbol": t.symbol if t else None,
+                        "name": t.name if t else None,
+                        "time": (info.launch_at.isoformat() + "Z") if info.launch_at else None,
+                        "creator_id": info.launch_user_id,
+                        "creator": (creator.display_name or creator.npub or creator.pubkey_hex) if creator else None,
                     })
                     yield f"data: {data}\n\n"
-            else:
+                    last_ts = max(last_ts, info.launch_at or last_ts)
+                    emitted = True
+
+                # Stage changes (burn events) for tokens by followed creators
+                if token_ids:
+                    burns = (
+                        db.session.query(BurnEvent, SwapPool)
+                        .join(SwapPool, BurnEvent.pool_id == SwapPool.id)
+                        .filter(BurnEvent.created_at > last_ts)
+                        .filter((SwapPool.token_a_id.in_(token_ids)) | (SwapPool.token_b_id.in_(token_ids)))
+                        .order_by(BurnEvent.created_at.asc())
+                        .limit(50)
+                        .all()
+                    )
+                    for ev, pool in burns:
+                        # Determine display token (non-gUSD where possible)
+                        gusd = _get_gusd_token()
+                        tokA = db.session.get(Token, pool.token_a_id)
+                        tokB = db.session.get(Token, pool.token_b_id)
+                        disp = tokA
+                        if gusd and tokA and tokA.id == gusd.id:
+                            disp = tokB
+                        elif gusd and tokB and tokB.id == gusd.id:
+                            disp = tokA
+                        data = json.dumps({
+                            "type": "stage",
+                            "symbol": disp.symbol if disp else (tokA.symbol if tokA else None),
+                            "stage": int(ev.stage),
+                            "time": ev.created_at.isoformat() + "Z",
+                        })
+                        yield f"data: {data}\n\n"
+                        last_ts = max(last_ts, ev.created_at or last_ts)
+                        emitted = True
+
+                if not emitted:
+                    yield ": keep-alive\n\n"
+            except Exception:
                 yield ": keep-alive\n\n"
             time.sleep(5)
 
