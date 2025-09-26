@@ -9,6 +9,7 @@ from .auth import auth_bp
 from . import models  # ensure models are imported for db.create_all()
 from .web import web_bp
 from .api import api_bp
+from flask_wtf.csrf import generate_csrf
 
 
 def create_app(config_class: type = Config) -> Flask:
@@ -53,6 +54,28 @@ def create_app(config_class: type = Config) -> Flask:
     @app.route("/health", methods=["GET"])  # simple health check
     def health():
         return jsonify({"status": "ok"})
+
+    # Ensure a JS-readable CSRF cookie is present for client-side requests
+    # This emulates Flask-SeaSurf's behavior so existing frontend code continues to work.
+    @app.after_request
+    def set_csrf_cookie(response):
+        try:
+            token = generate_csrf()
+            cookie_name = app.config.get("CSRF_COOKIE_NAME", "csrf_token")
+            secure = os.getenv("JWT_COOKIE_SECURE", "0") in ("1", "true", "True")
+            # 7-day expiry for convenience; token is also session-bound internally
+            response.set_cookie(
+                cookie_name,
+                token,
+                max_age=7 * 24 * 3600,
+                httponly=False,
+                samesite="Lax",
+                secure=secure,
+                path="/",
+            )
+        except Exception as e:
+            app.logger.debug(f"CSRF cookie set skipped: {e}")
+        return response
 
     # Auto-create tables in dev (SQLite fallback) to keep onboarding simple
     with app.app_context():

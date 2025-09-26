@@ -37,7 +37,34 @@ except Exception:  # pragma: no cover - fallback if convertbits not available
             return None
         return bytes(ret)
 
-from coincurve.schnorr import verify as schnorr_verify
+# Robust import for schnorr verification across coincurve versions
+try:
+    # Preferred path in some versions
+    from coincurve.schnorr import verify as schnorr_verify  # type: ignore
+except Exception:  # pragma: no cover - fallback for environments without submodule
+    try:
+        # Module-level schnorr object in other versions
+        from coincurve import schnorr  # type: ignore
+
+        def schnorr_verify(sig: bytes, msg: bytes, pubkey: bytes) -> bool:
+            try:
+                return bool(schnorr.verify(signature=sig, message=msg, public_key=pubkey))
+            except Exception:
+                return False
+    except Exception:  # pragma: no cover - final fallback using PublicKey API
+        try:
+            from coincurve import PublicKey  # type: ignore
+
+            def schnorr_verify(sig: bytes, msg: bytes, pubkey: bytes) -> bool:
+                try:
+                    pk = PublicKey(pubkey)
+                    # In recent coincurve versions, this verifies BIP340-style signatures
+                    return bool(pk.schnorr_verify(sig, msg))
+                except Exception:
+                    return False
+        except Exception:  # pragma: no cover - if coincurve entirely missing
+            def schnorr_verify(sig: bytes, msg: bytes, pubkey: bytes) -> bool:  # type: ignore
+                return False
 
 
 def npub_to_hex(npub: str) -> str:

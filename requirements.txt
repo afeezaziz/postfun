@@ -1,7 +1,7 @@
 # Pinned production dependencies for Postfun backend
 Flask==3.0.3
 Flask-Cors==4.0.1
-Flask-SeaSurf==1.1.1
+Flask-WTF==1.2.1
 Flask-Limiter==3.5.0
 Flask-Caching==2.3.0
 redis==5.0.7
