@@ -18,6 +18,9 @@ def create_app(config_class: type = Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # Flask-Limiter 3.x: configure default limits via config
+    app.config.setdefault("RATELIMIT_DEFAULT", app.config.get("RATE_LIMIT_DEFAULT", "100 per hour"))
+
     # CORS
     CORS(
         app,
@@ -28,7 +31,7 @@ def create_app(config_class: type = Config) -> Flask:
     # Extensions
     db.init_app(app)
     csrf.init_app(app)
-    limiter.init_app(app, default_limits=[app.config.get("RATE_LIMIT_DEFAULT", "100 per hour")])
+    limiter.init_app(app)
     # Cache: Redis if available, else SimpleCache
     cache_config = {}
     redis_url = os.getenv("REDIS_URL") or os.getenv("CACHE_REDIS_URL")
