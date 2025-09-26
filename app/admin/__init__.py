@@ -11,7 +11,7 @@ from ..extensions import db
 from ..models import User, Token, AlertRule, AlertEvent, AuditLog
 from ..web import get_jwt_from_cookie
 from ..services.audit import log_action
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, case
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -94,7 +94,10 @@ def tokens():
     if q:
         like = f"%{q}%"
         stmt = stmt.where(or_(Token.symbol.ilike(like), Token.name.ilike(like)))
-    stmt = stmt.order_by(Token.market_cap.desc().nullslast())
+    stmt = stmt.order_by(
+        case((Token.market_cap == None, 1), else_=0),  # noqa: E711
+        Token.market_cap.desc(),
+    )
     tokens_p = db.paginate(stmt, page=page, per_page=per)
     return render_template("admin/tokens.html", tokens_p=tokens_p, q=q or "")
 

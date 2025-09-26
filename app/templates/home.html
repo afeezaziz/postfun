@@ -2,16 +2,131 @@
 {% block title %}Postfun — Home{% endblock %}
 {% block content %}
   <section class="pf-hero card">
-    <h1>Welcome to Postfun</h1>
-    <p>The retro social-finance playground. Connect your Nostr wallet and have fun.</p>
-    <div class="pf-hero-actions">
+    <h1>Tokenize Posts & Tweets</h1>
+    <p>From posts to markets. Turn vibes into value on Postfun.</p>
+    <div class="pf-hero-actions" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      <input class="retro-input" id="pf-tokenize-input" type="text" placeholder="Paste a post/tweet URL or enter a name (e.g. PEPE MOMENT)" style="min-width:320px;" />
       {% if current_user %}
-        <a class="retro-button" href="{{ url_for('web.dashboard') }}">Go to Dashboard</a>
+        <a class="retro-button" href="{{ url_for('web.launchpad') }}">Tokenize Now</a>
       {% else %}
-        <button class="retro-button" onclick="pfNostrLogin()">Login with Nostr</button>
+        <button class="retro-button" onclick="pfNostrLogin()">Login to Tokenize</button>
       {% endif %}
     </div>
+    <div id="pf-og-preview" style="display:none; margin-top:8px;">
+      <div class="card" style="display:flex; gap:10px; align-items:center;">
+        <img id="pf-og-img" src="" alt="preview" style="display:none; height:48px; width:48px; object-fit:cover; border-radius:6px;" />
+        <div>
+          <div id="pf-og-title" class="pf-green" style="font-size:18px;"></div>
+          <div id="pf-og-desc" style="color:var(--dim-green);"></div>
+        </div>
+      </div>
+    </div>
+    {% if stats %}
+    <div class="pf-hero-stats" style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; color: var(--dim-green);">
+      <span class="badge">{{ stats.tokens }} tokens</span>
+      <span class="badge">{{ stats.pools }} pools</span>
+      <span class="badge">{{ stats.creators }} creators</span>
+      <span class="badge">{{ stats.trades_24h }} trades/24h</span>
+      <span class="badge">{{ '%.2f'|format(stats.volume_24h or 0) }} gUSD vol/24h</span>
+      <span class="badge">{{ stats.watchlists }} watchlists</span>
+    </div>
+    {% endif %}
   </section>
+
+  {% if live_trades %}
+  <section class="card" aria-label="Live Trades">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <strong>Live</strong>
+      <div id="pf-ticker" style="position:relative; overflow:hidden; width:100%;">
+        <div id="pf-ticker-track" style="display:inline-block; white-space:nowrap; will-change: transform;">
+          {% for t in live_trades %}
+            <span class="pf-tick" style="display:inline-block; margin-right:24px;">
+              <span class="badge">{{ t.symbol }}</span>
+              <span class="pf-green" style="text-transform:uppercase;">{{ t.side }}</span>
+              <span>{{ '%.6f'|format(t.price or 0) }}</span>
+            </span>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if recent_launches %}
+  <section class="pf-section">
+    <h2>Fresh Launches</h2>
+    <div class="pf-grid">
+      {% for it in recent_launches %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ it.symbol }}</span>
+            <span>{{ it.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            {% if it.logo_url %}
+              <img src="{{ it.logo_url }}" alt="{{ it.symbol }}" style="height:48px; width:48px; object-fit:cover; border-radius:6px;" />
+            {% endif %}
+            <div>Launched: <span class="pf-green">{{ it.launch_at }}</span></div>
+          </div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+            <button class="retro-button pf-watchlist-btn" data-symbol="{{ it.symbol }}" data-active="0">☆ Watchlist</button>
+          </div>
+        </div>
+      {% else %}
+        <div>No recent launches.</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if meme_hot %}
+  <section class="pf-section">
+    <h2>Meme Heat</h2>
+    <div class="pf-grid">
+      {% for it in meme_hot %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ it.symbol }}</span>
+            <span>{{ it.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Price: <span class="pf-green">{{ '%.6f'|format(it.price or 0) }}</span></div>
+            <div>24h Vol: <span class="pf-green">{{ '%.2f'|format(it.volume_24h or 0) }}</span></div>
+            <div>Stage/Fee: <span class="pf-green">S{{ it.stage }} • {{ it.fee_bps }} bps</span></div>
+          </div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+            <button class="retro-button pf-watchlist-btn" data-symbol="{{ it.symbol }}" data-active="0">☆ Watchlist</button>
+          </div>
+        </div>
+      {% else %}
+        <div>No memes trending right now.</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if top_creators %}
+  <section class="pf-section">
+    <h2>Top Creators</h2>
+    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+      {% for u in top_creators %}
+        <div class="card">
+          <div>Creator: <span class="pf-green">{{ u.npub }}</span></div>
+          <div>Launches: <span class="pf-green">{{ u.count }}</span></div>
+          <div style="margin-top:8px;">
+            <a class="retro-button" href="{{ url_for('web.dashboard') }}">Follow</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No creators yet.</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
 
   {% if trending %}
   <section class="pf-section">
@@ -26,10 +141,12 @@
           <div class="pf-token-body">
             <div>Price: <span class="pf-green">{{ '%.6f'|format(it.price or 0) }}</span></div>
             <div>24h Vol: <span class="pf-green">{{ '%.2f'|format(it.volume_24h or 0) }}</span></div>
+            <div>Stage/Fee: <span class="pf-green">S{{ it.stage }} • {{ it.fee_bps }} bps</span></div>
           </div>
           <div class="pf-card-actions">
             <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
             <a class="retro-button" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+            <button class="retro-button pf-watchlist-btn" data-symbol="{{ it.symbol }}" data-active="0">☆ Watchlist</button>
           </div>
         </div>
       {% else %}
@@ -39,8 +156,62 @@
   </section>
   {% endif %}
 
+  {% if movers_gainers or movers_losers %}
   <section class="pf-section">
-    <h2>Trending Tokens</h2>
+    <h2>Movers & Shakers</h2>
+    <div class="pf-grid" style="grid-template-columns: 1fr 1fr;">
+      <div class="card">
+        <h3>Top Gainers</h3>
+        <div class="pf-grid">
+          {% for t in movers_gainers %}
+            <div class="card pf-token-card">
+              <div class="pf-token-header">
+                <span class="badge">{{ t.symbol }}</span>
+                <span>{{ t.name }}</span>
+              </div>
+              <div class="pf-token-body">
+                <div>Price: <span class="pf-green">{{ '%.6f'|format((price_by_symbol.get(t.symbol) if price_by_symbol else None) or (t.price or 0)) }}</span></div>
+                <div>24h: <span class="pf-green">+{{ '%.2f'|format(t.change_24h or 0) }}%</span></div>
+              </div>
+              <div class="pf-card-actions">
+                <a class="retro-button" href="{{ url_for('web.token_detail', symbol=t.symbol) }}">Details</a>
+                <a class="retro-button" href="{{ url_for('web.pool', symbol=t.symbol) }}">Pool</a>
+              </div>
+            </div>
+          {% else %}
+            <div>No gainers.</div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card">
+        <h3>Top Losers</h3>
+        <div class="pf-grid">
+          {% for t in movers_losers %}
+            <div class="card pf-token-card">
+              <div class="pf-token-header">
+                <span class="badge">{{ t.symbol }}</span>
+                <span>{{ t.name }}</span>
+              </div>
+              <div class="pf-token-body">
+                <div>Price: <span class="pf-green">{{ '%.6f'|format((price_by_symbol.get(t.symbol) if price_by_symbol else None) or (t.price or 0)) }}</span></div>
+                <div>24h: <span class="pf-green">{{ '%.2f'|format(t.change_24h or 0) }}%</span></div>
+              </div>
+              <div class="pf-card-actions">
+                <a class="retro-button" href="{{ url_for('web.token_detail', symbol=t.symbol) }}">Details</a>
+                <a class="retro-button" href="{{ url_for('web.pool', symbol=t.symbol) }}">Pool</a>
+              </div>
+            </div>
+          {% else %}
+            <div>No losers.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="pf-section">
+    <h2>Top by Market Cap</h2>
     <div class="pf-grid">
       {% for token in tokens %}
         <div class="card pf-token-card">
@@ -49,13 +220,14 @@
             <span>{{ token.name }}</span>
           </div>
           <div class="pf-token-body">
-            <div>Price: <span class="pf-green">{{ '%.4f'|format(token.price or 0) }}</span></div>
+            <div>Price: <span class="pf-green">{{ '%.4f'|format((price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0)) }}</span></div>
             <div>24h: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
           </div>
-          <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ token.price or 0 }}"></div>
+          <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ (price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0) }}"></div>
           <div class="pf-card-actions">
             <a class="retro-button" href="{{ url_for('web.token_detail', symbol=token.symbol) }}">Details</a>
             <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Pool</a>
+            <button class="retro-button pf-watchlist-btn" data-symbol="{{ token.symbol }}" data-active="0">☆ Watchlist</button>
           </div>
         </div>
       {% else %}

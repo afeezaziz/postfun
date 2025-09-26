@@ -8,10 +8,11 @@ import time
 import json
 
 from flask import Blueprint, render_template, request, g, redirect, url_for, abort, flash, Response
+from urllib.parse import urlsplit
 
 from ..utils.jwt_utils import verify_jwt
 from ..extensions import db
-from ..models import User, Token, WatchlistItem, AlertRule, AlertEvent, SwapPool, SwapTrade, TokenBalance
+from ..models import User, Token, WatchlistItem, AlertRule, AlertEvent, SwapPool, SwapTrade, TokenBalance, TokenInfo
 from ..services.amm import execute_swap, quote_swap
 from sqlalchemy import case
 
@@ -61,6 +62,35 @@ def inject_user():
     return {"current_user": user}
 
 
+def _get_gusd_token() -> Optional[Token]:
+    return Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+
+
+def _amm_price_for_token(token: Token) -> Optional[float]:
+    """Compute AMM price for token against gUSD if such a pool exists."""
+    gusd = _get_gusd_token()
+    if not gusd:
+        return None
+    pool = (
+        SwapPool.query.filter(
+            ((SwapPool.token_a_id == token.id) & (SwapPool.token_b_id == gusd.id))
+            | ((SwapPool.token_b_id == token.id) & (SwapPool.token_a_id == gusd.id))
+        ).first()
+    )
+    if not pool or not pool.reserve_a or not pool.reserve_b:
+        return None
+    try:
+        if pool.token_b_id == gusd.id:
+            pr = (pool.reserve_b / pool.reserve_a)
+        elif pool.token_a_id == gusd.id:
+            pr = (pool.reserve_a / pool.reserve_b)
+        else:
+            pr = None
+        return float(pr) if pr is not None else None
+    except Exception:
+        return None
+
+
 @web_bp.route("/")
 def home():
     # Show trending by 24h AMM volume (gUSD pairs preferred); fallback to market cap
@@ -93,8 +123,154 @@ def home():
             "name": tok.name,
             "price": float(price) if price is not None else None,
             "volume_24h": float(vol or 0),
+            "stage": int(p.stage or 1),
+            "fee_bps": p.current_fee_bps(),
         })
     trending.sort(key=lambda x: x["volume_24h"], reverse=True)
+
+    # Meme Heat: promote memes (crypto culture). Heuristic keyword match on symbol or name.
+    meme_keywords = [
+        "PEPE", "DOGE", "SHIB", "WIF", "FLOKI", "BONK", "MEME", "MOON", "PUMP", "MOASS", "DEGEN", "WAGMI",
+        "APE", "CAT", "FROG", "LORD", "BOBO", "GME", "AMC"
+    ]
+    def _is_meme(it):
+        s = (it["symbol"] or "").upper()
+        n = (it["name"] or "").upper()
+        return any(k in s or k in n for k in meme_keywords)
+    meme_hot = [it for it in trending if _is_meme(it)][:8]
+
+    # Live trades ticker (latest 30 trades across all pools)
+    live_trades = []
+    rows = (
+        SwapTrade.query.order_by(SwapTrade.created_at.desc()).limit(30).all()
+    )
+    for t in rows:
+        pool = db.session.get(SwapPool, t.pool_id)
+        if not pool:
+            continue
+        # Determine which token (non-gUSD) this trade refers to
+        gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+        token_id = None
+        if gusd:
+            token_id = pool.token_a_id if pool.token_b_id == gusd.id else pool.token_b_id
+        tok = db.session.get(Token, token_id) if token_id else None
+        if not tok:
+            # fallback: pick token_a as primary if no gUSD
+            tok = db.session.get(Token, pool.token_a_id)
+        # Determine if this was a buy or sell of tok: receiving tok == buy
+        recv_token_id = pool.token_b_id if t.side == "AtoB" else pool.token_a_id
+        kind = "buy" if (tok and recv_token_id == tok.id) else "sell"
+        # Compute price in gUSD per token if possible
+        pr = None
+        if gusd:
+            if pool.token_b_id == gusd.id:
+                pr = (t.amount_in and t.amount_out and (t.amount_out / t.amount_in)) if t.side == "AtoB" else ((t.amount_in / t.amount_out) if (t.amount_in and t.amount_out) else None)
+            elif pool.token_a_id == gusd.id:
+                pr = (t.amount_in and t.amount_out and (t.amount_in / t.amount_out)) if t.side == "AtoB" else ((t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None)
+        live_trades.append({
+            "symbol": tok.symbol if tok else "?",
+            "side": kind,
+            "amount_in": float(t.amount_in or 0),
+            "amount_out": float(t.amount_out or 0),
+            "price": float(pr) if pr is not None else None,
+            "time": t.created_at.isoformat() + "Z",
+        })
+
+    # Recent launches (TokenInfo.launch_at)
+    recent_launches = []
+    infos = (
+        TokenInfo.query.order_by(TokenInfo.launch_at.desc()).limit(12).all()
+    )
+    for info in infos:
+        tok = db.session.get(Token, info.token_id)
+        if not tok:
+            continue
+        recent_launches.append({
+            "symbol": tok.symbol,
+            "name": tok.name,
+            "logo_url": info.logo_url,
+            "launch_at": info.launch_at.isoformat() + "Z" if info.launch_at else None,
+        })
+
+    # Top creators (by number of launches)
+    top_creators = []
+    agg = (
+        db.session.query(TokenInfo.launch_user_id, db.func.count(TokenInfo.id).label("cnt"))
+        .filter(TokenInfo.launch_user_id != None)  # noqa: E711
+        .group_by(TokenInfo.launch_user_id)
+        .order_by(db.text("cnt DESC"))
+        .limit(5)
+        .all()
+    )
+    for uid, cnt in agg:
+        u = db.session.get(User, uid)
+        if not u:
+            continue
+        top_creators.append({
+            "user_id": u.id,
+            "npub": u.npub or u.pubkey_hex,
+            "count": int(cnt or 0),
+        })
+
+    # Marketplace stats for hero
+    tokens_count = Token.query.count()
+    pools_count = SwapPool.query.count()
+    creators_count = (
+        db.session.query(db.func.count(db.func.distinct(TokenInfo.launch_user_id)))
+        .filter(TokenInfo.launch_user_id != None)  # noqa: E711
+        .scalar()
+    ) or 0
+    since_24h = datetime.utcnow() - timedelta(days=1)
+    # 24h trades and approximate USD volume via gUSD legs
+    trades_24h = 0
+    volume_24h_gusd = 0.0
+    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    if gusd:
+        pools_gusd = SwapPool.query.filter(
+            (SwapPool.token_a_id == gusd.id) | (SwapPool.token_b_id == gusd.id)
+        ).all()
+        pool_ids = [p.id for p in pools_gusd]
+        if pool_ids:
+            rows = (
+                SwapTrade.query
+                .filter(SwapTrade.pool_id.in_(pool_ids), SwapTrade.created_at >= since_24h)
+                .order_by(SwapTrade.created_at.desc())
+                .all()
+            )
+            trades_24h = len(rows)
+            for t in rows:
+                pool = next((p for p in pools_gusd if p.id == t.pool_id), None)
+                if not pool:
+                    continue
+                if pool.token_b_id == gusd.id:
+                    # A->B uses amount_out gUSD; B->A uses amount_in gUSD
+                    if t.side == "AtoB":
+                        if t.amount_out:
+                            volume_24h_gusd += float(t.amount_out)
+                    else:
+                        if t.amount_in:
+                            volume_24h_gusd += float(t.amount_in)
+                elif pool.token_a_id == gusd.id:
+                    # A->B uses amount_in gUSD; B->A uses amount_out gUSD
+                    if t.side == "AtoB":
+                        if t.amount_in:
+                            volume_24h_gusd += float(t.amount_in)
+                    else:
+                        if t.amount_out:
+                            volume_24h_gusd += float(t.amount_out)
+    else:
+        trades_24h = SwapTrade.query.filter(SwapTrade.created_at >= since_24h).count()
+    watchlists_count = WatchlistItem.query.count()
+
+    stats = {
+        "tokens": int(tokens_count or 0),
+        "pools": int(pools_count or 0),
+        "creators": int(creators_count or 0),
+        "trades_24h": int(trades_24h or 0),
+        "volume_24h": float(volume_24h_gusd or 0.0),
+        "watchlists": int(watchlists_count or 0),
+    }
+
     tokens = (
         Token.query
         .order_by(
@@ -104,7 +280,31 @@ def home():
         .limit(8)
         .all()
     )
-    return render_template("home.html", tokens=tokens, trending=trending)
+    # Top movers by 24h change
+    all_tokens = Token.query.filter(Token.change_24h != None).all()  # noqa: E711
+    movers_gainers = sorted(all_tokens, key=lambda t: float(t.change_24h or 0), reverse=True)[:6]
+    movers_losers = sorted(all_tokens, key=lambda t: float(t.change_24h or 0))[:6]
+    # Compute AMM prices for tokens displayed on this page
+    price_by_symbol: dict[str, Optional[float]] = {}
+    for t in tokens:
+        if t and t.symbol:
+            price_by_symbol[t.symbol] = _amm_price_for_token(t) or (float(t.price or 0) if t.price is not None else None)
+    for t in movers_gainers + movers_losers:
+        if t and t.symbol and t.symbol not in price_by_symbol:
+            price_by_symbol[t.symbol] = _amm_price_for_token(t) or (float(t.price or 0) if t.price is not None else None)
+    return render_template(
+        "home.html",
+        tokens=tokens,
+        trending=trending,
+        live_trades=live_trades,
+        recent_launches=recent_launches,
+        top_creators=top_creators,
+        meme_hot=meme_hot,
+        movers_gainers=movers_gainers,
+        movers_losers=movers_losers,
+        stats=stats,
+        price_by_symbol=price_by_symbol,
+    )
 
 
 @web_bp.route("/token/<symbol>")
@@ -124,7 +324,9 @@ def token_detail(symbol: str):
             watchlisted = (
                 WatchlistItem.query.filter_by(user_id=user.id, token_id=token.id).first() is not None
             )
-    return render_template("token_detail.html", token=token, watchlisted=watchlisted)
+    # Compute AMM price for display
+    price = _amm_price_for_token(token) or float(token.price or 0)
+    return render_template("token_detail.html", token=token, watchlisted=watchlisted, price=price)
 
 
 @web_bp.route("/dashboard")
@@ -201,9 +403,15 @@ def tokens_list():
     }.get(sort, Token.market_cap)
 
     if order == "asc":
-        qry = qry.order_by(sort_col.asc().nullslast())
+        qry = qry.order_by(
+            case((sort_col == None, 1), else_=0),  # noqa: E711
+            sort_col.asc(),
+        )
     else:
-        qry = qry.order_by(sort_col.desc().nullslast())
+        qry = qry.order_by(
+            case((sort_col == None, 1), else_=0),  # noqa: E711
+            sort_col.desc(),
+        )
 
     total = qry.count()
     if page < 1:
@@ -211,6 +419,8 @@ def tokens_list():
     if per < 1:
         per = 12
     tokens = qry.limit(per).offset((page - 1) * per).all()
+    # AMM prices for page tokens
+    price_by_symbol = {t.symbol: (_amm_price_for_token(t) or float(t.price or 0)) for t in tokens if t and t.symbol}
     pages = (total + per - 1) // per if per else 1
 
     return render_template(
@@ -223,6 +433,7 @@ def tokens_list():
         per=per,
         total=total,
         pages=pages,
+        price_by_symbol=price_by_symbol,
     )
 
 
@@ -278,9 +489,15 @@ def explore():
     }.get(sort, Token.market_cap)
 
     if order == "asc":
-        qry = qry.order_by(sort_col.asc().nullslast())
+        qry = qry.order_by(
+            case((sort_col == None, 1), else_=0),  # noqa: E711
+            sort_col.asc(),
+        )
     else:
-        qry = qry.order_by(sort_col.desc().nullslast())
+        qry = qry.order_by(
+            case((sort_col == None, 1), else_=0),  # noqa: E711
+            sort_col.desc(),
+        )
 
     total = qry.count()
     if page < 1:
@@ -305,6 +522,7 @@ def explore():
         price_max=price_max_s or "",
         change_min=change_min_s or "",
         change_max=change_max_s or "",
+        price_by_symbol=price_by_symbol,
     )
 
 
@@ -319,6 +537,38 @@ def launchpad():
     }
     errors = {}
     confirm_preview = False
+
+    # Prefill from query param q on GET
+    if request.method == "GET":
+        q = request.args.get("q", type=str)
+        if q:
+            q = q.strip()
+            sym = None
+            name = None
+            # If URL, derive from last path segment
+            try:
+                parts = urlsplit(q)
+                if parts.scheme and parts.netloc:
+                    # use last non-empty path segment
+                    segs = [s for s in parts.path.split("/") if s]
+                    base = segs[-1] if segs else parts.netloc.split(".")[0]
+                    cand = ''.join([c for c in base if c.isalnum()])
+                    sym = cand[:12].upper() if cand else None
+                    name = base.replace('-', ' ').replace('_', ' ').title()
+            except Exception:
+                pass
+            if not sym:
+                # Treat as name/symbol suggestion
+                base = ''.join([c for c in q if c.isalnum() or c == ' ']).strip()
+                if base:
+                    name = name or base.title()
+                    letters = ''.join([c for c in base if c.isalnum()])
+                    if letters:
+                        sym = letters[:12].upper()
+            if sym:
+                form["symbol"] = sym
+            if name:
+                form["name"] = name
 
     if request.method == "POST":
         form["symbol"] = (request.form.get("symbol", "").strip() or "").upper()
@@ -375,7 +625,7 @@ def launchpad():
         try:
             db.session.commit()
             flash("Token saved", "success")
-            return redirect(url_for("web.token_detail", symbol=symbol))
+            return redirect(url_for("web.token_detail", symbol=symbol, launched=1))
         except Exception:
             db.session.rollback()
             flash("Failed to save token", "error")
@@ -415,8 +665,15 @@ def pro():
     risk_filter = request.args.get("risk", default="all", type=str)
     trending_only = request.args.get("trending", default="0", type=str) == "1"
 
-    tokens = Token.query.order_by(Token.market_cap.desc().nullslast()).all()
+    tokens = (
+        Token.query.order_by(
+            case((Token.market_cap == None, 1), else_=0),  # noqa: E711
+            Token.market_cap.desc(),
+        ).all()
+    )
     items = [_compute_token_metrics(t) for t in tokens]
+    # AMM prices for display
+    price_by_symbol = {t.symbol: (_amm_price_for_token(t) or float(t.price or 0)) for t in tokens if t and t.symbol}
 
     # Filter
     if trending_only:
@@ -460,6 +717,7 @@ def pro():
         order=order,
         risk=risk_filter,
         trending="1" if trending_only else "0",
+        price_by_symbol=price_by_symbol,
     )
 
 
@@ -471,9 +729,15 @@ def portfolio():
     user = None
     if isinstance(uid, int):
         user = db.session.get(User, uid)
-    tokens = Token.query.order_by(Token.market_cap.desc().nullslast()).limit(4).all()
+    tokens = (
+        Token.query.order_by(
+            case((Token.market_cap == None, 1), else_=0),  # noqa: E711
+            Token.market_cap.desc(),
+        ).limit(4).all()
+    )
     holdings = [{"token": t, "amount": 0.0, "value": 0.0} for t in tokens]
-    return render_template("portfolio.html", user=user, holdings=holdings)
+    price_by_symbol = {t.symbol: (_amm_price_for_token(t) or float(t.price or 0)) for t in tokens if t and t.symbol}
+    return render_template("portfolio.html", user=user, holdings=holdings, price_by_symbol=price_by_symbol)
 
 
 # Phase 6: Watchlist
@@ -503,11 +767,26 @@ def watchlist():
         "name": Token.name,
     }.get(sort, Token.market_cap)
     if order == "asc":
-        qry = qry.order_by(sort_col.asc().nullslast())
+        qry = qry.order_by(
+            case((sort_col == None, 1), else_=0),  # noqa: E711
+            sort_col.asc(),
+        )
     else:
-        qry = qry.order_by(sort_col.desc().nullslast())
+        qry = qry.order_by(
+            case((sort_col == None, 1), else_=0),  # noqa: E711
+            sort_col.desc(),
+        )
     items = qry.all()
-    return render_template("watchlist.html", items=items, user=user, q=q or "", sort=sort, order=order)
+    # Extract tokens from items for price map
+    tokens = []
+    for it in items:
+        try:
+            if it.token:
+                tokens.append(it.token)
+        except Exception:
+            pass
+    price_by_symbol = {t.symbol: (_amm_price_for_token(t) or float(t.price or 0)) for t in tokens if t and t.symbol}
+    return render_template("watchlist.html", items=items, user=user, q=q or "", sort=sort, order=order, price_by_symbol=price_by_symbol)
 
 
 @web_bp.route("/watchlist/add/<symbol>", methods=["POST"])
@@ -878,7 +1157,10 @@ def download():
 @web_bp.route("/export/tokens.csv")
 def export_tokens_csv():
     # Export basic token data as CSV
-    tokens = Token.query.order_by(Token.market_cap.desc().nullslast()).all()
+    tokens = Token.query.order_by(
+        case((Token.market_cap == None, 1), else_=0),  # noqa: E711
+        Token.market_cap.desc(),
+    ).all()
     rows = ["symbol,name,price,market_cap,change_24h"]
     for t in tokens:
         rows.append(
@@ -921,7 +1203,10 @@ def sitemap_xml():
         url_for("web.download", _external=True),
     ]
     # Token-specific pages
-    for t in Token.query.order_by(Token.market_cap.desc().nullslast()).all():
+    for t in Token.query.order_by(
+        case((Token.market_cap == None, 1), else_=0),  # noqa: E711
+        Token.market_cap.desc(),
+    ).all():
         urls.append(url_for("web.token_detail", symbol=t.symbol, _external=True))
         urls.append(url_for("web.pool", symbol=t.symbol, _external=True))
     items = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
@@ -951,6 +1236,54 @@ def sse_prices():
         "X-Accel-Buffering": "no",
     })
 
+
+@web_bp.route("/sse/trades")
+def sse_trades():
+    """Stream recent trades for the homepage ticker."""
+    def event_stream():
+        last_ts = datetime.utcnow() - timedelta(minutes=10)
+        while True:
+            rows = (
+                SwapTrade.query
+                .filter(SwapTrade.created_at > last_ts)
+                .order_by(SwapTrade.created_at.asc())
+                .limit(100)
+                .all()
+            )
+            if rows:
+                for t in rows:
+                    last_ts = max(last_ts, t.created_at)
+                    pool = db.session.get(SwapPool, t.pool_id)
+                    if not pool:
+                        continue
+                    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+                    token_id = None
+                    if gusd:
+                        token_id = pool.token_a_id if pool.token_b_id == gusd.id else pool.token_b_id
+                    tok = db.session.get(Token, token_id) if token_id else None
+                    if not tok:
+                        tok = db.session.get(Token, pool.token_a_id)
+                    recv_token_id = pool.token_b_id if t.side == "AtoB" else pool.token_a_id
+                    kind = "buy" if (tok and recv_token_id == tok.id) else "sell"
+                    pr = None
+                    if gusd:
+                        if pool.token_b_id == gusd.id:
+                            pr = (t.amount_out / t.amount_in) if (t.side == "AtoB" and t.amount_in and t.amount_out) else ((t.amount_in / t.amount_out) if (t.amount_in and t.amount_out) else None)
+                        elif pool.token_a_id == gusd.id:
+                            pr = (t.amount_in / t.amount_out) if (t.side == "AtoB" and t.amount_in and t.amount_out) else ((t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None)
+                    data = json.dumps({
+                        "symbol": tok.symbol if tok else "?",
+                        "side": kind,
+                        "price": float(pr) if pr is not None else None,
+                        "time": t.created_at.isoformat() + "Z",
+                    })
+                    yield f"data: {data}\n\n"
+            time.sleep(5)
+
+    return Response(event_stream(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
 
 @web_bp.route("/sse/alerts")
 def sse_alerts():
@@ -1040,9 +1373,15 @@ def export_explore_csv():
         "change_24h": Token.change_24h,
     }.get(sort, Token.market_cap)
     if order == "asc":
-        qry = qry.order_by(sort_col.asc().nullslast())
+        qry = qry.order_by(
+            case((sort_col == None, 1), else_=0),  # noqa: E711
+            sort_col.asc(),
+        )
     else:
-        qry = qry.order_by(sort_col.desc().nullslast())
+        qry = qry.order_by(
+            case((sort_col == None, 1), else_=0),  # noqa: E711
+            sort_col.desc(),
+        )
 
     tokens = qry.all()
     rows = ["symbol,name,price,market_cap,change_24h"]
@@ -1068,7 +1407,10 @@ def export_pro_csv():
     risk_filter = request.args.get("risk", default="all", type=str)
     trending_only = request.args.get("trending", default="0", type=str) == "1"
 
-    tokens = Token.query.order_by(Token.market_cap.desc().nullslast()).all()
+    tokens = Token.query.order_by(
+        case((Token.market_cap == None, 1), else_=0),  # noqa: E711
+        Token.market_cap.desc(),
+    ).all()
     items = [_compute_token_metrics(t) for t in tokens]
     if trending_only:
         items = [it for it in items if it["trending"]]
@@ -1127,7 +1469,10 @@ def export_pro_csv():
 
 @web_bp.route("/stats")
 def stats():
-    tokens = Token.query.order_by(Token.market_cap.desc().nullslast()).all()
+    tokens = Token.query.order_by(
+        case((Token.market_cap == None, 1), else_=0),  # noqa: E711
+        Token.market_cap.desc(),
+    ).all()
     num_tokens = len(tokens)
     prices = [float(t.price) for t in tokens if t.price is not None]
     mcaps = [float(t.market_cap) for t in tokens if t.market_cap is not None]

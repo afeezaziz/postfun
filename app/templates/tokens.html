@@ -48,11 +48,11 @@
             <span>{{ token.name }}</span>
           </div>
           <div class="pf-token-body">
-            <div>Price: <span class="pf-green">{{ '%.4f'|format(token.price or 0) }}</span></div>
+            <div>Price: <span class="pf-green">{{ '%.4f'|format((price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0)) }}</span></div>
             <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
             <div>24h: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
           </div>
-          <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ token.price or 0 }}"></div>
+          <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ (price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0) }}"></div>
           <div class="pf-card-actions">
             <a class="retro-button" href="{{ url_for('web.token_detail', symbol=token.symbol) }}">Details</a>
             <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Pool</a>

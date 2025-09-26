@@ -6,6 +6,223 @@ function pfGetCookie(name) {
   return null;
 }
 
+// Home: SSE for live trades into ticker
+function pfInitTradesSSE() {
+  const track = document.getElementById('pf-ticker-track');
+  if (!track || typeof EventSource === 'undefined') return;
+  try {
+    const es = new EventSource('/sse/trades');
+    es.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        const { symbol, side, price } = data;
+        const span = document.createElement('span');
+        span.className = 'pf-tick';
+        span.style.display = 'inline-block';
+        span.style.marginRight = '24px';
+        span.innerHTML = `<span class="badge">${symbol}</span> <span class="pf-green" style="text-transform:uppercase;">${side}</span> <span>${Number(price||0).toFixed(6)}</span>`;
+        track.appendChild(span);
+        const clone = document.getElementById('pf-ticker-track-clone');
+        if (clone) clone.appendChild(span.cloneNode(true));
+      } catch (e) {}
+    };
+  } catch (e) {}
+}
+
+// Watchlist AJAX (uses /api/watchlist)
+function pfInitWatchlist() {
+  const onClick = async (btn) => {
+    const symbol = btn.getAttribute('data-symbol');
+    if (!symbol) return;
+    const active = btn.getAttribute('data-active') === '1';
+    const method = active ? 'DELETE' : 'POST';
+    try {
+      const res = await fetch('/api/watchlist', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol }),
+        credentials: 'same-origin',
+      });
+      if (res.status === 401) {
+        if (typeof window.pfNostrLogin === 'function') window.pfNostrLogin();
+        else pfToast('Please login to use Watchlist', 'info');
+        return;
+      }
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `HTTP ${res.status}`);
+      }
+      if (method === 'POST') {
+        btn.setAttribute('data-active', '1');
+        btn.textContent = '★ Watchlisted';
+        pfToast(`Added ${symbol} to watchlist`, 'success');
+      } else {
+        btn.setAttribute('data-active', '0');
+        btn.textContent = '☆ Watchlist';
+        pfToast(`Removed ${symbol} from watchlist`, 'info');
+      }
+    } catch (e) {
+      pfToast(`Watchlist failed: ${e.message || e}`, 'error');
+    }
+  };
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pf-watchlist-btn');
+    if (!btn) return;
+    e.preventDefault();
+    onClick(btn);
+  });
+}
+
+// Home: live ticker marquee
+function pfInitTicker() {
+  const track = document.getElementById('pf-ticker-track');
+  if (!track) return;
+  try {
+    // Duplicate content to make loop seamless
+    const clone = track.cloneNode(true);
+    clone.id = 'pf-ticker-track-clone';
+    track.parentNode.appendChild(clone);
+    let x = 0;
+    const speed = 60; // px per second
+    let lastTs = performance.now();
+    function step(ts) {
+      const dt = (ts - lastTs) / 1000;
+      lastTs = ts;
+      x -= speed * dt;
+      const w = track.getBoundingClientRect().width;
+      // Loop when original fully out of view
+      if (-x >= w) {
+        x += w;
+      }
+      track.style.transform = `translateX(${x}px)`;
+      clone.style.transform = `translateX(${x + w}px)`;
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  } catch (e) {
+    // ignore
+  }
+}
+
+// Home: tokenize input quickflow
+function pfInitTokenize() {
+  const input = document.getElementById('pf-tokenize-input');
+  if (!input) return;
+  const go = () => {
+    const v = (input.value || '').trim();
+    const url = v ? `/launchpad?q=${encodeURIComponent(v)}` : '/launchpad';
+    window.location.href = url;
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      go();
+    }
+  });
+  const btn = document.querySelector('.pf-hero .retro-button[href*="/launchpad"]');
+  if (btn) {
+    btn.addEventListener('click', (e) => {
+      const v = (input.value || '').trim();
+      if (v) {
+        e.preventDefault();
+        window.location.href = `/launchpad?q=${encodeURIComponent(v)}`;
+      }
+    });
+  }
+}
+
+// Util: debounce
+function pfDebounce(fn, ms) {
+  let t = null;
+  return (...args) => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => fn.apply(null, args), ms);
+  };
+}
+
+// Home: OG preview for pasted URL
+function pfInitOgPreview() {
+  const input = document.getElementById('pf-tokenize-input');
+  const box = document.getElementById('pf-og-preview');
+  if (!input || !box) return;
+  const titleEl = document.getElementById('pf-og-title');
+  const descEl = document.getElementById('pf-og-desc');
+  const imgEl = document.getElementById('pf-og-img');
+  const isUrl = (s) => /^https?:\/\//i.test(s);
+  const update = pfDebounce(async () => {
+    const v = (input.value || '').trim();
+    if (!isUrl(v)) {
+      box.style.display = 'none';
+      return;
+    }
+    try {
+      const res = await fetch(`/api/og/preview?url=${encodeURIComponent(v)}`, { credentials: 'same-origin' });
+      const j = await res.json();
+      if (!res.ok || j.error) throw new Error(j.error || 'preview_failed');
+      titleEl.textContent = j.title || '';
+      descEl.textContent = j.description || '';
+      if (j.image) {
+        imgEl.src = j.image;
+        imgEl.style.display = '';
+      } else {
+        imgEl.style.display = 'none';
+      }
+      box.style.display = '';
+    } catch (e) {
+      box.style.display = 'none';
+    }
+  }, 350);
+  input.addEventListener('input', update);
+  input.addEventListener('paste', () => setTimeout(update, 10));
+}
+
+// Confetti utility
+function pfConfetti(durationMs = 2000, count = 120) {
+  const colors = ['#00ff00', '#00cc00', '#66ff66', '#33cc33'];
+  const container = document.body;
+  const pieces = [];
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.style.position = 'fixed';
+    el.style.top = '-10px';
+    el.style.left = (Math.random() * 100) + 'vw';
+    el.style.width = '6px';
+    el.style.height = '10px';
+    el.style.background = colors[i % colors.length];
+    el.style.opacity = '0.9';
+    el.style.transform = `rotate(${Math.random()*360}deg)`;
+    el.style.zIndex = '9999';
+    el.style.pointerEvents = 'none';
+    el.style.transition = 'transform 2.5s ease-out, top 2.5s ease-out, opacity 0.5s ease';
+    container.appendChild(el);
+    pieces.push(el);
+    // start
+    requestAnimationFrame(() => {
+      const dx = (Math.random() * 2 - 1) * 200; // -200..200 px sideways
+      const dy = window.innerHeight + 50;
+      el.style.top = dy + 'px';
+      el.style.transform = `translate(${dx}px, 0) rotate(${Math.random()*720}deg)`;
+    });
+  }
+  setTimeout(() => {
+    pieces.forEach(el => {
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 600);
+    });
+  }, durationMs);
+}
+
+function pfInitLaunchConfetti() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('launched') === '1') {
+    pfConfetti();
+    pfToast('Token launched! 🎉', 'success');
+    params.delete('launched');
+    const url = `${window.location.pathname}${params.toString()?('?'+params.toString()):''}`;
+    history.replaceState(null, '', url);
+  }
+}
+
 // SSE: in-app toasts for user alert events
 function pfInitAlertsSSE() {
   if (typeof EventSource === 'undefined') return;
@@ -247,6 +464,12 @@ window.addEventListener('DOMContentLoaded', () => {
   pfInitSparklines();
   pfInitPricesSSE();
   pfInitAlertsSSE();
+  pfInitTicker();
+  pfInitTradesSSE();
+  pfInitTokenize();
+  pfInitOgPreview();
+  pfInitLaunchConfetti();
+  pfInitWatchlist();
 });
 
 // Toasts

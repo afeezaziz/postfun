@@ -21,8 +21,11 @@ from ..extensions import cache, db, limiter, csrf
 from ..utils.jwt_utils import require_auth
 from ..services.lightning import LNBitsClient
 from datetime import datetime
+import re
+from urllib.parse import urlparse
 from decimal import Decimal
 from ..services.amm import quote_swap, execute_swap
+from sqlalchemy import case
 
 api_bp = Blueprint("api", __name__)
 
@@ -30,7 +33,12 @@ api_bp = Blueprint("api", __name__)
 @api_bp.get("/tokens")
 @cache.cached(timeout=60)
 def list_tokens():
-    tokens = Token.query.order_by(Token.market_cap.desc().nullslast()).all()
+    tokens = (
+        Token.query.order_by(
+            case((Token.market_cap == None, 1), else_=0),  # noqa: E711
+            Token.market_cap.desc(),
+        ).all()
+    )
     return jsonify({"items": [t.to_dict() for t in tokens]})
 
 
@@ -262,6 +270,78 @@ def tokens_trending():
     # Sort by 24h volume desc
     items.sort(key=lambda x: x["volume_24h"], reverse=True)
     return jsonify({"items": items})
+
+
+@api_bp.get("/og/preview")
+@cache.cached(timeout=60, query_string=True)
+def og_preview():
+    """Fetch basic OpenGraph preview for a URL (title, description, image).
+    Lightweight regex parsing to avoid bringing in heavy HTML parsers.
+    """
+    url = request.args.get("url", type=str)
+    if not url:
+        return jsonify({"error": "url_required"}), 400
+    try:
+        u = urlparse(url)
+    except Exception:
+        return jsonify({"error": "invalid_url"}), 400
+    if u.scheme not in ("http", "https"):
+        return jsonify({"error": "unsupported_scheme"}), 400
+    host = (u.hostname or "").lower()
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return jsonify({"error": "forbidden_host"}), 400
+
+    headers = {"User-Agent": "PostfunBot/1.0 (+https://postfun.app)"}
+    try:
+        import requests
+        resp = requests.get(url, headers=headers, timeout=5, allow_redirects=True, stream=True)
+        # Limit size to avoid excessive memory
+        max_bytes = 1024 * 1024  # 1MB
+        data = resp.raw.read(max_bytes, decode_content=True) if hasattr(resp, "raw") else resp.content[:max_bytes]
+        enc = resp.encoding or "utf-8"
+        html = data.decode(enc, errors="ignore")
+    except Exception as e:
+        return jsonify({"error": "fetch_failed", "detail": str(e)}), 502
+
+    def _find_meta_val(attr_name: str):
+        # Try og: and twitter: variants
+        candidates = [
+            f"og:{attr_name}",
+        ]
+        if attr_name == "title":
+            candidates += ["twitter:title"]
+        if attr_name == "description":
+            candidates += ["twitter:description", "description"]
+        if attr_name == "image":
+            candidates += ["twitter:image", "image"]
+
+        for cand in candidates:
+            # property=..., content=...
+            rx1 = re.compile(rf"<meta[^>]+(?:property|name)=[\"']{re.escape(cand)}[\"'][^>]+content=[\"'](.*?)[\"'][^>]*>", re.I|re.S)
+            m = rx1.search(html)
+            if m:
+                return m.group(1).strip()
+            # content=..., property=...
+            rx2 = re.compile(rf"<meta[^>]+content=[\"'](.*?)[\"'][^>]+(?:property|name)=[\"']{re.escape(cand)}[\"'][^>]*>", re.I|re.S)
+            m = rx2.search(html)
+            if m:
+                return m.group(1).strip()
+        return None
+
+    title = _find_meta_val("title")
+    if not title:
+        m = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
+        if m:
+            title = m.group(1).strip()
+    desc = _find_meta_val("description") or ""
+    image = _find_meta_val("image")
+
+    return jsonify({
+        "url": url,
+        "title": title,
+        "description": desc,
+        "image": image,
+    })
 
 
 @api_bp.get("/tokens/<symbol>/holders")
