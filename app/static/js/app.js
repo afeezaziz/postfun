@@ -222,6 +222,7 @@ window.addEventListener('DOMContentLoaded', () => {
   pfInitChart();
   pfInitTrade();
   pfInitSparklines();
+  pfInitPricesSSE();
 });
 
 // Toasts
@@ -246,4 +247,38 @@ function pfToast(message, type = 'info', timeout = 3000) {
     el.style.opacity = '0';
     setTimeout(() => el.remove(), 350);
   }, timeout);
+}
+
+// SSE: live price updates for a specific token
+function pfInitPricesSSE() {
+  const el = document.querySelector('[data-sse-symbol]');
+  if (!el || typeof EventSource === 'undefined') return;
+  const symbol = el.getAttribute('data-sse-symbol');
+  if (!symbol) return;
+  try {
+    const es = new EventSource(`/sse/prices?symbol=${encodeURIComponent(symbol)}`);
+    es.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        const price = Number(data.price || 0) || 0;
+        document.querySelectorAll('[data-price-target]').forEach(node => {
+          node.textContent = price.toFixed(6);
+        });
+        // Update trade total if present
+        const totalEl = document.getElementById('pf-trade-total');
+        const amountInput = document.querySelector('#pf-trade-form input[name="amount"]');
+        if (totalEl && amountInput) {
+          const amt = Number(amountInput.value || '0') || 0;
+          totalEl.textContent = (price * amt).toFixed(6);
+        }
+      } catch (e) {
+        // ignore parse errors
+      }
+    };
+    es.onerror = () => {
+      // let browser auto-reconnect; optionally we could close and retry
+    };
+  } catch (e) {
+    // ignore
+  }
 }

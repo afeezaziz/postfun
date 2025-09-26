@@ -1,11 +1,11 @@
 import os
 import time
 from datetime import datetime
-from decimal import Decimal
+
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from app import create_app
-from app.extensions import db
-from app.models import Token
+from app.services.market_data import refresh_all_tokens
 
 
 app = create_app()
@@ -15,32 +15,23 @@ def heartbeat_job():
     app.logger.info("[worker] heartbeat at %s", datetime.utcnow().isoformat() + "Z")
 
 
-def sample_price_drift_job():
-    """Demo job: nudge token prices slightly to simulate movement."""
+def refresh_prices_job():
     with app.app_context():
-        tokens = Token.query.all()
-        if not tokens:
-            return
-        for t in tokens:
-            try:
-                # drift by +/- 0.1%
-                if t.price is not None:
-                    t.price = t.price * Decimal("1.001")
-            except Exception as e:
-                app.logger.warning("Price drift error for %s: %s", t.symbol, e)
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            app.logger.warning("Commit error: %s", e)
+        n = refresh_all_tokens()
+        app.logger.info("[worker] refreshed prices for %d tokens", n)
 
 
 if __name__ == "__main__":
-    interval = int(os.getenv("WORKER_INTERVAL_SECONDS", "15"))
-    while True:
-        try:
-            heartbeat_job()
-            sample_price_drift_job()
-        except Exception as e:
-            app.logger.error("Worker loop error: %s", e)
-        time.sleep(interval)
+    hb_interval = int(os.getenv("WORKER_INTERVAL_SECONDS", "30"))
+    refresh_interval = int(os.getenv("MARKET_REFRESH_SECONDS", "30"))
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(heartbeat_job, "interval", seconds=hb_interval, id="heartbeat")
+    scheduler.add_job(refresh_prices_job, "interval", seconds=refresh_interval, id="refresh_prices")
+    scheduler.start()
+    app.logger.info("[worker] scheduler started (hb=%ss, refresh=%ss)", hb_interval, refresh_interval)
+    try:
+        while True:
+            time.sleep(5)
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()
+        app.logger.info("[worker] scheduler stopped")

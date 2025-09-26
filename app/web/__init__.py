@@ -4,6 +4,8 @@ from functools import wraps
 from typing import Optional
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta
+import time
+import json
 
 from flask import Blueprint, render_template, request, g, redirect, url_for, abort, flash, Response
 
@@ -580,6 +582,29 @@ def sitemap_xml():
     items = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
     xml = f"<?xml version='1.0' encoding='UTF-8'?><urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>{items}</urlset>"
     return Response(xml, mimetype="application/xml", headers={"Cache-Control": "public, max-age=3600"})
+
+
+@web_bp.route("/sse/prices")
+def sse_prices():
+    symbol = request.args.get("symbol", type=str)
+    if not symbol:
+        abort(400)
+    token = Token.query.filter_by(symbol=symbol).first()
+    if not token:
+        abort(404)
+
+    def event_stream(sym: str):
+        while True:
+            t = Token.query.filter_by(symbol=sym).first()
+            price = float(t.price or 0) if t and t.price is not None else 0.0
+            data = json.dumps({"symbol": sym, "price": price})
+            yield f"data: {data}\n\n"
+            time.sleep(5)
+
+    return Response(event_stream(symbol), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
 
 
 @web_bp.route("/export/explore.csv")

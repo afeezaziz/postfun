@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}{{ token.symbol }} Pool | Postfun{% endblock %}
 {% block content %}
-  <section class="card">
+  <section class="card" data-sse-symbol="{{ token.symbol }}">
     <h1>
       <span class="badge">{{ token.symbol }}</span>
       {{ token.name }}
@@ -92,7 +92,7 @@
             </div>
             <div style="margin-bottom:8px;">
               <label>Quote</label>
-              <div>Price: <span class="pf-green" id="pf-trade-price">{{ '%.6f'|format(token.price or 0) }}</span></div>
+              <div>Price: <span class="pf-green" id="pf-trade-price" data-price-target>{{ '%.6f'|format(token.price or 0) }}</span></div>
               <div>Total: <span class="pf-green" id="pf-trade-total">0.000000</span></div>
             </div>
             <button class="retro-button" type="submit">Review</button>
@@ -107,7 +107,7 @@
     <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
       <div>Symbol: <strong>{{ token.symbol }}</strong></div>
       <div>Name: <span class="pf-green">{{ token.name }}</span></div>
-      <div>Price: <span class="pf-green">{{ '%.6f'|format(token.price or 0) }}</span></div>
+      <div>Price: <span class="pf-green" data-price-target>{{ '%.6f'|format(token.price or 0) }}</span></div>
       <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
       <div>24h Change: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
     </div>

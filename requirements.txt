@@ -1,0 +1,17 @@
+# Pinned production dependencies for Postfun backend
+Flask==3.0.3
+Flask-Cors==4.0.1
+Flask-SeaSurf==1.1.1
+Flask-Limiter==3.5.0
+Flask-Caching==2.3.0
+redis==5.0.7
+APScheduler==3.10.4
+SQLAlchemy==2.0.36
+Flask-SQLAlchemy==3.1.1
+PyMySQL==1.1.1
+PyJWT==2.8.0
+coincurve==18.0.0
+pynostr==0.4.4
+bech32==1.2.0
+python-dotenv==1.0.1
+gunicorn==21.2.0
