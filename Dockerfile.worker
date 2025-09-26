@@ -18,10 +18,9 @@ COPY requirements.txt /app/
 COPY app /app/app
 
 # Install uv and use it to install pinned deps and the package
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh -s -- -y \
-    && export PATH="/root/.local/bin:$PATH" \
-    && uv pip install --system -r requirements.txt \
-    && uv pip install --system --no-deps .
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && /root/.local/bin/uv pip install --system -r requirements.txt \
+    && /root/.local/bin/uv pip install --system --no-deps .
 
 ENV PYTHONPATH=/app
 

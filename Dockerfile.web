@@ -21,10 +21,9 @@ COPY app /app/app
 COPY wsgi.py /app/
 
 # Install uv and use it to install pinned deps and the package
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh -s -- -y \
-    && export PATH="/root/.local/bin:$PATH" \
-    && uv pip install --system -r requirements.txt \
-    && uv pip install --system --no-deps .
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && /root/.local/bin/uv pip install --system -r requirements.txt \
+    && /root/.local/bin/uv pip install --system --no-deps .
 
 # Environment defaults
 ENV PORT=8000 \
