@@ -9,7 +9,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -20,10 +19,9 @@ COPY requirements.txt /app/
 COPY app /app/app
 COPY wsgi.py /app/
 
-# Install uv and use it to install pinned deps and the package
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && /root/.local/bin/uv pip install --system -r requirements.txt \
-    && /root/.local/bin/uv pip install --system --no-deps .
+# Install Python dependencies
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt
 
 # Environment defaults
 ENV PORT=8000 \

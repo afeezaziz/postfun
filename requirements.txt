@@ -11,7 +11,7 @@ Flask-SQLAlchemy==3.1.1
 PyMySQL==1.1.1
 PyJWT==2.8.0
 coincurve==18.0.0
-pynostr==0.4.4
+pynostr==0.7.0
 bech32==1.2.0
 python-dotenv==1.0.1
 gunicorn==21.2.0

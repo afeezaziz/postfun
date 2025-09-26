@@ -8,7 +8,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -17,10 +16,10 @@ COPY pyproject.toml README.md /app/
 COPY requirements.txt /app/
 COPY app /app/app
 
-# Install uv and use it to install pinned deps and the package
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && /root/.local/bin/uv pip install --system -r requirements.txt \
-    && /root/.local/bin/uv pip install --system --no-deps .
+# Install dependencies with pip (fast and reliable for container builds)
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt \
+    && pip install --no-deps .
 
 ENV PYTHONPATH=/app
 
