@@ -20,7 +20,7 @@ from ..models import (
 from ..extensions import cache, db, limiter, csrf
 from ..utils.jwt_utils import require_auth
 from ..services.lightning import LNBitsClient
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 from urllib.parse import urlparse
 from decimal import Decimal
@@ -391,6 +391,87 @@ def tokens_trades(symbol: str):
         .all()
     )
     return jsonify({"items": [t.to_dict() for t in rows]})
+
+
+@api_bp.get("/tokens/<symbol>/series")
+def tokens_series(symbol: str):
+    """Return a simple historical price series for a token based on pool trades.
+
+    Query params:
+      - window: one of '1h','6h','24h','7d','30d' (optional)
+      - limit: max number of points (default 200, max 1000)
+    """
+    tok = Token.query.filter_by(symbol=symbol).first()
+    if not tok:
+        return jsonify({"error": "token_not_found"}), 404
+    # Prefer pool with gUSD pairing if present
+    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    pool = None
+    if gusd:
+        pool = SwapPool.query.filter(
+            ((SwapPool.token_a_id == tok.id) & (SwapPool.token_b_id == gusd.id))
+            | ((SwapPool.token_b_id == tok.id) & (SwapPool.token_a_id == gusd.id))
+        ).first()
+    if not pool:
+        pool = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).first()
+    if not pool:
+        return jsonify({"items": []})
+
+    window = (request.args.get("window") or "").lower()
+    now = datetime.utcnow()
+    since = None
+    if window in {"1h", "1hour"}:
+        since = now - timedelta(hours=1)
+    elif window in {"6h"}:
+        since = now - timedelta(hours=6)
+    elif window in {"24h", "1d"}:
+        since = now - timedelta(days=1)
+    elif window in {"7d", "1w"}:
+        since = now - timedelta(days=7)
+    elif window in {"30d", "1m"}:
+        since = now - timedelta(days=30)
+
+    limit = request.args.get("limit", default=200, type=int)
+    limit = max(1, min(1000, int(limit)))
+
+    q = SwapTrade.query.filter_by(pool_id=pool.id)
+    if since is not None:
+        q = q.filter(SwapTrade.created_at >= since)
+    rows = q.order_by(SwapTrade.created_at.desc()).limit(limit).all()
+    rows = list(reversed(rows))
+
+    # Build series (ISO time, price in gUSD per token)
+    items = []
+    for t in rows:
+        pr = None
+        if gusd and pool.token_b_id == gusd.id:
+            if t.side == "AtoB":
+                pr = (t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None
+            else:
+                pr = (t.amount_in / t.amount_out) if (t.amount_in and t.amount_out) else None
+        else:
+            if t.side == "AtoB":
+                pr = (t.amount_in / t.amount_out) if (t.amount_in and t.amount_out) else None
+            else:
+                pr = (t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None
+        if pr is not None:
+            items.append({
+                "t": t.created_at.isoformat() + "Z",
+                "price": float(pr),
+            })
+
+    # If empty, include a single point from current pool reserves if possible
+    if not items and pool and pool.reserve_a and pool.reserve_b:
+        if gusd and pool.token_b_id == gusd.id:
+            pr = (pool.reserve_b / pool.reserve_a)
+        elif gusd and pool.token_a_id == gusd.id:
+            pr = (pool.reserve_a / pool.reserve_b)
+        else:
+            pr = None
+        if pr is not None:
+            items.append({"t": now.isoformat() + "Z", "price": float(pr)})
+
+    return jsonify({"items": items})
 
 
 @api_bp.get("/lightning/balance")

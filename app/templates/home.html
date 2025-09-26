@@ -127,7 +127,7 @@
                 <span>{{ it.progress_pct }}%</span>
               </div>
               <div class="pf-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ it.progress_pct }}" style="height:8px; background:#0a0; opacity:0.3; border-radius:4px; overflow:hidden;">
-                <div style="width: {{ it.progress_pct }}%; height:100%; background:linear-gradient(90deg,#0f0,#4cff4c);"></div>
+                <div class="pf-progress-bar" data-progress="{{ it.progress_pct }}" style="height:100%; background:linear-gradient(90deg,#0f0,#4cff4c);"></div>
               </div>
             </div>
           </div>
@@ -183,7 +183,7 @@
                   <span>{{ it.progress_pct }}%</span>
                 </div>
                 <div class="pf-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ it.progress_pct }}" style="height:8px; background:#0a0; opacity:0.3; border-radius:4px; overflow:hidden;">
-                  <div style="width: {{ it.progress_pct }}%; height:100%; background:linear-gradient(90deg,#0f0,#4cff4c);"></div>
+                  <div class="pf-progress-bar" data-progress="{{ it.progress_pct }}" style="height:100%; background:linear-gradient(90deg,#0f0,#4cff4c);"></div>
                 </div>
               </div>
             {% endif %}

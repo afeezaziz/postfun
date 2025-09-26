@@ -6,13 +6,48 @@ function pfGetCookie(name) {
   return null;
 }
 
+// Progress bars: set widths from data-progress attributes
+function pfInitProgressBars() {
+  document.querySelectorAll('.pf-progress-bar[data-progress]')
+    .forEach(el => {
+      const pct = Math.max(0, Math.min(100, Number(el.getAttribute('data-progress') || '0')));
+      el.style.width = pct + '%';
+    });
+}
+
+// Generic SSE with exponential backoff + jitter
+function pfSSEWithBackoff(url, onMessage, label = 'sse') {
+  if (typeof EventSource === 'undefined') return { close: () => {} };
+  let attempt = 0;
+  let es = null;
+  let closed = false;
+  function open() {
+    if (closed) return;
+    es = new EventSource(url);
+    es.onmessage = (ev) => {
+      attempt = 0; // reset on success
+      try { onMessage(ev); } catch (e) {}
+    };
+    es.onerror = () => {
+      try { es && es.close(); } catch {}
+      if (closed) return;
+      attempt += 1;
+      const base = Math.min(30000, 1000 * Math.pow(2, Math.min(6, attempt - 1)));
+      const jitter = Math.floor(Math.random() * 400);
+      const delay = base + jitter;
+      setTimeout(open, delay);
+    };
+  }
+  open();
+  return { close: () => { closed = true; try { es && es.close(); } catch {} } };
+}
+
 // Home: SSE for live trades into ticker
 function pfInitTradesSSE() {
   const track = document.getElementById('pf-ticker-track');
   if (!track || typeof EventSource === 'undefined') return;
   try {
-    const es = new EventSource('/sse/trades');
-    es.onmessage = (ev) => {
+    pfSSEWithBackoff('/sse/trades', (ev) => {
       try {
         const data = JSON.parse(ev.data);
         const { symbol, side, price } = data;
@@ -25,7 +60,7 @@ function pfInitTradesSSE() {
         const clone = document.getElementById('pf-ticker-track-clone');
         if (clone) clone.appendChild(span.cloneNode(true));
       } catch (e) {}
-    };
+    }, 'trades');
   } catch (e) {}
 }
 
@@ -227,8 +262,7 @@ function pfInitLaunchConfetti() {
 function pfInitAlertsSSE() {
   if (typeof EventSource === 'undefined') return;
   try {
-    const es = new EventSource('/sse/alerts');
-    es.onmessage = (ev) => {
+    pfSSEWithBackoff('/sse/alerts', (ev) => {
       try {
         const data = JSON.parse(ev.data);
         const { symbol, condition, threshold, price } = data;
@@ -237,10 +271,7 @@ function pfInitAlertsSSE() {
       } catch (e) {
         // ignore parse errors
       }
-    };
-    es.onerror = () => {
-      // Likely unauthenticated or network issue; let browser handle retries silently
-    };
+    }, 'alerts');
   } catch (e) {
     // ignore
   }
@@ -414,30 +445,52 @@ function pfInitSparklines() {
 function pfInitChart() {
   const chart = document.getElementById('pf-chart');
   if (!chart) return;
-  try {
-    const series = JSON.parse(chart.dataset.series || '[]');
-    const svg = chart.querySelector('.pf-chart-svg');
-    const path = chart.querySelector('.pf-chart-path');
-    if (!svg || !path) return;
-    const box = svg.getBoundingClientRect();
-    const width = Math.max(200, Math.floor(box.width));
-    const height = Math.max(120, Math.floor(box.height));
-    const d = pfBuildChartPath(series, width, height);
-    path.setAttribute('d', d);
+  const svg = chart.querySelector('.pf-chart-svg');
+  const path = chart.querySelector('.pf-chart-path');
+  if (!svg || !path) return;
 
-    // Set min/max labels if present
-    const prices = series.map(p => Number(p.price) || 0);
-    if (prices.length > 0) {
-      const min = Math.min(...prices);
-      const max = Math.max(...prices);
-      const minEl = document.getElementById('pf-chart-min');
-      const maxEl = document.getElementById('pf-chart-max');
-      if (minEl) minEl.textContent = min.toFixed(6);
-      if (maxEl) maxEl.textContent = max.toFixed(6);
-    }
-  } catch (e) {
-    // ignore
+  function redraw(series) {
+    try {
+      const box = svg.getBoundingClientRect();
+      const width = Math.max(200, Math.floor(box.width));
+      const height = Math.max(120, Math.floor(box.height));
+      const d = pfBuildChartPath(series, width, height);
+      path.setAttribute('d', d);
+      const prices = series.map(p => Number(p.price) || 0);
+      if (prices.length > 0) {
+        const min = Math.min(...prices);
+        const max = Math.max(...prices);
+        const minEl = document.getElementById('pf-chart-min');
+        const maxEl = document.getElementById('pf-chart-max');
+        if (minEl) minEl.textContent = min.toFixed(6);
+        if (maxEl) maxEl.textContent = max.toFixed(6);
+      }
+    } catch (e) {}
   }
+
+  // Start with server-provided series
+  let series = [];
+  try { series = JSON.parse(chart.dataset.series || '[]'); } catch {};
+  window.pfChartSeries = Array.isArray(series) ? series.slice() : [];
+  redraw(window.pfChartSeries);
+
+  // Fetch richer history from API (24h by default)
+  const sseEl = document.querySelector('[data-sse-symbol]');
+  const symbol = sseEl ? sseEl.getAttribute('data-sse-symbol') : null;
+  if (symbol) {
+    fetch(`/api/tokens/${encodeURIComponent(symbol)}/series?window=24h&limit=300`, { credentials: 'same-origin' })
+      .then(res => res.json())
+      .then(j => {
+        if (j && Array.isArray(j.items) && j.items.length) {
+          window.pfChartSeries = j.items;
+          redraw(window.pfChartSeries);
+        }
+      })
+      .catch(() => {});
+  }
+
+  // Expose redraw for SSE appends
+  window.pfChartRedraw = () => redraw(window.pfChartSeries || []);
 }
 
 function pfInitTrade() {
@@ -462,6 +515,7 @@ window.addEventListener('DOMContentLoaded', () => {
   pfInitChart();
   pfInitTrade();
   pfInitSparklines();
+  pfInitProgressBars();
   pfInitPricesSSE();
   pfInitAlertsSSE();
   pfInitTicker();
@@ -470,6 +524,7 @@ window.addEventListener('DOMContentLoaded', () => {
   pfInitOgPreview();
   pfInitLaunchConfetti();
   pfInitWatchlist();
+  pfInitShareButtons();
 });
 
 // Toasts
@@ -503,8 +558,7 @@ function pfInitPricesSSE() {
   const symbol = el.getAttribute('data-sse-symbol');
   if (!symbol) return;
   try {
-    const es = new EventSource(`/sse/prices?symbol=${encodeURIComponent(symbol)}`);
-    es.onmessage = (ev) => {
+    pfSSEWithBackoff(`/sse/prices?symbol=${encodeURIComponent(symbol)}`,(ev) => {
       try {
         const data = JSON.parse(ev.data);
         const price = Number(data.price || 0) || 0;
@@ -518,14 +572,61 @@ function pfInitPricesSSE() {
           const amt = Number(amountInput.value || '0') || 0;
           totalEl.textContent = (price * amt).toFixed(6);
         }
+
+        // Append to chart series and redraw (cap to 300 points)
+        if (window.pfChartSeries && Array.isArray(window.pfChartSeries)) {
+          const nowIso = new Date().toISOString();
+          window.pfChartSeries.push({ t: nowIso, price });
+          if (window.pfChartSeries.length > 300) {
+            window.pfChartSeries = window.pfChartSeries.slice(window.pfChartSeries.length - 300);
+          }
+          if (typeof window.pfChartRedraw === 'function') window.pfChartRedraw();
+        }
       } catch (e) {
         // ignore parse errors
       }
-    };
-    es.onerror = () => {
-      // let browser auto-reconnect; optionally we could close and retry
-    };
+    }, 'prices');
   } catch (e) {
     // ignore
   }
+}
+
+// Social share helpers
+function pfCopyLink(url) {
+  try {
+    navigator.clipboard.writeText(url).then(() => pfToast('Link copied', 'success'));
+  } catch (e) {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = url; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); pfToast('Link copied', 'success'); } catch {}
+    ta.remove();
+  }
+}
+
+function pfShareUrl(url, text = 'Check this out on Postfun') {
+  if (navigator.share) {
+    navigator.share({ url, text }).catch(() => pfCopyLink(url));
+  } else {
+    pfCopyLink(url);
+  }
+}
+
+function pfInitShareButtons() {
+  document.addEventListener('click', (e) => {
+    const shareBtn = e.target.closest('[data-share-url]');
+    if (shareBtn) {
+      e.preventDefault();
+      const url = shareBtn.getAttribute('data-share-url');
+      const text = shareBtn.getAttribute('data-share-text') || '';
+      pfShareUrl(url, text);
+      return;
+    }
+    const copyBtn = e.target.closest('[data-copy-url]');
+    if (copyBtn) {
+      e.preventDefault();
+      const url = copyBtn.getAttribute('data-copy-url');
+      pfCopyLink(url);
+    }
+  });
 }

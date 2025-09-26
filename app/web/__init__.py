@@ -11,7 +11,7 @@ from flask import Blueprint, render_template, request, g, redirect, url_for, abo
 from urllib.parse import urlsplit
 
 from ..utils.jwt_utils import verify_jwt
-from ..extensions import db
+from ..extensions import db, cache
 from ..models import User, Token, WatchlistItem, AlertRule, AlertEvent, SwapPool, SwapTrade, TokenBalance, TokenInfo
 from ..services.amm import execute_swap, quote_swap
 from sqlalchemy import case
@@ -91,11 +91,10 @@ def _amm_price_for_token(token: Token) -> Optional[float]:
         return None
 
 
-@web_bp.route("/")
-def home():
-    # Show trending by 24h AMM volume (gUSD pairs preferred); fallback to market cap
+# Cached data builders for home page
+@cache.memoize(timeout=30)
+def _cached_trending_items():
     from datetime import timedelta as _td
-
     since = datetime.utcnow() - _td(days=1)
     gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
     pools = SwapPool.query.order_by(SwapPool.id.asc()).all()
@@ -113,12 +112,11 @@ def home():
         tok = db.session.get(Token, token_id)
         if not tok:
             continue
-        # price (gUSD per token)
         if p.token_b_id == gusd.id:
             price = (p.reserve_b / p.reserve_a) if p.reserve_a and p.reserve_b else None
         else:
             price = (p.reserve_a / p.reserve_b) if p.reserve_a and p.reserve_b else None
-        # stage/fee and progress to next threshold
+        # stage progress
         stg = int(p.stage or 1)
         vol_a = float(p.cumulative_volume_a or 0)
         thr1 = float(p.stage1_threshold) if getattr(p, "stage1_threshold", None) is not None else None
@@ -144,6 +142,111 @@ def home():
             "remaining_to_next": (float(next_thr) - vol_a) if next_thr else 0.0,
         })
     trending.sort(key=lambda x: x["volume_24h"], reverse=True)
+    return trending
+
+
+@cache.memoize(timeout=60)
+def _cached_recent_launches():
+    recent_launches = []
+    infos = (
+        TokenInfo.query.order_by(TokenInfo.launch_at.desc()).limit(12).all()
+    )
+    for info in infos:
+        tok = db.session.get(Token, info.token_id)
+        if not tok:
+            continue
+        recent_launches.append({
+            "symbol": tok.symbol,
+            "name": tok.name,
+            "logo_url": info.logo_url,
+            "launch_at": info.launch_at.isoformat() + "Z" if info.launch_at else None,
+        })
+    return recent_launches
+
+
+@cache.memoize(timeout=120)
+def _cached_top_creators():
+    top_creators = []
+    agg = (
+        db.session.query(TokenInfo.launch_user_id, db.func.count(TokenInfo.id).label("cnt"))
+        .filter(TokenInfo.launch_user_id != None)  # noqa: E711
+        .group_by(TokenInfo.launch_user_id)
+        .order_by(db.text("cnt DESC"))
+        .limit(5)
+        .all()
+    )
+    for uid, cnt in agg:
+        u = db.session.get(User, uid)
+        if not u:
+            continue
+        top_creators.append({
+            "user_id": u.id,
+            "npub": u.npub or u.pubkey_hex,
+            "count": int(cnt or 0),
+        })
+    return top_creators
+
+
+@cache.memoize(timeout=30)
+def _cached_stats():
+    tokens_count = Token.query.count()
+    pools_count = SwapPool.query.count()
+    creators_count = (
+        db.session.query(db.func.count(db.func.distinct(TokenInfo.launch_user_id)))
+        .filter(TokenInfo.launch_user_id != None)  # noqa: E711
+        .scalar()
+    ) or 0
+    since_24h = datetime.utcnow() - timedelta(days=1)
+    trades_24h = 0
+    volume_24h_gusd = 0.0
+    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    if gusd:
+        pools_gusd = SwapPool.query.filter(
+            (SwapPool.token_a_id == gusd.id) | (SwapPool.token_b_id == gusd.id)
+        ).all()
+        pool_ids = [p.id for p in pools_gusd]
+        if pool_ids:
+            rows = (
+                SwapTrade.query
+                .filter(SwapTrade.pool_id.in_(pool_ids), SwapTrade.created_at >= since_24h)
+                .order_by(SwapTrade.created_at.desc())
+                .all()
+            )
+            trades_24h = len(rows)
+            for t in rows:
+                pool = next((p for p in pools_gusd if p.id == t.pool_id), None)
+                if not pool:
+                    continue
+                if pool.token_b_id == gusd.id:
+                    if t.side == "AtoB":
+                        if t.amount_out:
+                            volume_24h_gusd += float(t.amount_out)
+                    else:
+                        if t.amount_in:
+                            volume_24h_gusd += float(t.amount_in)
+                elif pool.token_a_id == gusd.id:
+                    if t.side == "AtoB":
+                        if t.amount_in:
+                            volume_24h_gusd += float(t.amount_in)
+                    else:
+                        if t.amount_out:
+                            volume_24h_gusd += float(t.amount_out)
+    else:
+        trades_24h = SwapTrade.query.filter(SwapTrade.created_at >= since_24h).count()
+    watchlists_count = WatchlistItem.query.count()
+    return {
+        "tokens": int(tokens_count or 0),
+        "pools": int(pools_count or 0),
+        "creators": int(creators_count or 0),
+        "trades_24h": int(trades_24h or 0),
+        "volume_24h": float(volume_24h_gusd or 0.0),
+        "watchlists": int(watchlists_count or 0),
+    }
+
+@web_bp.route("/")
+def home():
+    # Cached trending list
+    trending = _cached_trending_items()
 
     # Meme Heat: promote memes (crypto culture). Heuristic keyword match on symbol or name.
     meme_keywords = [
@@ -198,100 +301,14 @@ def home():
             "time": t.created_at.isoformat() + "Z",
         })
 
-    # Recent launches (TokenInfo.launch_at)
-    recent_launches = []
-    infos = (
-        TokenInfo.query.order_by(TokenInfo.launch_at.desc()).limit(12).all()
-    )
-    for info in infos:
-        tok = db.session.get(Token, info.token_id)
-        if not tok:
-            continue
-        recent_launches.append({
-            "symbol": tok.symbol,
-            "name": tok.name,
-            "logo_url": info.logo_url,
-            "launch_at": info.launch_at.isoformat() + "Z" if info.launch_at else None,
-        })
+    # Recent launches (cached)
+    recent_launches = _cached_recent_launches()
 
-    # Top creators (by number of launches)
-    top_creators = []
-    agg = (
-        db.session.query(TokenInfo.launch_user_id, db.func.count(TokenInfo.id).label("cnt"))
-        .filter(TokenInfo.launch_user_id != None)  # noqa: E711
-        .group_by(TokenInfo.launch_user_id)
-        .order_by(db.text("cnt DESC"))
-        .limit(5)
-        .all()
-    )
-    for uid, cnt in agg:
-        u = db.session.get(User, uid)
-        if not u:
-            continue
-        top_creators.append({
-            "user_id": u.id,
-            "npub": u.npub or u.pubkey_hex,
-            "count": int(cnt or 0),
-        })
+    # Top creators (cached)
+    top_creators = _cached_top_creators()
 
-    # Marketplace stats for hero
-    tokens_count = Token.query.count()
-    pools_count = SwapPool.query.count()
-    creators_count = (
-        db.session.query(db.func.count(db.func.distinct(TokenInfo.launch_user_id)))
-        .filter(TokenInfo.launch_user_id != None)  # noqa: E711
-        .scalar()
-    ) or 0
-    since_24h = datetime.utcnow() - timedelta(days=1)
-    # 24h trades and approximate USD volume via gUSD legs
-    trades_24h = 0
-    volume_24h_gusd = 0.0
-    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
-    if gusd:
-        pools_gusd = SwapPool.query.filter(
-            (SwapPool.token_a_id == gusd.id) | (SwapPool.token_b_id == gusd.id)
-        ).all()
-        pool_ids = [p.id for p in pools_gusd]
-        if pool_ids:
-            rows = (
-                SwapTrade.query
-                .filter(SwapTrade.pool_id.in_(pool_ids), SwapTrade.created_at >= since_24h)
-                .order_by(SwapTrade.created_at.desc())
-                .all()
-            )
-            trades_24h = len(rows)
-            for t in rows:
-                pool = next((p for p in pools_gusd if p.id == t.pool_id), None)
-                if not pool:
-                    continue
-                if pool.token_b_id == gusd.id:
-                    # A->B uses amount_out gUSD; B->A uses amount_in gUSD
-                    if t.side == "AtoB":
-                        if t.amount_out:
-                            volume_24h_gusd += float(t.amount_out)
-                    else:
-                        if t.amount_in:
-                            volume_24h_gusd += float(t.amount_in)
-                elif pool.token_a_id == gusd.id:
-                    # A->B uses amount_in gUSD; B->A uses amount_out gUSD
-                    if t.side == "AtoB":
-                        if t.amount_in:
-                            volume_24h_gusd += float(t.amount_in)
-                    else:
-                        if t.amount_out:
-                            volume_24h_gusd += float(t.amount_out)
-    else:
-        trades_24h = SwapTrade.query.filter(SwapTrade.created_at >= since_24h).count()
-    watchlists_count = WatchlistItem.query.count()
-
-    stats = {
-        "tokens": int(tokens_count or 0),
-        "pools": int(pools_count or 0),
-        "creators": int(creators_count or 0),
-        "trades_24h": int(trades_24h or 0),
-        "volume_24h": float(volume_24h_gusd or 0.0),
-        "watchlists": int(watchlists_count or 0),
-    }
+    # Marketplace stats (cached)
+    stats = _cached_stats()
 
     tokens = (
         Token.query
@@ -349,7 +366,48 @@ def token_detail(symbol: str):
             )
     # Compute AMM price for display
     price = _amm_price_for_token(token) or float(token.price or 0)
-    return render_template("token_detail.html", token=token, watchlisted=watchlisted, price=price)
+
+    # Token info (for SEO)
+    info = TokenInfo.query.filter_by(token_id=token.id).first()
+    meta_title = f"{token.symbol} – {token.name} | Postfun"
+    meta_description = (info.description if info and info.description else "From posts to markets. Turn vibes into value on Postfun.")
+    meta_image = info.logo_url if (info and info.logo_url) else None
+    meta_url = url_for("web.token_detail", symbol=token.symbol, _external=True)
+
+    # JSON-LD structured data (Product)
+    jsonld = {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": f"{token.name} ({token.symbol})",
+        "url": meta_url,
+        "brand": {"@type": "Brand", "name": "Postfun"},
+    }
+    if meta_image:
+        jsonld["image"] = meta_image
+    try:
+        pr = float(price or 0)
+        if pr > 0:
+            jsonld["offers"] = {
+                "@type": "Offer",
+                "price": f"{pr:.6f}",
+                "priceCurrency": "USD",
+                "url": meta_url,
+                "availability": "https://schema.org/InStock",
+            }
+    except Exception:
+        pass
+
+    return render_template(
+        "token_detail.html",
+        token=token,
+        watchlisted=watchlisted,
+        price=price,
+        meta_title=meta_title,
+        meta_description=meta_description,
+        meta_image=meta_image,
+        meta_url=meta_url,
+        jsonld=jsonld,
+    )
 
 
 @web_bp.route("/dashboard")
@@ -1155,6 +1213,12 @@ def pool_trade(symbol: str):
     try:
         execute_swap(db.session, pool.id, uid, side, amt)
         db.session.commit()
+        # Invalidate cached homepage sections affected by trades
+        try:
+            cache.delete_memoized(_cached_trending_items)
+            cache.delete_memoized(_cached_stats)
+        except Exception:
+            pass
         flash("Trade executed", "success")
     except Exception as e:
         db.session.rollback()
@@ -1303,6 +1367,9 @@ def sse_trades():
                         "time": t.created_at.isoformat() + "Z",
                     })
                     yield f"data: {data}\n\n"
+            else:
+                # Heartbeat to keep connection alive
+                yield ": keep-alive\n\n"
             time.sleep(5)
 
     return Response(event_stream(), mimetype="text/event-stream", headers={
@@ -1331,17 +1398,20 @@ def sse_alerts():
                 .limit(20)
                 .all()
             )
-            for ev in evs:
-                last_ts = max(last_ts, ev.triggered_at)
-                data = json.dumps({
-                    "symbol": ev.rule.token.symbol,
-                    "name": ev.rule.token.name,
-                    "condition": ev.rule.condition,
-                    "threshold": float(ev.rule.threshold or 0),
-                    "price": float(ev.price or 0),
-                    "time": ev.triggered_at.isoformat() + "Z",
-                })
-                yield f"data: {data}\n\n"
+            if evs:
+                for ev in evs:
+                    last_ts = max(last_ts, ev.triggered_at)
+                    data = json.dumps({
+                        "symbol": ev.rule.token.symbol,
+                        "name": ev.rule.token.name,
+                        "condition": ev.rule.condition,
+                        "threshold": float(ev.rule.threshold or 0),
+                        "price": float(ev.price or 0),
+                        "time": ev.triggered_at.isoformat() + "Z",
+                    })
+                    yield f"data: {data}\n\n"
+            else:
+                yield ": keep-alive\n\n"
             time.sleep(5)
 
     return Response(event_stream(uid), mimetype="text/event-stream", headers={

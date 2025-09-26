@@ -127,6 +127,11 @@ class Token(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    __table_args__ = (
+        db.Index('ix_tokens_market_cap', 'market_cap'),
+        db.Index('ix_tokens_change_24h', 'change_24h'),
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -297,6 +302,7 @@ class TokenBalance(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint("user_id", "token_id", name="uq_token_balance_user_token"),
+        db.Index('ix_token_balances_token_user', 'token_id', 'user_id'),
     )
 
     def to_dict(self):
@@ -374,6 +380,11 @@ class SwapTrade(db.Model):
 
     pool = db.relationship("SwapPool")
     user = db.relationship("User")
+
+    __table_args__ = (
+        db.Index('ix_swap_trades_pool_created', 'pool_id', 'created_at'),
+        db.Index('ix_swap_trades_created', 'created_at'),
+    )
 
     def to_dict(self):
         return {
