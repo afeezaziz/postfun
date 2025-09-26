@@ -13,6 +13,32 @@
     </div>
   </section>
 
+  {% if trending %}
+  <section class="pf-section">
+    <h2>Hot Today (AMM Volume)</h2>
+    <div class="pf-grid">
+      {% for it in trending %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ it.symbol }}</span>
+            <span>{{ it.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Price: <span class="pf-green">{{ '%.6f'|format(it.price or 0) }}</span></div>
+            <div>24h Vol: <span class="pf-green">{{ '%.2f'|format(it.volume_24h or 0) }}</span></div>
+          </div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No trending items.</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   <section class="pf-section">
     <h2>Trending Tokens</h2>
     <div class="pf-grid">

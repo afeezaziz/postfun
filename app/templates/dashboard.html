@@ -17,14 +17,19 @@
           </div>
         </div>
         <div class="card pf-dash-panel">
-          <h2>Portfolio</h2>
-          <div>Holdings: <span class="pf-green">—</span></div>
-          <div>24h PnL: <span class="pf-green">—</span></div>
+          <h2>Activity</h2>
+          <div>Watchlist: <span class="pf-green">{{ wl_count or 0 }}</span></div>
+          <div>Alerts: <span class="pf-green">{{ alerts_count or 0 }}</span></div>
+          <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+            <a class="retro-button" href="{{ url_for('web.watchlist') }}">View Watchlist</a>
+            <a class="retro-button" href="{{ url_for('web.alerts') }}">Manage Alerts</a>
+          </div>
         </div>
         <div class="card pf-dash-panel">
           <h2>Quick Actions</h2>
           <a class="retro-button" href="{{ url_for('web.pool', symbol='gBTC') }}">Trade gBTC</a>
           <a class="retro-button" href="{{ url_for('web.pool', symbol='gUSD') }}">Trade gUSD</a>
+          <a class="retro-button" href="{{ url_for('web.launchpad') }}">Launch Token</a>
           <a class="retro-button" href="{{ url_for('web.stats') }}">View Stats</a>
         </div>
       </div>
@@ -33,4 +38,30 @@
       <button class="retro-button" onclick="pfNostrLogin()">Login with Nostr</button>
     {% endif %}
   </section>
+
+  {% if trending %}
+  <section class="card">
+    <h2>Hot Today (AMM Volume)</h2>
+    <div class="pf-grid">
+      {% for it in trending %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ it.symbol }}</span>
+            <span>{{ it.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Price: <span class="pf-green">{{ '%.6f'|format(it.price or 0) }}</span></div>
+            <div>24h Vol: <span class="pf-green">{{ '%.2f'|format(it.volume_24h or 0) }}</span></div>
+          </div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No trending items.</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
 {% endblock %}

@@ -756,6 +756,17 @@ def pool(symbol: str):
         address = (u.npub if (u and u.npub) else (u.pubkey_hex if u else f"user:{r.user_id}"))
         holders.append({"rank": idx, "address": address, "amount": float(r.amount or 0)})
 
+    # Watchlist status for current user
+    watchlisted = False
+    payload = get_jwt_from_cookie()
+    if payload:
+        uid = payload.get("uid")
+        user = db.session.get(User, uid) if isinstance(uid, int) else None
+        if user:
+            watchlisted = (
+                WatchlistItem.query.filter_by(user_id=user.id, token_id=token.id).first() is not None
+            )
+
     return render_template(
         "pool.html",
         token=token,
@@ -764,6 +775,7 @@ def pool(symbol: str):
         series=series,
         holders=holders,
         trades=trades,
+        watchlisted=watchlisted,
         confirm_trade_preview=False,
         trade_form=None,
     )

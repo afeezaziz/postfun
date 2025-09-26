@@ -82,12 +82,29 @@
           </div>
           <button class="retro-button" type="submit">Swap</button>
         </form>
+        <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          {% if current_user %}
+            {% if watchlisted %}
+              <form method="POST" action="{{ url_for('web.watchlist_remove', symbol=token.symbol, next=request.path) }}">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                <button class="retro-button" type="submit">Remove from Watchlist</button>
+              </form>
+            {% else %}
+              <form method="POST" action="{{ url_for('web.watchlist_add', symbol=token.symbol, next=request.path) }}">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                <button class="retro-button" type="submit">Add to Watchlist</button>
+              </form>
+            {% endif %}
+            <a class="retro-button" href="{{ url_for('web.alerts') }}">Alerts</a>
+          {% else %}
+            <button class="retro-button" onclick="pfNostrLogin()">Login to use Watchlist & Alerts</button>
+          {% endif %}
+        </div>
       </div>
     </div>
   </section>
 
   <section class="card">
-{{ ... }}
     <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
       <div>Symbol: <strong>{{ token.symbol }}</strong></div>
       <div>Name: <span class="pf-green">{{ token.name }}</span></div>
