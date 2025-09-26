@@ -13,6 +13,7 @@ from ..utils.jwt_utils import verify_jwt
 from ..extensions import db
 from ..models import User, Token, WatchlistItem, AlertRule, AlertEvent, SwapPool, SwapTrade, TokenBalance
 from ..services.amm import execute_swap, quote_swap
+from sqlalchemy import case
 
 
 web_bp = Blueprint("web", __name__)
@@ -94,7 +95,15 @@ def home():
             "volume_24h": float(vol or 0),
         })
     trending.sort(key=lambda x: x["volume_24h"], reverse=True)
-    tokens = Token.query.order_by(Token.market_cap.desc().nullslast()).limit(8).all()
+    tokens = (
+        Token.query
+        .order_by(
+            case((Token.market_cap == None, 1), else_=0),  # noqa: E711
+            Token.market_cap.desc(),
+        )
+        .limit(8)
+        .all()
+    )
     return render_template("home.html", tokens=tokens, trending=trending)
 
 
