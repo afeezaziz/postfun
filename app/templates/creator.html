@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Creator — {{ creator.npub or creator.pubkey_hex }} | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Creator Profile</h1>
+    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));">
+      <div class="card">
+        <div>npub: <span class="pf-green">{{ creator.npub or '—' }}</span></div>
+        <div>pubkey: <span class="pf-green">{{ creator.pubkey_hex }}</span></div>
+        <div>display: <span class="pf-green">{{ creator.display_name or '—' }}</span></div>
+        <div>followers: <span class="pf-green">{{ follower_count }}</span></div>
+        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+          {% if current_user and current_user.id != creator.id %}
+            {% if is_following %}
+              <form method="POST" action="{{ url_for('web.creator_unfollow', user_id=creator.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                <button class="retro-button" type="submit">Unfollow</button>
+              </form>
+            {% else %}
+              <form method="POST" action="{{ url_for('web.creator_follow', user_id=creator.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                <button class="retro-button" type="submit">Follow</button>
+              </form>
+            {% endif %}
+          {% endif %}
+          <a class="retro-button" href="#" data-share-url="{{ meta_url }}" data-share-text="Check out this creator on Postfun">Share</a>
+          <button class="retro-button" data-copy-url="{{ meta_url }}">Copy Link</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Recent Launches</h3>
+        {% if launches and launches|length > 0 %}
+          <ul>
+            {% for info in launches %}
+              <li>
+                {% set t = (tokens[loop.index0] if tokens and tokens|length > loop.index0 else None) %}
+                {% if t %}
+                  <span class="badge">{{ t.symbol }}</span>
+                  <strong>{{ t.name }}</strong>
+                  <span class="pf-green">{{ '%.6f'|format((price_by_symbol.get(t.symbol) if price_by_symbol else None) or (t.price or 0)) }}</span>
+                  <a class="retro-button" style="margin-left:6px;" href="{{ url_for('web.token_detail', symbol=t.symbol) }}">Details</a>
+                  <a class="retro-button" href="{{ url_for('web.pool', symbol=t.symbol) }}">Pool</a>
+                {% else %}
+                  Token {{ info.token_id }}
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div>No launches yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

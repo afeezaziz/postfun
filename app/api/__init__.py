@@ -16,6 +16,8 @@ from ..models import (
     SwapPool,
     SwapTrade,
     BurnEvent,
+    FeeDistributionRule,
+    FeePayout,
 )
 from ..extensions import cache, db, limiter, csrf
 from ..utils.jwt_utils import require_auth
@@ -944,6 +946,165 @@ def amm_pool_burns(pool_id: int):
         .all()
     )
     return jsonify({"items": [b.to_dict() for b in rows]})
+
+
+# ---- Fees: distribution rules & payouts ----
+
+def _default_fee_rule_dict(pool_id: int) -> dict:
+    return {
+        "pool_id": pool_id,
+        "creator_user_id": None,
+        "minter_user_id": None,
+        "treasury_account": None,
+        "bps_creator": 5000,
+        "bps_minter": 3000,
+        "bps_treasury": 2000,
+    }
+
+
+def _fee_rule_to_dict(r: FeeDistributionRule) -> dict:
+    return {
+        "pool_id": r.pool_id,
+        "creator_user_id": r.creator_user_id,
+        "minter_user_id": r.minter_user_id,
+        "treasury_account": r.treasury_account,
+        "bps_creator": int(r.bps_creator),
+        "bps_minter": int(r.bps_minter),
+        "bps_treasury": int(r.bps_treasury),
+    }
+
+
+@api_bp.get("/fees/pools/<int:pool_id>/rule")
+def fees_get_rule(pool_id: int):
+    pool = db.session.get(SwapPool, pool_id)
+    if not pool:
+        return jsonify({"error": "pool_not_found"}), 404
+    r = FeeDistributionRule.query.filter_by(pool_id=pool_id).first()
+    return jsonify(_fee_rule_to_dict(r) if r else _default_fee_rule_dict(pool_id))
+
+
+@api_bp.post("/fees/pools/<int:pool_id>/rule")
+@require_auth
+@csrf.exempt
+def fees_set_rule(pool_id: int):
+    actor = _get_user_from_jwt()
+    if not _is_admin(actor):
+        return jsonify({"error": "forbidden"}), 403
+    pool = db.session.get(SwapPool, pool_id)
+    if not pool:
+        return jsonify({"error": "pool_not_found"}), 404
+    data = request.get_json(force=True)
+    bps_creator = int(data.get("bps_creator", 5000))
+    bps_minter = int(data.get("bps_minter", 3000))
+    bps_treasury = int(data.get("bps_treasury", 2000))
+    if bps_creator < 0 or bps_minter < 0 or bps_treasury < 0 or (bps_creator + bps_minter + bps_treasury) != 10000:
+        return jsonify({"error": "bps_must_sum_to_10000"}), 400
+    creator_user_id = data.get("creator_user_id")
+    minter_user_id = data.get("minter_user_id")
+    treasury_account = data.get("treasury_account")
+    r = FeeDistributionRule.query.filter_by(pool_id=pool_id).first()
+    if not r:
+        r = FeeDistributionRule(pool_id=pool_id)
+        db.session.add(r)
+    r.creator_user_id = int(creator_user_id) if creator_user_id is not None else None
+    r.minter_user_id = int(minter_user_id) if minter_user_id is not None else None
+    r.treasury_account = treasury_account or None
+    r.bps_creator = bps_creator
+    r.bps_minter = bps_minter
+    r.bps_treasury = bps_treasury
+    db.session.add(r)
+    db.session.commit()
+    return jsonify(_fee_rule_to_dict(r))
+
+
+def _fees_summary_for_pool(pool: SwapPool, rule: FeeDistributionRule | None) -> dict:
+    # Base allocations from accumulated fees
+    bps_c = int(rule.bps_creator if rule else 5000)
+    bps_m = int(rule.bps_minter if rule else 3000)
+    bps_t = int(rule.bps_treasury if rule else 2000)
+    fa = Decimal(pool.fee_accum_a or 0)
+    fb = Decimal(pool.fee_accum_b or 0)
+    def allocs(bps: int):
+        return {
+            "A": (fa * Decimal(bps) / Decimal(10000)),
+            "B": (fb * Decimal(bps) / Decimal(10000)),
+        }
+    # Totals paid so far from payouts table
+    def paid(entity: str):
+        rows = FeePayout.query.filter_by(pool_id=pool.id, entity=entity).all()
+        totA = Decimal("0")
+        totB = Decimal("0")
+        for p in rows:
+            if p.asset == "A":
+                totA += Decimal(p.amount or 0)
+            elif p.asset == "B":
+                totB += Decimal(p.amount or 0)
+        return {"A": totA, "B": totB}
+
+    out = {}
+    for entity, bps in (("creator", bps_c), ("minter", bps_m), ("treasury", bps_t)):
+        a = allocs(bps)
+        p = paid(entity)
+        out[entity] = {
+            "alloc": {"A": float(a["A"]), "B": float(a["B"])},
+            "paid": {"A": float(p["A"]), "B": float(p["B"])},
+            "pending": {"A": float(max(Decimal("0"), a["A"] - p["A"])), "B": float(max(Decimal("0"), a["B"] - p["B"]))},
+        }
+    return out
+
+
+@api_bp.get("/fees/pools/<int:pool_id>/summary")
+def fees_summary(pool_id: int):
+    pool = db.session.get(SwapPool, pool_id)
+    if not pool:
+        return jsonify({"error": "pool_not_found"}), 404
+    r = FeeDistributionRule.query.filter_by(pool_id=pool_id).first()
+    return jsonify(_fees_summary_for_pool(pool, r))
+
+
+@api_bp.post("/fees/payout")
+@require_auth
+@csrf.exempt
+def fees_payout():
+    actor = _get_user_from_jwt()
+    if not _is_admin(actor):
+        return jsonify({"error": "forbidden"}), 403
+    data = request.get_json(force=True)
+    pool_id = data.get("pool_id")
+    entity = data.get("entity")  # creator|minter|treasury
+    asset = data.get("asset")    # A|B
+    amount_raw = data.get("amount")
+    if entity not in {"creator", "minter", "treasury"} or asset not in {"A", "B"}:
+        return jsonify({"error": "invalid_params"}), 400
+    pool = db.session.get(SwapPool, int(pool_id)) if pool_id else None
+    if not pool:
+        return jsonify({"error": "pool_not_found"}), 404
+    try:
+        amount = _parse_decimal(amount_raw)
+    except Exception:
+        return jsonify({"error": "invalid_amount"}), 400
+    if amount <= 0:
+        return jsonify({"error": "amount_must_be_positive"}), 400
+    rule = FeeDistributionRule.query.filter_by(pool_id=pool.id).first()
+    summary = _fees_summary_for_pool(pool, rule)
+    pending = Decimal(str(summary.get(entity, {}).get("pending", {}).get(asset, 0)))
+    if amount > pending:
+        return jsonify({"error": "amount_exceeds_pending", "pending": float(pending)}), 400
+    p = FeePayout(pool_id=pool.id, entity=entity, asset=asset, amount=amount, note=(data.get("note") or None))
+    db.session.add(p)
+    db.session.commit()
+    return jsonify({
+        "ok": True,
+        "payout": {
+            "id": p.id,
+            "pool_id": p.pool_id,
+            "entity": p.entity,
+            "asset": p.asset,
+            "amount": float(p.amount or 0),
+            "note": p.note,
+            "created_at": p.created_at.isoformat() + "Z",
+        }
+    }), 201
 
 
 # ---- Watchlist ----

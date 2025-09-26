@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 from ..utils.jwt_utils import verify_jwt
 from ..extensions import db, cache
-from ..models import User, Token, WatchlistItem, AlertRule, AlertEvent, SwapPool, SwapTrade, TokenBalance, TokenInfo
+from ..models import User, Token, WatchlistItem, AlertRule, AlertEvent, SwapPool, SwapTrade, TokenBalance, TokenInfo, CreatorFollow
 from ..services.amm import execute_swap, quote_swap
 from sqlalchemy import case
 
@@ -344,6 +344,9 @@ def home():
         movers_losers=movers_losers,
         stats=stats,
         price_by_symbol=price_by_symbol,
+        meta_title="Postfun — From posts to markets.",
+        meta_description="From posts to markets. Turn vibes into value on Postfun.",
+        meta_url=url_for("web.home", _external=True),
     )
 
 
@@ -462,6 +465,7 @@ def dashboard():
 
 
 @web_bp.route("/tokens")
+@cache.cached(timeout=60, query_string=True)
 def tokens_list():
     # Simple list with search/sort/pagination
     q = request.args.get("q", type=str)
@@ -515,10 +519,14 @@ def tokens_list():
         total=total,
         pages=pages,
         price_by_symbol=price_by_symbol,
+        meta_title="Tokens — Postfun",
+        meta_description="Browse tokens by market cap, price and 24h change on Postfun.",
+        meta_url=url_for("web.tokens_list", _external=True),
     )
 
 
 @web_bp.route("/explore")
+@cache.cached(timeout=60, query_string=True)
 def explore():
     # Filters: q (search), filter (gainers|losers|all), sort (market_cap|price|change_24h), order (desc|asc)
     # Ranges: price_min, price_max, change_min, change_max; Pagination: page, per
@@ -604,6 +612,9 @@ def explore():
         change_min=change_min_s or "",
         change_max=change_max_s or "",
         price_by_symbol=price_by_symbol,
+        meta_title="Explore — Postfun",
+        meta_description="Explore the Postfun market: filter by gainers, losers, price and more.",
+        meta_url=url_for("web.explore", _external=True),
     )
 
 
@@ -705,6 +716,18 @@ def launchpad():
             token.market_cap = mcap_val
         try:
             db.session.commit()
+            # Invalidate caches affected by launches/edits
+            try:
+                cache.delete_memoized(tokens_list)
+                cache.delete_memoized(explore)
+                cache.delete_memoized(pro)
+                cache.delete_memoized(stats)
+                cache.delete_memoized(_cached_recent_launches)
+                cache.delete_memoized(_cached_top_creators)
+                cache.delete_memoized(_cached_stats)
+                cache.delete_memoized(_cached_trending_items)
+            except Exception:
+                pass
             flash("Token saved", "success")
             return redirect(url_for("web.token_detail", symbol=symbol, launched=1))
         except Exception:
@@ -740,6 +763,7 @@ def _compute_token_metrics(t: Token):
 
 
 @web_bp.route("/pro")
+@cache.cached(timeout=60, query_string=True)
 def pro():
     sort = request.args.get("sort", default="market_cap", type=str)
     order = request.args.get("order", default="desc", type=str)
@@ -799,6 +823,9 @@ def pro():
         risk=risk_filter,
         trending="1" if trending_only else "0",
         price_by_symbol=price_by_symbol,
+        meta_title="Pro Scanner — Postfun",
+        meta_description="Deep-dive token scanner with risk, sentiment and trends on Postfun.",
+        meta_url=url_for("web.pro", _external=True),
     )
 
 
@@ -818,7 +845,15 @@ def portfolio():
     )
     holdings = [{"token": t, "amount": 0.0, "value": 0.0} for t in tokens]
     price_by_symbol = {t.symbol: (_amm_price_for_token(t) or float(t.price or 0)) for t in tokens if t and t.symbol}
-    return render_template("portfolio.html", user=user, holdings=holdings, price_by_symbol=price_by_symbol)
+    return render_template(
+        "portfolio.html",
+        user=user,
+        holdings=holdings,
+        price_by_symbol=price_by_symbol,
+        meta_title="Portfolio — Postfun",
+        meta_description="Your holdings on Postfun.",
+        meta_url=url_for("web.portfolio", _external=True),
+    )
 
 
 # Phase 6: Watchlist
@@ -867,7 +902,18 @@ def watchlist():
         except Exception:
             pass
     price_by_symbol = {t.symbol: (_amm_price_for_token(t) or float(t.price or 0)) for t in tokens if t and t.symbol}
-    return render_template("watchlist.html", items=items, user=user, q=q or "", sort=sort, order=order, price_by_symbol=price_by_symbol)
+    return render_template(
+        "watchlist.html",
+        items=items,
+        user=user,
+        q=q or "",
+        sort=sort,
+        order=order,
+        price_by_symbol=price_by_symbol,
+        meta_title="Watchlist — Postfun",
+        meta_description="Your watchlist on Postfun.",
+        meta_url=url_for("web.watchlist", _external=True),
+    )
 
 
 @web_bp.route("/watchlist/add/<symbol>", methods=["POST"])
@@ -943,7 +989,16 @@ def alerts():
     )
     # tokens for convenience in a select control
     tokens = Token.query.order_by(Token.symbol.asc()).all()
-    return render_template("alerts.html", user=user, rules=rules, events=events, tokens=tokens)
+    return render_template(
+        "alerts.html",
+        user=user,
+        rules=rules,
+        events=events,
+        tokens=tokens,
+        meta_title="Alerts — Postfun",
+        meta_description="Price alerts on Postfun.",
+        meta_url=url_for("web.alerts", _external=True),
+    )
 
 
 @web_bp.route("/alerts/create", methods=["POST"])
@@ -1228,17 +1283,111 @@ def pool_trade(symbol: str):
 
 @web_bp.route("/about")
 def about():
-    return render_template("about.html")
+    return render_template(
+        "about.html",
+        meta_title="About — Postfun",
+        meta_description="From posts to markets. Turn vibes into value on Postfun.",
+        meta_url=url_for("web.about", _external=True),
+    )
 
 
 @web_bp.route("/faq")
 def faq():
-    return render_template("faq.html")
+    return render_template(
+        "faq.html",
+        meta_title="FAQ — Postfun",
+        meta_description="Frequently asked questions about Postfun.",
+        meta_url=url_for("web.faq", _external=True),
+    )
 
 
 @web_bp.route("/download")
 def download():
-    return render_template("download.html")
+    return render_template(
+        "download.html",
+        meta_title="Download — Postfun",
+        meta_description="Download resources for Postfun.",
+        meta_url=url_for("web.download", _external=True),
+    )
+
+
+@web_bp.route("/creator/<int:user_id>")
+def creator_profile(user_id: int):
+    user = db.session.get(User, user_id)
+    if not user:
+        abort(404)
+    launches = TokenInfo.query.filter_by(launch_user_id=user.id).order_by(TokenInfo.launch_at.desc()).all()
+    tokens = []
+    for info in launches:
+        t = db.session.get(Token, info.token_id)
+        if t:
+            tokens.append(t)
+    price_by_symbol = {t.symbol: (_amm_price_for_token(t) or float(t.price or 0)) for t in tokens if t and t.symbol}
+    follower_count = CreatorFollow.query.filter_by(creator_user_id=user.id).count()
+    # follow status
+    is_following = False
+    payload = get_jwt_from_cookie()
+    if payload and isinstance(payload.get("uid"), int):
+        me = db.session.get(User, int(payload.get("uid")))
+        if me:
+            is_following = CreatorFollow.query.filter_by(follower_user_id=me.id, creator_user_id=user.id).first() is not None
+    meta_title = f"Creator — {user.npub or user.pubkey_hex} | Postfun"
+    meta_url = url_for("web.creator_profile", user_id=user.id, _external=True)
+    return render_template(
+        "creator.html",
+        creator=user,
+        launches=launches,
+        tokens=tokens,
+        follower_count=follower_count,
+        is_following=is_following,
+        price_by_symbol=price_by_symbol,
+        meta_title=meta_title,
+        meta_description="Creator profile on Postfun.",
+        meta_url=meta_url,
+    )
+
+
+@web_bp.route("/creator/<int:user_id>/follow", methods=["POST"])
+@require_auth_web
+def creator_follow(user_id: int):
+    payload = g.jwt_payload
+    uid = payload.get("uid") if payload else None
+    me = db.session.get(User, uid) if isinstance(uid, int) else None
+    if not me:
+        return redirect(url_for("web.home"))
+    if me.id == user_id:
+        flash("You cannot follow yourself", "error")
+        return redirect(url_for("web.creator_profile", user_id=user_id))
+    exists = CreatorFollow.query.filter_by(follower_user_id=me.id, creator_user_id=user_id).first()
+    if not exists:
+        db.session.add(CreatorFollow(follower_user_id=me.id, creator_user_id=user_id))
+        try:
+            db.session.commit()
+            flash("Followed creator", "success")
+        except Exception:
+            db.session.rollback()
+            flash("Could not follow", "error")
+    return redirect(url_for("web.creator_profile", user_id=user_id))
+
+
+@web_bp.route("/creator/<int:user_id>/unfollow", methods=["POST"])
+@require_auth_web
+def creator_unfollow(user_id: int):
+    payload = g.jwt_payload
+    uid = payload.get("uid") if payload else None
+    me = db.session.get(User, uid) if isinstance(uid, int) else None
+    if not me:
+        return redirect(url_for("web.home"))
+    row = CreatorFollow.query.filter_by(follower_user_id=me.id, creator_user_id=user_id).first()
+    if row:
+        try:
+            db.session.delete(row)
+            db.session.commit()
+            flash("Unfollowed creator", "success")
+        except Exception:
+            db.session.rollback()
+            flash("Could not unfollow", "error")
+    return redirect(url_for("web.creator_profile", user_id=user_id))
 
 
 @web_bp.route("/export/tokens.csv")
@@ -1563,6 +1712,7 @@ def export_pro_csv():
 
 
 @web_bp.route("/stats")
+@cache.cached(timeout=120)
 def stats():
     tokens = Token.query.order_by(
         case((Token.market_cap == None, 1), else_=0),  # noqa: E711
@@ -1586,6 +1736,9 @@ def stats():
         top_by_mcap=top_by_mcap,
         gainers=gainers,
         losers=losers,
+        meta_title="Stats — Postfun",
+        meta_description="Market stats across Postfun.",
+        meta_url=url_for("web.stats", _external=True),
     )
 
 

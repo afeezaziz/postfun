@@ -423,3 +423,52 @@ class BurnEvent(db.Model):
             "amount": float(self.amount),
             "created_at": self.created_at.isoformat() + "Z",
         }
+
+
+class CreatorFollow(db.Model):
+    __tablename__ = "creator_follows"
+
+    id = db.Column(db.Integer, primary_key=True)
+    follower_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    creator_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    follower = db.relationship("User", foreign_keys=[follower_user_id])
+    creator = db.relationship("User", foreign_keys=[creator_user_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("follower_user_id", "creator_user_id", name="uq_creator_follow"),
+    )
+
+
+class FeeDistributionRule(db.Model):
+    __tablename__ = "fee_distribution_rules"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pool_id = db.Column(db.Integer, db.ForeignKey("swap_pools.id"), nullable=False, unique=True, index=True)
+    creator_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    minter_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    treasury_account = db.Column(db.String(120), nullable=True)
+    bps_creator = db.Column(db.Integer, nullable=False, default=5000)
+    bps_minter = db.Column(db.Integer, nullable=False, default=3000)
+    bps_treasury = db.Column(db.Integer, nullable=False, default=2000)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    pool = db.relationship("SwapPool")
+    creator = db.relationship("User", foreign_keys=[creator_user_id])
+    minter = db.relationship("User", foreign_keys=[minter_user_id])
+
+
+class FeePayout(db.Model):
+    __tablename__ = "fee_payouts"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    pool_id = db.Column(db.Integer, db.ForeignKey("swap_pools.id"), nullable=False, index=True)
+    entity = db.Column(db.String(16), nullable=False)  # 'creator' | 'minter' | 'treasury'
+    asset = db.Column(db.String(1), nullable=False)  # 'A' | 'B'
+    amount = db.Column(db.Numeric(30, 18), nullable=False)
+    note = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    pool = db.relationship("SwapPool")

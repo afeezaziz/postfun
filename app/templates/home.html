@@ -71,6 +71,8 @@
           <div class="pf-card-actions">
             <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
             <a class="retro-button" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+            <a class="retro-button" href="#" data-share-url="{{ url_for('web.token_detail', symbol=it.symbol, _external=True) }}" data-share-text="Fresh launch: {{ it.symbol }} — {{ it.name }} on Postfun">Share</a>
+            <button class="retro-button" data-copy-url="{{ url_for('web.token_detail', symbol=it.symbol, _external=True) }}">Copy Link</button>
             <button class="retro-button pf-watchlist-btn" data-symbol="{{ it.symbol }}" data-active="0">☆ Watchlist</button>
           </div>
         </div>
