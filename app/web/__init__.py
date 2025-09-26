@@ -118,6 +118,20 @@ def home():
             price = (p.reserve_b / p.reserve_a) if p.reserve_a and p.reserve_b else None
         else:
             price = (p.reserve_a / p.reserve_b) if p.reserve_a and p.reserve_b else None
+        # stage/fee and progress to next threshold
+        stg = int(p.stage or 1)
+        vol_a = float(p.cumulative_volume_a or 0)
+        thr1 = float(p.stage1_threshold) if getattr(p, "stage1_threshold", None) is not None else None
+        thr2 = float(p.stage2_threshold) if getattr(p, "stage2_threshold", None) is not None else None
+        thr3 = float(p.stage3_threshold) if getattr(p, "stage3_threshold", None) is not None else None
+        next_thr = None
+        if stg < 2:
+            next_thr = thr1
+        elif stg < 3:
+            next_thr = thr2
+        elif stg < 4:
+            next_thr = thr3
+        progress_pct = 100 if not next_thr else max(0, min(100, int(round((vol_a / float(next_thr)) * 100))))
         trending.append({
             "symbol": tok.symbol,
             "name": tok.name,
@@ -125,6 +139,9 @@ def home():
             "volume_24h": float(vol or 0),
             "stage": int(p.stage or 1),
             "fee_bps": p.current_fee_bps(),
+            "next_stage": (stg + 1) if next_thr else None,
+            "progress_pct": progress_pct,
+            "remaining_to_next": (float(next_thr) - vol_a) if next_thr else 0.0,
         })
     trending.sort(key=lambda x: x["volume_24h"], reverse=True)
 
@@ -138,6 +155,11 @@ def home():
         n = (it["name"] or "").upper()
         return any(k in s or k in n for k in meme_keywords)
     meme_hot = [it for it in trending if _is_meme(it)][:8]
+
+    # Fair Launch Radar: tokens closest to next stage
+    fair_radar = [it for it in trending if it.get("next_stage")]
+    fair_radar.sort(key=lambda x: x.get("progress_pct", 0), reverse=True)
+    fair_radar = fair_radar[:8]
 
     # Live trades ticker (latest 30 trades across all pools)
     live_trades = []
@@ -300,6 +322,7 @@ def home():
         recent_launches=recent_launches,
         top_creators=top_creators,
         meme_hot=meme_hot,
+        fair_radar=fair_radar,
         movers_gainers=movers_gainers,
         movers_losers=movers_losers,
         stats=stats,
@@ -1226,7 +1249,9 @@ def sse_prices():
     def event_stream(sym: str):
         while True:
             t = Token.query.filter_by(symbol=sym).first()
-            price = float(t.price or 0) if t and t.price is not None else 0.0
+            # Use AMM-computed price when available for consistency
+            amm_price = _amm_price_for_token(t) if t else None
+            price = float(amm_price) if amm_price is not None else (float(t.price or 0) if t and t.price is not None else 0.0)
             data = json.dumps({"symbol": sym, "price": price})
             yield f"data: {data}\n\n"
             time.sleep(5)

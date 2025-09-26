@@ -8,7 +8,7 @@
         <h2>Overview</h2>
         <div>Symbol: <strong>{{ token.symbol }}</strong></div>
         <div>Name: <span class="pf-green">{{ token.name }}</span></div>
-        <div>Price: <span class="pf-green" data-price-target>{{ '%.4f'|format(token.price or 0) }}</span></div>
+        <div>Price: <span class="pf-green" data-price-target>{{ '%.4f'|format(price or 0) }}</span></div>
         <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
         <div>24h Change: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
       </div>

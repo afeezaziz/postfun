@@ -109,6 +109,40 @@
   </section>
   {% endif %}
 
+  {% if fair_radar %}
+  <section class="pf-section">
+    <h2>Fair Launch Radar</h2>
+    <div class="pf-grid">
+      {% for it in fair_radar %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ it.symbol }}</span>
+            <span>{{ it.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Stage/Fee: <span class="pf-green">S{{ it.stage }} → S{{ it.next_stage }} • {{ it.fee_bps }} bps</span></div>
+            <div style="margin-top:6px;">
+              <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--dim-green);">
+                <span>Progress</span>
+                <span>{{ it.progress_pct }}%</span>
+              </div>
+              <div class="pf-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ it.progress_pct }}" style="height:8px; background:#0a0; opacity:0.3; border-radius:4px; overflow:hidden;">
+                <div style="width: {{ it.progress_pct }}%; height:100%; background:linear-gradient(90deg,#0f0,#4cff4c);"></div>
+              </div>
+            </div>
+          </div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=it.symbol) }}">Boost</a>
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No pools near the next stage right now.</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   {% if top_creators %}
   <section class="pf-section">
     <h2>Top Creators</h2>
@@ -142,6 +176,17 @@
             <div>Price: <span class="pf-green">{{ '%.6f'|format(it.price or 0) }}</span></div>
             <div>24h Vol: <span class="pf-green">{{ '%.2f'|format(it.volume_24h or 0) }}</span></div>
             <div>Stage/Fee: <span class="pf-green">S{{ it.stage }} • {{ it.fee_bps }} bps</span></div>
+            {% if it.next_stage %}
+              <div style="margin-top:6px;">
+                <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--dim-green);">
+                  <span>S{{ it.stage }} → S{{ it.next_stage }}</span>
+                  <span>{{ it.progress_pct }}%</span>
+                </div>
+                <div class="pf-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ it.progress_pct }}" style="height:8px; background:#0a0; opacity:0.3; border-radius:4px; overflow:hidden;">
+                  <div style="width: {{ it.progress_pct }}%; height:100%; background:linear-gradient(90deg,#0f0,#4cff4c);"></div>
+                </div>
+              </div>
+            {% endif %}
           </div>
           <div class="pf-card-actions">
             <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
