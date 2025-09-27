@@ -21,9 +21,11 @@ def log_action(user_id: Optional[int], action: str, meta: Optional[str] = None) 
             xff = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
             ip = xff or (request.remote_addr or "")
             ua = getattr(request.user_agent, "string", "") or ""
+            method = request.method
+            path = request.path
             if enriched_meta:
                 enriched_meta += " "
-            enriched_meta += f"ip={ip} ua={ua}"
+            enriched_meta += f"ip={ip} ua={ua} method={method} path={path}"
             try:
                 from flask import g
 

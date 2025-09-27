@@ -78,6 +78,41 @@
         </div>
       </form>
     </div>
+
+    <div class="card">
+      <h2>Force Payout</h2>
+      <p style="color:#b14a4a;">Bypass pending check. Use only for manual adjustments.</p>
+      <form method="POST" action="{{ url_for('admin.fees_detail', pool_id=pool.id) }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items:end;">
+        <input type="hidden" name="op" value="force_payout" />
+        <div>
+          <label>Entity</label>
+          <select class="retro-input" name="entity">
+            <option value="creator">Creator</option>
+            <option value="minter">Minter</option>
+            <option value="treasury">Treasury</option>
+          </select>
+        </div>
+        <div>
+          <label>Asset</label>
+          <select class="retro-input" name="asset">
+            <option value="A">Token A</option>
+            <option value="B">Token B</option>
+          </select>
+        </div>
+        <div>
+          <label>Amount</label>
+          <input class="retro-input" type="text" name="amount" placeholder="e.g. 1.2345" />
+        </div>
+        <div>
+          <label>Note</label>
+          <input class="retro-input" type="text" name="note" placeholder="reason" />
+        </div>
+        <div>
+          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+          <button class="retro-button" type="submit" style="background:#b14a4a;">Force Payout</button>
+        </div>
+      </form>
+    </div>
   </section>
 
   <section class="card">

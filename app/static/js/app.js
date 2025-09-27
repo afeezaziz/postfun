@@ -477,30 +477,110 @@ function pfInitChart() {
   const path = chart.querySelector('.pf-chart-path');
   if (!svg || !path) return;
 
-  function redraw(series) {
+  // Candle layer container
+  let gCandles = svg.querySelector('.pf-candles');
+  if (!gCandles) {
+    gCandles = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    gCandles.setAttribute('class', 'pf-candles');
+    svg.appendChild(gCandles);
+  }
+
+  function updateMinMax(min, max) {
+    try {
+      const minEl = document.getElementById('pf-chart-min');
+      const maxEl = document.getElementById('pf-chart-max');
+      if (typeof min === 'number' && isFinite(min) && minEl) minEl.textContent = min.toFixed(6);
+      if (typeof max === 'number' && isFinite(max) && maxEl) maxEl.textContent = max.toFixed(6);
+    } catch (e) {}
+  }
+
+  function redrawLine(series) {
     try {
       const box = svg.getBoundingClientRect();
       const width = Math.max(200, Math.floor(box.width));
       const height = Math.max(120, Math.floor(box.height));
       const d = pfBuildChartPath(series, width, height);
       path.setAttribute('d', d);
+      path.style.display = '';
+      gCandles.style.display = 'none';
       const prices = series.map(p => Number(p.price) || 0);
       if (prices.length > 0) {
-        const min = Math.min(...prices);
-        const max = Math.max(...prices);
-        const minEl = document.getElementById('pf-chart-min');
-        const maxEl = document.getElementById('pf-chart-max');
-        if (minEl) minEl.textContent = min.toFixed(6);
-        if (maxEl) maxEl.textContent = max.toFixed(6);
+        updateMinMax(Math.min(...prices), Math.max(...prices));
       }
     } catch (e) {}
   }
 
-  // Start with server-provided series
+  function redrawCandles(candles) {
+    try {
+      const box = svg.getBoundingClientRect();
+      const width = Math.max(200, Math.floor(box.width));
+      const height = Math.max(120, Math.floor(box.height));
+      const padX = 6, padY = 6;
+      const innerW = Math.max(1, width - padX * 2);
+      const innerH = Math.max(1, height - padY * 2);
+      const highs = candles.map(c => Number(c.h) || 0);
+      const lows = candles.map(c => Number(c.l) || 0);
+      const min = lows.length ? Math.min(...lows) : 0;
+      const max = highs.length ? Math.max(...highs) : 1;
+      const spread = (max - min) || 1;
+      const n = Math.max(1, candles.length);
+      const candleSpace = innerW / n;
+      const bodyW = Math.max(2, Math.floor(candleSpace * 0.6));
+      // Clear previous
+      while (gCandles.firstChild) gCandles.removeChild(gCandles.firstChild);
+      // Draw
+      candles.forEach((c, i) => {
+        const o = Number(c.o), h = Number(c.h), l = Number(c.l), cl = Number(c.c);
+        const xCenter = padX + i * candleSpace + candleSpace / 2;
+        const y = (val) => padY + (1 - ((val - min) / spread)) * innerH;
+        const yO = y(o), yH = y(h), yL = y(l), yC = y(cl);
+        const up = cl >= o;
+        const stroke = up ? '#00cc66' : '#cc3333';
+        const fill = up ? '#00cc66' : 'transparent';
+        const bodyTop = up ? yC : yO;
+        const bodyBottom = up ? yO : yC;
+        // Wick
+        const wick = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        wick.setAttribute('x1', String(xCenter));
+        wick.setAttribute('x2', String(xCenter));
+        wick.setAttribute('y1', String(yH));
+        wick.setAttribute('y2', String(yL));
+        wick.setAttribute('stroke', stroke);
+        wick.setAttribute('stroke-width', '1');
+        gCandles.appendChild(wick);
+        // Body
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', String(Math.round(xCenter - bodyW / 2)));
+        rect.setAttribute('y', String(Math.round(Math.min(bodyTop, bodyBottom))));
+        rect.setAttribute('width', String(bodyW));
+        rect.setAttribute('height', String(Math.max(1, Math.abs(bodyBottom - bodyTop))));
+        rect.setAttribute('fill', fill);
+        rect.setAttribute('stroke', stroke);
+        rect.setAttribute('stroke-width', '1');
+        gCandles.appendChild(rect);
+      });
+      // Toggle layers
+      gCandles.style.display = '';
+      path.style.display = 'none';
+      updateMinMax(min, max);
+    } catch (e) {}
+  }
+
+  // Fetch OHLC data from API
+  function fetchOHLC(symbol, interval = '1m', windowArg = '24h') {
+    const url = `/api/ohlc?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&window=${encodeURIComponent(windowArg)}`;
+    return fetch(url, { credentials: 'same-origin' })
+      .then(res => res.json())
+      .then(j => (j && Array.isArray(j.items)) ? j.items : [])
+      .catch(() => []);
+  }
+
+  // Start with server-provided series (line mode default)
   let series = [];
   try { series = JSON.parse(chart.dataset.series || '[]'); } catch {};
   window.pfChartSeries = Array.isArray(series) ? series.slice() : [];
-  redraw(window.pfChartSeries);
+  window.pfChartCandles = [];
+  window.pfChartMode = 'line';
 
   // Fetch richer history from API (24h by default)
   const sseEl = document.querySelector('[data-sse-symbol]');
@@ -511,14 +591,76 @@ function pfInitChart() {
       .then(j => {
         if (j && Array.isArray(j.items) && j.items.length) {
           window.pfChartSeries = j.items;
-          redraw(window.pfChartSeries);
+          if (window.pfChartMode === 'line') redrawLine(window.pfChartSeries);
         }
       })
       .catch(() => {});
   }
 
-  // Expose redraw for SSE appends
-  window.pfChartRedraw = () => redraw(window.pfChartSeries || []);
+  // Controls: mode, interval, refresh
+  const intervalSelect = chart.querySelector('[data-chart-interval]');
+  const modeButtons = chart.querySelectorAll('[data-chart-mode]');
+  const refreshBtn = chart.querySelector('[data-chart-refresh]');
+  const getInterval = () => (intervalSelect ? (intervalSelect.value || '1m') : '1m');
+
+  function setMode(nextMode) {
+    window.pfChartMode = nextMode === 'candle' ? 'candle' : 'line';
+    // toggle button active state
+    modeButtons.forEach(btn => {
+      const m = btn.getAttribute('data-chart-mode');
+      if (m === window.pfChartMode) btn.classList.add('pf-active'); else btn.classList.remove('pf-active');
+    });
+    if (window.pfChartMode === 'line') {
+      redrawLine(window.pfChartSeries || []);
+    } else if (symbol) {
+      // draw existing or fetch
+      const candles = window.pfChartCandles || [];
+      if (candles.length) {
+        redrawCandles(candles);
+      } else {
+        fetchOHLC(symbol, getInterval()).then(items => { window.pfChartCandles = items; redrawCandles(items); });
+      }
+    }
+  }
+
+  modeButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const m = btn.getAttribute('data-chart-mode');
+      setMode(m);
+    });
+  });
+
+  if (intervalSelect) {
+    intervalSelect.addEventListener('change', () => {
+      if (window.pfChartMode === 'candle' && symbol) {
+        fetchOHLC(symbol, getInterval()).then(items => { window.pfChartCandles = items; redrawCandles(items); });
+      }
+    });
+  }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (window.pfChartMode === 'candle' && symbol) {
+        fetchOHLC(symbol, getInterval()).then(items => { window.pfChartCandles = items; redrawCandles(items); });
+      } else {
+        redrawLine(window.pfChartSeries || []);
+      }
+    });
+  }
+
+  // Initial draw
+  redrawLine(window.pfChartSeries);
+
+  // Expose redraw for SSE appends; respects current mode
+  window.pfChartRedraw = () => {
+    if (window.pfChartMode === 'candle') {
+      redrawCandles(window.pfChartCandles || []);
+    } else {
+      redrawLine(window.pfChartSeries || []);
+    }
+  };
 }
 
 function pfInitTrade() {
@@ -526,15 +668,101 @@ function pfInitTrade() {
   if (!form) return;
   const priceEl = document.getElementById('pf-trade-price');
   const totalEl = document.getElementById('pf-trade-total');
+  const impactEl = document.getElementById('pf-trade-impact');
+  const feeEl = document.getElementById('pf-trade-fee');
+  const feeBpsEl = document.getElementById('pf-trade-fee-bps');
+  const stageEl = document.getElementById('pf-trade-stage');
+  const warnEl = document.getElementById('pf-trade-warn');
   const amountInput = form.querySelector('input[name="amount"]');
-  function refresh() {
-    const price = Number((priceEl && priceEl.textContent) || form.dataset.price || '0') || 0;
-    const amt = Number(amountInput.value || '0') || 0;
-    const total = price * amt;
-    if (totalEl) totalEl.textContent = total.toFixed(6);
+  const sideInputs = form.querySelectorAll('input[name="side"]');
+  const slippageInput = document.getElementById('pf-slippage-bps');
+  const minOutHidden = document.getElementById('pf-min-amount-out');
+  const maxSlipHidden = document.getElementById('pf-max-slippage-bps');
+  const symbol = form.getAttribute('data-symbol');
+
+  function setWarn(msg) {
+    if (!warnEl) return;
+    warnEl.textContent = msg || '';
   }
+
+  async function fetchQuote() {
+    try {
+      const amt = Number(amountInput.value || '0') || 0;
+      const side = Array.from(sideInputs).find(i => i.checked)?.value || 'buy';
+      if (!symbol || !amt || amt <= 0) {
+        // reset
+        if (totalEl) totalEl.textContent = '0.000000';
+        if (impactEl) impactEl.textContent = '—';
+        if (feeEl) feeEl.textContent = '—';
+        setWarn('');
+        return;
+      }
+      const body = { symbol, action: side, amount_in: String(amt) };
+      const res = await fetch('/api/amm/quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body)
+      });
+      const j = await res.json();
+      if (!res.ok || j.error) {
+        setWarn(String(j.error || `Quote failed (HTTP ${res.status})`));
+        return;
+      }
+      const execPrice = Number(j.execution_price || 0) || 0;
+      const out = Number(j.amount_out || 0) || 0;
+      const impactBps = Number(j.price_impact_bps || 0) || 0;
+      const fee = Number(j.fee_amount || 0) || 0;
+      if (priceEl) priceEl.textContent = execPrice.toFixed(6);
+      if (totalEl) totalEl.textContent = out.toFixed(6);
+      if (impactEl) impactEl.textContent = (impactBps / 100).toFixed(2) + '%';
+      if (feeEl) feeEl.textContent = fee.toFixed(6);
+      if (feeBpsEl) feeBpsEl.textContent = String(j.fee_bps || feeBpsEl.textContent || '0');
+      if (stageEl) stageEl.textContent = String(j.stage || stageEl.textContent || '1');
+
+      // Compute min amount out from slippage
+      const slipBps = Math.max(0, Math.min(5000, Number((slippageInput && slippageInput.value) || (maxSlipHidden && maxSlipHidden.value) || '0') || 0));
+      const minOut = out * (1 - slipBps / 10000);
+      if (minOutHidden) minOutHidden.value = String(minOut.toFixed(12));
+      if (maxSlipHidden) maxSlipHidden.value = String(slipBps);
+
+      // Warnings
+      if (impactBps > slipBps * 2) {
+        setWarn(`High price impact: ${(impactBps/100).toFixed(2)}%`);
+      } else if (impactBps > slipBps) {
+        setWarn(`Price impact ${(impactBps/100).toFixed(2)}% exceeds slippage ${ (slipBps/100).toFixed(2)}%`);
+      } else {
+        setWarn('');
+      }
+    } catch (e) {
+      setWarn('Quote failed');
+    }
+  }
+
+  const refresh = pfDebounce(fetchQuote, 200);
   amountInput && amountInput.addEventListener('input', refresh);
+  slippageInput && slippageInput.addEventListener('input', refresh);
+  sideInputs.forEach(i => i.addEventListener('change', refresh));
   refresh();
+
+  // Keep constraints in sync on submit
+  form.addEventListener('submit', (e) => {
+    try {
+      const amt = Number(amountInput.value || '0') || 0;
+      if (!amt || amt <= 0) {
+        e.preventDefault();
+        setWarn('Enter a valid amount');
+        return;
+      }
+      const out = Number((totalEl && totalEl.textContent) || '0') || 0;
+      const slipBps = Math.max(0, Math.min(5000, Number((slippageInput && slippageInput.value) || (maxSlipHidden && maxSlipHidden.value) || '0') || 0));
+      const minOut = out * (1 - slipBps / 10000);
+      if (minOutHidden) minOutHidden.value = String(minOut.toFixed(12));
+      if (maxSlipHidden) maxSlipHidden.value = String(slipBps);
+    } catch (err) {
+      // allow submit; server will validate
+    }
+  });
 }
 
 window.addEventListener('DOMContentLoaded', () => {

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import time
 import json
 
-from flask import Blueprint, render_template, request, g, redirect, url_for, abort, flash, Response
+from flask import Blueprint, render_template, request, g, redirect, url_for, abort, flash, Response, current_app
 from urllib.parse import urlsplit
 
 from ..utils.jwt_utils import verify_jwt
@@ -29,6 +29,7 @@ from ..models import (
 )
 from ..services.amm import execute_swap, quote_swap
 from sqlalchemy import case
+from ..services.metrics import inc_sse, dec_sse
 
 
 web_bp = Blueprint("web", __name__)
@@ -402,6 +403,13 @@ def token_detail(symbol: str):
     token = Token.query.filter_by(symbol=symbol).first()
     if not token:
         abort(404)
+    # Respect hidden/moderation flags
+    try:
+        info = TokenInfo.query.filter_by(token_id=token.id).first()
+        if bool(getattr(token, "hidden", False)) or (info and getattr(info, "moderation_status", None) == "hidden"):
+            abort(404)
+    except Exception:
+        pass
     # Check watchlist status for current user if logged in
     watchlisted = False
     payload = get_jwt_from_cookie()
@@ -556,6 +564,13 @@ def tokens_list():
     per = request.args.get("per", default=12, type=int)
 
     qry = Token.query
+    # Exclude hidden tokens and those moderated as hidden
+    try:
+        qry = qry.outerjoin(TokenInfo, TokenInfo.token_id == Token.id)
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
+        qry = qry.filter((TokenInfo.moderation_status == None) | (TokenInfo.moderation_status != 'hidden'))  # noqa: E711
+    except Exception:
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
     if q:
         like = f"%{q}%"
         qry = qry.filter((Token.symbol.ilike(like)) | (Token.name.ilike(like)))
@@ -636,6 +651,13 @@ def explore():
     change_max = parse_dec(change_max_s)
 
     qry = Token.query
+    # Exclude hidden tokens and those moderated as hidden
+    try:
+        qry = qry.outerjoin(TokenInfo, TokenInfo.token_id == Token.id)
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
+        qry = qry.filter((TokenInfo.moderation_status == None) | (TokenInfo.moderation_status != 'hidden'))  # noqa: E711
+    except Exception:
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
     if q:
         like = f"%{q}%"
         qry = qry.filter((Token.symbol.ilike(like)) | (Token.name.ilike(like)))
@@ -864,12 +886,18 @@ def pro():
     risk_filter = request.args.get("risk", default="all", type=str)
     trending_only = request.args.get("trending", default="0", type=str) == "1"
 
-    tokens = (
-        Token.query.order_by(
-            case((Token.market_cap == None, 1), else_=0),  # noqa: E711
-            Token.market_cap.desc(),
-        ).all()
-    )
+    qry = Token.query
+    # Exclude hidden tokens and those moderated as hidden
+    try:
+        qry = qry.outerjoin(TokenInfo, TokenInfo.token_id == Token.id)
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
+        qry = qry.filter((TokenInfo.moderation_status == None) | (TokenInfo.moderation_status != 'hidden'))  # noqa: E711
+    except Exception:
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
+    tokens = qry.order_by(
+        case((Token.market_cap == None, 1), else_=0),  # noqa: E711
+        Token.market_cap.desc(),
+    ).all()
     items = [_compute_token_metrics(t) for t in tokens]
     # AMM prices for display
     price_by_symbol = {t.symbol: (_amm_price_for_token(t) or float(t.price or 0)) for t in tokens if t and t.symbol}
@@ -1082,7 +1110,15 @@ def alerts():
         .all()
     )
     # tokens for convenience in a select control
-    tokens = Token.query.order_by(Token.symbol.asc()).all()
+    # Limit available tokens to non-hidden/non-moderated hidden
+    t_qry = Token.query
+    try:
+        t_qry = t_qry.outerjoin(TokenInfo, TokenInfo.token_id == Token.id)
+        t_qry = t_qry.filter((Token.hidden == False))  # noqa: E712
+        t_qry = t_qry.filter((TokenInfo.moderation_status == None) | (TokenInfo.moderation_status != 'hidden'))  # noqa: E711
+    except Exception:
+        t_qry = t_qry.filter((Token.hidden == False))  # noqa: E712
+    tokens = t_qry.order_by(Token.symbol.asc()).all()
     return render_template(
         "alerts.html",
         user=user,
@@ -1296,6 +1332,9 @@ def pool(symbol: str):
     if pool:
         summary = _fee_summary_for_pool_cached(pool.id)
 
+    # Default slippage tolerance (bps) for UI
+    default_slippage_bps = int(current_app.config.get("AMM_DEFAULT_MAX_SLIPPAGE_BPS", 500))
+
     return render_template(
         "pool.html",
         token=token,
@@ -1309,6 +1348,7 @@ def pool(symbol: str):
         trade_form=None,
         fee_summary=summary,
         launcher=launcher,
+        default_slippage_bps=default_slippage_bps,
     )
 
 
@@ -1373,7 +1413,56 @@ def pool_trade(symbol: str):
         return redirect(url_for("web.home"))
 
     try:
-        execute_swap(db.session, pool.id, uid, side, amt)
+        # Optional slippage/min-out constraints from form
+        min_amount_out = None
+        max_slippage_bps = request.form.get("max_slippage_bps")
+        min_amount_out_s = request.form.get("min_amount_out")
+        if min_amount_out_s:
+            try:
+                min_amount_out = Decimal(min_amount_out_s)
+            except Exception:
+                min_amount_out = None
+        max_slippage = None
+        try:
+            if max_slippage_bps is not None:
+                max_slippage = int(max_slippage_bps)
+        except Exception:
+            max_slippage = None
+
+        # Multi-pool routing: evaluate candidate pools to maximize output
+        tok = token
+        candidates = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).all()
+        chosen = pool
+        chosen_side = side
+        best_out = None
+        from ..services.amm import quote_swap
+        if candidates:
+            for p in candidates:
+                try:
+                    # Re-derive side based on desired action (buy/sell relative to token)
+                    if form_side == "buy":
+                        side_p = "BtoA" if p.token_a_id == tok.id else "AtoB"
+                    else:
+                        side_p = "AtoB" if p.token_a_id == tok.id else "BtoA"
+                    qtest = quote_swap(p, side_p, amt)
+                    if best_out is None or qtest.amount_out > best_out:
+                        best_out = qtest.amount_out
+                        chosen = p
+                        chosen_side = side_p
+                except Exception:
+                    continue
+        pool = chosen
+        side = chosen_side
+
+        trade, q, pool = execute_swap(
+            db.session,
+            pool.id,
+            uid,
+            side,
+            amt,
+            min_amount_out=min_amount_out,
+            max_slippage_bps=max_slippage,
+        )
         db.session.commit()
         # Invalidate cached homepage sections affected by trades
         try:
@@ -1382,6 +1471,19 @@ def pool_trade(symbol: str):
         except Exception:
             pass
         flash("Trade executed", "success")
+    except ValueError as ve:
+        db.session.rollback()
+        code = str(ve)
+        mapping = {
+            "insufficient_balance": "Insufficient balance",
+            "insufficient_liquidity": "Insufficient liquidity or pool too small",
+            "pool_exhausted": "Pool exhausted for this trade size",
+            "slippage_too_high": "Slippage too high: expected output below your minimum",
+            "price_impact_too_high": "Price impact too high",
+            "invalid_side": "Invalid trade side",
+            "pool_not_found": "Pool not found",
+        }
+        flash(mapping.get(code, code or "Trade failed"), "error")
     except Exception as e:
         db.session.rollback()
         flash(f"Trade failed: {e}", "error")
@@ -1543,7 +1645,15 @@ def creator_unfollow(user_id: int):
 @web_bp.route("/export/tokens.csv")
 def export_tokens_csv():
     # Export basic token data as CSV
-    tokens = Token.query.order_by(
+    qry = Token.query
+    # Exclude hidden tokens and those moderated as hidden
+    try:
+        qry = qry.outerjoin(TokenInfo, TokenInfo.token_id == Token.id)
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
+        qry = qry.filter((TokenInfo.moderation_status == None) | (TokenInfo.moderation_status != 'hidden'))  # noqa: E711
+    except Exception:
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
+    tokens = qry.order_by(
         case((Token.market_cap == None, 1), else_=0),  # noqa: E711
         Token.market_cap.desc(),
     ).all()
@@ -1618,18 +1728,22 @@ def sse_prices():
         abort(404)
 
     def event_stream(sym: str):
-        while True:
-            try:
-                t = Token.query.filter_by(symbol=sym).first()
-                # Use AMM-computed price when available for consistency
-                amm_price = _amm_price_for_token(t) if t else None
-                price = float(amm_price) if amm_price is not None else (float(t.price or 0) if t and t.price is not None else 0.0)
-                data = json.dumps({"symbol": sym, "price": price})
-                yield f"data: {data}\n\n"
-            except Exception:
-                # Heartbeat on errors to keep connection alive
-                yield ": keep-alive\n\n"
-            time.sleep(5)
+        inc_sse("prices")
+        try:
+            while True:
+                try:
+                    t = Token.query.filter_by(symbol=sym).first()
+                    # Use AMM-computed price when available for consistency
+                    amm_price = _amm_price_for_token(t) if t else None
+                    price = float(amm_price) if amm_price is not None else (float(t.price or 0) if t and t.price is not None else 0.0)
+                    data = json.dumps({"symbol": sym, "price": price})
+                    yield f"data: {data}\n\n"
+                except Exception:
+                    # Heartbeat on errors to keep connection alive
+                    yield ": keep-alive\n\n"
+                time.sleep(5)
+        finally:
+            dec_sse("prices")
 
     return Response(event_stream(symbol), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",
@@ -1642,49 +1756,53 @@ def sse_trades():
     """Stream recent trades for the homepage ticker."""
     def event_stream():
         last_ts = datetime.utcnow() - timedelta(minutes=10)
-        while True:
-            try:
-                rows = (
-                    SwapTrade.query
-                    .filter(SwapTrade.created_at > last_ts)
-                    .order_by(SwapTrade.created_at.asc())
-                    .limit(100)
-                    .all()
-                )
-                if rows:
-                    for t in rows:
-                        last_ts = max(last_ts, t.created_at)
-                        pool = db.session.get(SwapPool, t.pool_id)
-                        if not pool:
-                            continue
-                        gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
-                        token_id = None
-                        if gusd:
-                            token_id = pool.token_a_id if pool.token_b_id == gusd.id else pool.token_b_id
-                        tok = db.session.get(Token, token_id) if token_id else None
-                        if not tok:
-                            tok = db.session.get(Token, pool.token_a_id)
-                        recv_token_id = pool.token_b_id if t.side == "AtoB" else pool.token_a_id
-                        kind = "buy" if (tok and recv_token_id == tok.id) else "sell"
-                        pr = None
-                        if gusd:
-                            if pool.token_b_id == gusd.id:
-                                pr = (t.amount_out / t.amount_in) if (t.side == "AtoB" and t.amount_in and t.amount_out) else ((t.amount_in / t.amount_out) if (t.amount_in and t.amount_out) else None)
-                            elif pool.token_a_id == gusd.id:
-                                pr = (t.amount_in / t.amount_out) if (t.side == "AtoB" and t.amount_in and t.amount_out) else ((t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None)
-                        data = json.dumps({
-                            "symbol": tok.symbol if tok else "?",
-                            "side": kind,
-                            "price": float(pr) if pr is not None else None,
-                            "time": t.created_at.isoformat() + "Z",
-                        })
-                        yield f"data: {data}\n\n"
-                else:
-                    # Heartbeat to keep connection alive
+        inc_sse("trades")
+        try:
+            while True:
+                try:
+                    rows = (
+                        SwapTrade.query
+                        .filter(SwapTrade.created_at > last_ts)
+                        .order_by(SwapTrade.created_at.asc())
+                        .limit(100)
+                        .all()
+                    )
+                    if rows:
+                        for t in rows:
+                            last_ts = max(last_ts, t.created_at)
+                            pool = db.session.get(SwapPool, t.pool_id)
+                            if not pool:
+                                continue
+                            gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+                            token_id = None
+                            if gusd:
+                                token_id = pool.token_a_id if pool.token_b_id == gusd.id else pool.token_b_id
+                            tok = db.session.get(Token, token_id) if token_id else None
+                            if not tok:
+                                tok = db.session.get(Token, pool.token_a_id)
+                            recv_token_id = pool.token_b_id if t.side == "AtoB" else pool.token_a_id
+                            kind = "buy" if (tok and recv_token_id == tok.id) else "sell"
+                            pr = None
+                            if gusd:
+                                if pool.token_b_id == gusd.id:
+                                    pr = (t.amount_out / t.amount_in) if (t.side == "AtoB" and t.amount_in and t.amount_out) else ((t.amount_in / t.amount_out) if (t.amount_in and t.amount_out) else None)
+                                elif pool.token_a_id == gusd.id:
+                                    pr = (t.amount_in / t.amount_out) if (t.side == "AtoB" and t.amount_in and t.amount_out) else ((t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None)
+                            data = json.dumps({
+                                "symbol": tok.symbol if tok else "?",
+                                "side": kind,
+                                "price": float(pr) if pr is not None else None,
+                                "time": t.created_at.isoformat() + "Z",
+                            })
+                            yield f"data: {data}\n\n"
+                    else:
+                        # Heartbeat to keep connection alive
+                        yield ": keep-alive\n\n"
+                except Exception:
                     yield ": keep-alive\n\n"
-            except Exception:
-                yield ": keep-alive\n\n"
-            time.sleep(5)
+                time.sleep(5)
+        finally:
+            dec_sse("trades")
 
     return Response(event_stream(), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",
@@ -1702,34 +1820,38 @@ def sse_alerts():
 
     def event_stream(user_id: int):
         last_ts = datetime.utcnow() - timedelta(minutes=5)
-        while True:
-            try:
-                # stream recent events for this user
-                evs = (
-                    AlertEvent.query.join(AlertRule, AlertEvent.rule_id == AlertRule.id)
-                    .join(Token, AlertRule.token_id == Token.id)
-                    .filter(AlertRule.user_id == user_id, AlertEvent.triggered_at > last_ts)
-                    .order_by(AlertEvent.triggered_at.asc())
-                    .limit(20)
-                    .all()
-                )
-                if evs:
-                    for ev in evs:
-                        last_ts = max(last_ts, ev.triggered_at)
-                        data = json.dumps({
-                            "symbol": ev.rule.token.symbol,
-                            "name": ev.rule.token.name,
-                            "condition": ev.rule.condition,
-                            "threshold": float(ev.rule.threshold or 0),
-                            "price": float(ev.price or 0),
-                            "time": ev.triggered_at.isoformat() + "Z",
-                        })
-                        yield f"data: {data}\n\n"
-                else:
+        inc_sse("alerts")
+        try:
+            while True:
+                try:
+                    # stream recent events for this user
+                    evs = (
+                        AlertEvent.query.join(AlertRule, AlertEvent.rule_id == AlertRule.id)
+                        .join(Token, AlertRule.token_id == Token.id)
+                        .filter(AlertRule.user_id == user_id, AlertEvent.triggered_at > last_ts)
+                        .order_by(AlertEvent.triggered_at.asc())
+                        .limit(20)
+                        .all()
+                    )
+                    if evs:
+                        for ev in evs:
+                            last_ts = max(last_ts, ev.triggered_at)
+                            data = json.dumps({
+                                "symbol": ev.rule.token.symbol,
+                                "name": ev.rule.token.name,
+                                "condition": ev.rule.condition,
+                                "threshold": float(ev.rule.threshold or 0),
+                                "price": float(ev.price or 0),
+                                "time": ev.triggered_at.isoformat() + "Z",
+                            })
+                            yield f"data: {data}\n\n"
+                    else:
+                        yield ": keep-alive\n\n"
+                except Exception:
                     yield ": keep-alive\n\n"
-            except Exception:
-                yield ": keep-alive\n\n"
-            time.sleep(5)
+                time.sleep(5)
+        finally:
+            dec_sse("alerts")
 
     return Response(event_stream(uid), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",
@@ -1751,79 +1873,83 @@ def sse_follow():
         token_ids = []
         last_follow_refresh = datetime.utcnow() - timedelta(minutes=10)
         refresh_interval = timedelta(seconds=60)
-        while True:
-            try:
-                # creators I follow (refresh every 60s)
-                now = datetime.utcnow()
-                if (now - last_follow_refresh) > refresh_interval:
-                    followed = [row.creator_user_id for row in CreatorFollow.query.filter_by(follower_user_id=me_id).all()]
-                    # Derive token_ids for followed creators (refresh with followed)
-                    token_ids = [row[0] for row in db.session.query(TokenInfo.token_id).filter(TokenInfo.launch_user_id.in_(followed)).all()] if followed else []
-                    last_follow_refresh = now
-                if not followed:
-                    yield ": keep-alive\n\n"
-                    time.sleep(5)
-                    continue
-                emitted = False
-                # New launches by followed creators
-                launches = (
-                    TokenInfo.query
-                    .filter(TokenInfo.launch_user_id.in_(followed), TokenInfo.launch_at != None, TokenInfo.launch_at > last_ts)  # noqa: E711
-                    .order_by(TokenInfo.launch_at.asc())
-                    .limit(50)
-                    .all()
-                )
-                for info in launches:
-                    t = db.session.get(Token, info.token_id)
-                    creator = db.session.get(User, info.launch_user_id) if info.launch_user_id else None
-                    data = json.dumps({
-                        "type": "launch",
-                        "symbol": t.symbol if t else None,
-                        "name": t.name if t else None,
-                        "time": (info.launch_at.isoformat() + "Z") if info.launch_at else None,
-                        "creator_id": info.launch_user_id,
-                        "creator": (creator.display_name or creator.npub or creator.pubkey_hex) if creator else None,
-                    })
-                    yield f"data: {data}\n\n"
-                    last_ts = max(last_ts, info.launch_at or last_ts)
-                    emitted = True
-
-                # Stage changes (burn events) for tokens by followed creators
-                if token_ids:
-                    burns = (
-                        db.session.query(BurnEvent, SwapPool)
-                        .join(SwapPool, BurnEvent.pool_id == SwapPool.id)
-                        .filter(BurnEvent.created_at > last_ts)
-                        .filter((SwapPool.token_a_id.in_(token_ids)) | (SwapPool.token_b_id.in_(token_ids)))
-                        .order_by(BurnEvent.created_at.asc())
+        inc_sse("follow")
+        try:
+            while True:
+                try:
+                    # creators I follow (refresh every 60s)
+                    now = datetime.utcnow()
+                    if (now - last_follow_refresh) > refresh_interval:
+                        followed = [row.creator_user_id for row in CreatorFollow.query.filter_by(follower_user_id=me_id).all()]
+                        # Derive token_ids for followed creators (refresh with followed)
+                        token_ids = [row[0] for row in db.session.query(TokenInfo.token_id).filter(TokenInfo.launch_user_id.in_(followed)).all()] if followed else []
+                        last_follow_refresh = now
+                    if not followed:
+                        yield ": keep-alive\n\n"
+                        time.sleep(5)
+                        continue
+                    emitted = False
+                    # New launches by followed creators
+                    launches = (
+                        TokenInfo.query
+                        .filter(TokenInfo.launch_user_id.in_(followed), TokenInfo.launch_at != None, TokenInfo.launch_at > last_ts)  # noqa: E711
+                        .order_by(TokenInfo.launch_at.asc())
                         .limit(50)
                         .all()
                     )
-                    for ev, pool in burns:
-                        # Determine display token (non-gUSD where possible)
-                        gusd = _get_gusd_token()
-                        tokA = db.session.get(Token, pool.token_a_id)
-                        tokB = db.session.get(Token, pool.token_b_id)
-                        disp = tokA
-                        if gusd and tokA and tokA.id == gusd.id:
-                            disp = tokB
-                        elif gusd and tokB and tokB.id == gusd.id:
-                            disp = tokA
+                    for info in launches:
+                        t = db.session.get(Token, info.token_id)
+                        creator = db.session.get(User, info.launch_user_id) if info.launch_user_id else None
                         data = json.dumps({
-                            "type": "stage",
-                            "symbol": disp.symbol if disp else (tokA.symbol if tokA else None),
-                            "stage": int(ev.stage),
-                            "time": ev.created_at.isoformat() + "Z",
+                            "type": "launch",
+                            "symbol": t.symbol if t else None,
+                            "name": t.name if t else None,
+                            "time": (info.launch_at.isoformat() + "Z") if info.launch_at else None,
+                            "creator_id": info.launch_user_id,
+                            "creator": (creator.display_name or creator.npub or creator.pubkey_hex) if creator else None,
                         })
                         yield f"data: {data}\n\n"
-                        last_ts = max(last_ts, ev.created_at or last_ts)
+                        last_ts = max(last_ts, info.launch_at or last_ts)
                         emitted = True
 
-                if not emitted:
+                    # Stage changes (burn events) for tokens by followed creators
+                    if token_ids:
+                        burns = (
+                            db.session.query(BurnEvent, SwapPool)
+                            .join(SwapPool, BurnEvent.pool_id == SwapPool.id)
+                            .filter(BurnEvent.created_at > last_ts)
+                            .filter((SwapPool.token_a_id.in_(token_ids)) | (SwapPool.token_b_id.in_(token_ids)))
+                            .order_by(BurnEvent.created_at.asc())
+                            .limit(50)
+                            .all()
+                        )
+                        for ev, pool in burns:
+                            # Determine display token (non-gUSD where possible)
+                            gusd = _get_gusd_token()
+                            tokA = db.session.get(Token, pool.token_a_id)
+                            tokB = db.session.get(Token, pool.token_b_id)
+                            disp = tokA
+                            if gusd and tokA and tokA.id == gusd.id:
+                                disp = tokB
+                            elif gusd and tokB and tokB.id == gusd.id:
+                                disp = tokA
+                            data = json.dumps({
+                                "type": "stage",
+                                "symbol": disp.symbol if disp else (tokA.symbol if tokA else None),
+                                "stage": int(ev.stage),
+                                "time": ev.created_at.isoformat() + "Z",
+                            })
+                            yield f"data: {data}\n\n"
+                            last_ts = max(last_ts, ev.created_at or last_ts)
+                            emitted = True
+
+                    if not emitted:
+                        yield ": keep-alive\n\n"
+                except Exception:
                     yield ": keep-alive\n\n"
-            except Exception:
-                yield ": keep-alive\n\n"
-            time.sleep(5)
+                time.sleep(5)
+        finally:
+            dec_sse("follow")
 
     return Response(event_stream(uid), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",
@@ -1913,7 +2039,15 @@ def export_pro_csv():
     risk_filter = request.args.get("risk", default="all", type=str)
     trending_only = request.args.get("trending", default="0", type=str) == "1"
 
-    tokens = Token.query.order_by(
+    qry = Token.query
+    # Exclude hidden tokens and those moderated as hidden
+    try:
+        qry = qry.outerjoin(TokenInfo, TokenInfo.token_id == Token.id)
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
+        qry = qry.filter((TokenInfo.moderation_status == None) | (TokenInfo.moderation_status != 'hidden'))  # noqa: E711
+    except Exception:
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
+    tokens = qry.order_by(
         case((Token.market_cap == None, 1), else_=0),  # noqa: E711
         Token.market_cap.desc(),
     ).all()
@@ -1976,7 +2110,15 @@ def export_pro_csv():
 @web_bp.route("/stats")
 @cache.cached(timeout=120)
 def stats():
-    tokens = Token.query.order_by(
+    qry = Token.query
+    # Exclude hidden tokens and those moderated as hidden
+    try:
+        qry = qry.outerjoin(TokenInfo, TokenInfo.token_id == Token.id)
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
+        qry = qry.filter((TokenInfo.moderation_status == None) | (TokenInfo.moderation_status != 'hidden'))  # noqa: E711
+    except Exception:
+        qry = qry.filter((Token.hidden == False))  # noqa: E712
+    tokens = qry.order_by(
         case((Token.market_cap == None, 1), else_=0),  # noqa: E711
         Token.market_cap.desc(),
     ).all()

@@ -8,10 +8,31 @@ from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, abort, flash, g
 
 from ..extensions import db, cache
-from ..models import User, Token, AlertRule, AlertEvent, AuditLog, SwapPool, FeeDistributionRule, FeePayout, TokenInfo, BurnEvent
+from ..models import (
+    User,
+    Token,
+    AlertRule,
+    AlertEvent,
+    AuditLog,
+    SwapPool,
+    FeeDistributionRule,
+    FeePayout,
+    TokenInfo,
+    BurnEvent,
+    ProviderLog,
+    LightningInvoice,
+    LightningWithdrawal,
+    AccountBalance,
+    LedgerEntry,
+    IdempotencyKey,
+    FeatureFlag,
+)
 from ..web import get_jwt_from_cookie, _fee_summary_for_pool_cached
 from ..services.audit import log_action
-from sqlalchemy import select, or_, case
+from sqlalchemy import select, or_, case, func, exists, and_
+from ..services.lightning import LNBitsClient
+from ..services.reconcile import reconcile_invoices_once, reconcile_withdrawals_once, _get_or_create_balance
+from ..services.metrics import get_request_stats, get_sse_counts, db_health
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -50,6 +71,477 @@ def dashboard():
         events_count=events_count,
         audit_count=audit_count,
     )
+
+
+@admin_bp.route("/payments")
+@require_admin
+def payments():
+    # Summary stats
+    pending_invoices = db.session.query(func.count(LightningInvoice.id)).filter(LightningInvoice.status == "pending").scalar() or 0
+    pending_withdrawals = db.session.query(func.count(LightningWithdrawal.id)).filter(LightningWithdrawal.status == "pending").scalar() or 0
+
+    # Provider log success rate last 1h
+    from datetime import datetime, timedelta
+    since = datetime.utcnow() - timedelta(hours=1)
+    logs_1h = ProviderLog.query.filter(ProviderLog.created_at >= since)
+    success_1h = logs_1h.filter(ProviderLog.success == True).count()  # noqa: E712
+    total_1h = logs_1h.count()
+    success_rate_1h = (success_1h / total_1h * 100.0) if total_1h else None
+
+    # Ledger vs account invariant
+    total_balance = db.session.query(func.coalesce(func.sum(AccountBalance.balance_sats), 0)).scalar() or 0
+    ledger_sum = db.session.query(func.coalesce(func.sum(LedgerEntry.delta_sats), 0)).scalar() or 0
+    invariant_diff = int(ledger_sum) - int(total_balance)
+
+    # Anti-fraud quick checks
+    negative_balances = db.session.query(func.count(AccountBalance.id)).filter(AccountBalance.balance_sats < 0).scalar() or 0
+    negative_items = (
+        AccountBalance.query
+        .filter(AccountBalance.balance_sats < 0)
+        .order_by(AccountBalance.balance_sats.asc())
+        .limit(50)
+        .all()
+    )
+    uncredited_paid_q = LightningInvoice.query.filter(
+        LightningInvoice.status == "paid", LightningInvoice.credited == False  # noqa: E712
+    )
+    uncredited_paid = uncredited_paid_q.count() or 0
+    uncredited_ids = [row.id for row in uncredited_paid_q.with_entities(LightningInvoice.id).limit(100).all()]
+    # Confirmed withdrawals missing a fee ledger entry
+    fee_exists = (
+        db.session.query(LedgerEntry.id)
+        .filter(and_(LedgerEntry.ref_type == "withdrawal", LedgerEntry.entry_type == "fee", LedgerEntry.ref_id == LightningWithdrawal.id))
+        .exists()
+    )
+    missing_fee_q = (
+        LightningWithdrawal.query
+        .filter(LightningWithdrawal.status == "confirmed")
+        .filter(~fee_exists)
+    )
+    confirmed_missing_fee = (missing_fee_q.count() or 0)
+    missing_fee_withdrawal_ids = [row.id for row in missing_fee_q.with_entities(LightningWithdrawal.id).limit(100).all()]
+
+    # Duplicate idempotency across users (same scope+key)
+    dupes = (
+        db.session.query(IdempotencyKey.scope, IdempotencyKey.key, func.count(func.distinct(IdempotencyKey.user_id)).label("users"))
+        .group_by(IdempotencyKey.scope, IdempotencyKey.key)
+        .having(func.count(func.distinct(IdempotencyKey.user_id)) > 1)
+        .order_by(func.count(func.distinct(IdempotencyKey.user_id)).desc())
+        .limit(50)
+        .all()
+    )
+
+    # Filters for provider logs
+    action = request.args.get("action", type=str)
+    success_q = request.args.get("success", type=str)
+    ref_type = request.args.get("ref_type", type=str)
+    q = request.args.get("q", type=str)  # ref_id or payment_hash
+    start_s = request.args.get("start", type=str)
+    end_s = request.args.get("end", type=str)
+
+    def _parse_dt(val):
+        if not val:
+            return None
+        s = val.strip()
+        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                return datetime.strptime(s, fmt)
+            except Exception:
+                pass
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            return None
+
+    start_dt = _parse_dt(start_s)
+    end_dt = _parse_dt(end_s)
+    if end_dt and (end_s and len(end_s) == 10):
+        end_dt = end_dt + timedelta(days=1)
+
+    stmt = select(ProviderLog).order_by(ProviderLog.created_at.desc())
+    if action:
+        like = f"%{action}%"
+        stmt = stmt.where(ProviderLog.action.ilike(like))
+    if ref_type:
+        stmt = stmt.where(ProviderLog.ref_type == ref_type)
+    if success_q in {"0", "1"}:
+        stmt = stmt.where(ProviderLog.success == (success_q == "1"))
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(or_(ProviderLog.ref_id.ilike(like), ProviderLog.response_payload.ilike(like)))
+    if start_dt:
+        stmt = stmt.where(ProviderLog.created_at >= start_dt)
+    if end_dt:
+        if end_s and len(end_s) == 10:
+            stmt = stmt.where(ProviderLog.created_at < end_dt)
+        else:
+            stmt = stmt.where(ProviderLog.created_at <= end_dt)
+
+    page = max(1, request.args.get("page", default=1, type=int))
+    per = min(200, request.args.get("per", default=50, type=int))
+    logs_p = db.paginate(stmt, page=page, per_page=per)
+
+    # Recent invoices/withdrawals
+    invoices = LightningInvoice.query.order_by(LightningInvoice.created_at.desc()).limit(25).all()
+    withdrawals = LightningWithdrawal.query.order_by(LightningWithdrawal.created_at.desc()).limit(25).all()
+
+    return render_template(
+        "admin/payments.html",
+        pending_invoices=int(pending_invoices or 0),
+        pending_withdrawals=int(pending_withdrawals or 0),
+        success_rate_1h=success_rate_1h,
+        total_balance=int(total_balance or 0),
+        ledger_sum=int(ledger_sum or 0),
+        invariant_diff=int(invariant_diff or 0),
+        negative_balances=int(negative_balances or 0),
+        uncredited_paid=int(uncredited_paid or 0),
+        confirmed_missing_fee=int(confirmed_missing_fee or 0),
+        uncredited_ids=uncredited_ids,
+        missing_fee_withdrawal_ids=missing_fee_withdrawal_ids,
+        negative_items=negative_items,
+        dupes=dupes,
+        logs_p=logs_p,
+        action=action or "",
+        success_q=success_q or "",
+        ref_type=ref_type or "",
+        q=q or "",
+        start=start_s or "",
+        end=end_s or "",
+        invoices=invoices,
+        withdrawals=withdrawals,
+    )
+
+
+@admin_bp.route("/payments/reconcile", methods=["POST"])
+@require_admin
+def payments_reconcile():
+    op = (request.form.get("op") or "").strip().lower()
+    count = 0
+    try:
+        if op == "invoices":
+            count = reconcile_invoices_once()
+        elif op == "withdrawals":
+            count = reconcile_withdrawals_once()
+        else:
+            flash("Invalid reconcile op", "error")
+            return redirect(url_for("admin.payments"))
+        flash(f"Reconciled {count} {op}", "success")
+    except Exception as e:
+        flash(f"Reconcile failed: {e}", "error")
+    return redirect(url_for("admin.payments"))
+
+
+@admin_bp.route("/payments/balance/adjust", methods=["POST"])
+@require_admin
+def payments_balance_adjust():
+    user_id = request.form.get("user_id", type=int)
+    delta_sats = request.form.get("delta_sats", type=int)
+    note = request.form.get("note", type=str) or None
+    if not user_id or delta_sats is None:
+        flash("Missing user_id or delta_sats", "error")
+        return redirect(url_for("admin.payments"))
+    try:
+        bal = _get_or_create_balance(user_id)
+        bal.balance_sats = int(bal.balance_sats) + int(delta_sats)
+        db.session.add(bal)
+        db.session.add(LedgerEntry(
+            user_id=user_id,
+            entry_type="adjustment",
+            delta_sats=int(delta_sats),
+            ref_type="admin",
+            ref_id=str(g.admin_user.id),
+            meta=note,
+        ))
+        db.session.commit()
+        log_action(g.admin_user.id, "balance_adjust", meta=f"user_id={user_id} delta_sats={delta_sats}")
+        flash("Balance adjusted", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Adjust failed: {e}", "error")
+    return redirect(url_for("admin.payments"))
+
+
+@admin_bp.route("/payments/invoice/credit", methods=["POST"])
+@require_admin
+def payments_invoice_credit():
+    inv_id = request.form.get("id")
+    if not inv_id:
+        flash("Missing invoice id", "error")
+        return redirect(url_for("admin.payments"))
+    try:
+        inv = (
+            LightningInvoice.query.filter_by(id=inv_id)
+            .with_for_update()
+            .first()
+        )
+        if not inv:
+            flash("Invoice not found", "error")
+            return redirect(url_for("admin.payments"))
+        if inv.status != "paid":
+            flash("Invoice not paid", "error")
+            return redirect(url_for("admin.payments"))
+        if inv.credited:
+            flash("Invoice already credited", "info")
+            return redirect(url_for("admin.payments"))
+        bal = _get_or_create_balance(inv.user_id)
+        bal.balance_sats = int(bal.balance_sats) + int(inv.amount_sats)
+        db.session.add(bal)
+        db.session.add(LedgerEntry(
+            user_id=inv.user_id,
+            entry_type="deposit",
+            delta_sats=int(inv.amount_sats),
+            ref_type="invoice",
+            ref_id=inv.id,
+        ))
+        inv.credited = True
+        db.session.add(inv)
+        db.session.commit()
+        log_action(g.admin_user.id, "invoice_credit", meta=f"invoice_id={inv.id}")
+        flash("Invoice credited", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Credit failed: {e}", "error")
+    return redirect(url_for("admin.payments"))
+
+
+@admin_bp.route("/payments/withdrawal/add_fee", methods=["POST"])
+@require_admin
+def payments_withdrawal_add_fee():
+    wid = request.form.get("id")
+    if not wid:
+        flash("Missing withdrawal id", "error")
+        return redirect(url_for("admin.payments"))
+    try:
+        w = (
+            LightningWithdrawal.query.filter_by(id=wid)
+            .with_for_update()
+            .first()
+        )
+        if not w:
+            flash("Withdrawal not found", "error")
+            return redirect(url_for("admin.payments"))
+        if w.status != "confirmed":
+            flash("Withdrawal not confirmed", "error")
+            return redirect(url_for("admin.payments"))
+        # Avoid duplicate fee
+        has_fee = db.session.query(func.count(LedgerEntry.id)).filter_by(ref_type="withdrawal", ref_id=w.id, entry_type="fee").scalar()
+        if has_fee:
+            flash("Fee already recorded", "info")
+            return redirect(url_for("admin.payments"))
+        client = LNBitsClient()
+        if not w.payment_hash:
+            flash("Missing payment_hash", "error")
+            return redirect(url_for("admin.payments"))
+        ok, res = client.get_payment_status(w.payment_hash)
+        if not ok or not res.get("paid"):
+            flash("Provider not paid yet", "error")
+            return redirect(url_for("admin.payments"))
+        fee = res.get("fee")
+        if not isinstance(fee, int) or fee <= 0:
+            flash("No positive fee reported", "error")
+            return redirect(url_for("admin.payments"))
+        w.fee_sats = int(fee)
+        db.session.add(LedgerEntry(
+            user_id=w.user_id,
+            entry_type="fee",
+            delta_sats=-int(fee),
+            ref_type="withdrawal",
+            ref_id=w.id,
+            meta="network_fee",
+        ))
+        db.session.add(w)
+        db.session.commit()
+        log_action(g.admin_user.id, "withdraw_add_fee", meta=f"withdrawal_id={w.id} fee={int(fee)}")
+        flash("Fee recorded", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Add fee failed: {e}", "error")
+    return redirect(url_for("admin.payments"))
+
+
+@admin_bp.route("/payments/fix", methods=["POST"])
+@require_admin
+def payments_fix():
+    op = (request.form.get("op") or "").strip().lower()
+    fixed = 0
+    try:
+        if op == "credit_uncredited":
+            items = LightningInvoice.query.filter(LightningInvoice.status == "paid", LightningInvoice.credited == False).limit(200).all()  # noqa: E712
+            for inv in items:
+                if inv.credited:
+                    continue
+                bal = _get_or_create_balance(inv.user_id)
+                bal.balance_sats = int(bal.balance_sats) + int(inv.amount_sats)
+                db.session.add(bal)
+                db.session.add(LedgerEntry(user_id=inv.user_id, entry_type="deposit", delta_sats=int(inv.amount_sats), ref_type="invoice", ref_id=inv.id))
+                inv.credited = True
+                db.session.add(inv)
+                fixed += 1
+            db.session.commit()
+            log_action(g.admin_user.id, "payments_fix_credit_uncredited", meta=f"count={fixed}")
+            flash(f"Credited {fixed} invoices", "success")
+        elif op == "fees_missing":
+            client = LNBitsClient()
+            fee_exists = (
+                db.session.query(LedgerEntry.id)
+                .filter(and_(LedgerEntry.ref_type == "withdrawal", LedgerEntry.entry_type == "fee", LedgerEntry.ref_id == LightningWithdrawal.id))
+                .exists()
+            )
+            items = (
+                LightningWithdrawal.query
+                .filter(LightningWithdrawal.status == "confirmed")
+                .filter(~fee_exists)
+                .limit(200)
+                .all()
+            )
+            for w in items:
+                if not w.payment_hash:
+                    continue
+                ok, res = client.get_payment_status(w.payment_hash)
+                if not ok or not res.get("paid"):
+                    continue
+                fee = res.get("fee")
+                if isinstance(fee, int) and fee > 0:
+                    w.fee_sats = int(fee)
+                    db.session.add(LedgerEntry(user_id=w.user_id, entry_type="fee", delta_sats=-int(fee), ref_type="withdrawal", ref_id=w.id, meta="network_fee"))
+                    db.session.add(w)
+                    fixed += 1
+            db.session.commit()
+            log_action(g.admin_user.id, "payments_fix_fees_missing", meta=f"count={fixed}")
+            flash(f"Added fee entries for {fixed} withdrawals", "success")
+        else:
+            flash("Invalid fix op", "error")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Fix failed: {e}", "error")
+    return redirect(url_for("admin.payments"))
+
+
+@admin_bp.route("/payments/repoll", methods=["POST"])
+@require_admin
+def payments_repoll():
+    typ = (request.form.get("type") or "").strip().lower()  # invoice|withdrawal
+    rid = request.form.get("id")
+    if not typ or not rid:
+        flash("Missing type or id", "error")
+        return redirect(url_for("admin.payments"))
+    try:
+        client = LNBitsClient()
+        if typ == "invoice":
+            inv = db.session.get(LightningInvoice, rid)
+            if not inv:
+                flash("Invoice not found", "error")
+                return redirect(url_for("admin.payments"))
+            if not inv.payment_hash:
+                flash("Invoice missing payment_hash", "error")
+                return redirect(url_for("admin.payments"))
+            ok, res = client.get_payment_status(inv.payment_hash)
+            if ok and res.get("paid"):
+                from datetime import datetime as _dt
+                inv.status = "paid"
+                inv.paid_at = inv.paid_at or _dt.utcnow()
+                if not getattr(inv, "credited", False):
+                    bal = AccountBalance.query.filter_by(user_id=inv.user_id, asset="BTC").with_for_update().first()
+                    if not bal:
+                        bal = AccountBalance(user_id=inv.user_id, asset="BTC", balance_sats=0)
+                        db.session.add(bal)
+                        db.session.flush()
+                    bal.balance_sats = int(bal.balance_sats) + int(inv.amount_sats)
+                    db.session.add(bal)
+                    db.session.add(LedgerEntry(user_id=inv.user_id, entry_type="deposit", delta_sats=int(inv.amount_sats), ref_type="invoice", ref_id=inv.id))
+                    inv.credited = True
+                db.session.add(inv)
+                db.session.commit()
+                flash("Invoice credited", "success")
+            else:
+                flash("Not paid yet", "info")
+        elif typ == "withdrawal":
+            w = db.session.get(LightningWithdrawal, rid)
+            if not w:
+                flash("Withdrawal not found", "error")
+                return redirect(url_for("admin.payments"))
+            if not w.payment_hash:
+                flash("Withdrawal missing payment_hash", "error")
+                return redirect(url_for("admin.payments"))
+            ok, res = client.get_payment_status(w.payment_hash)
+            if ok and res.get("paid"):
+                from datetime import datetime as _dt
+                w.status = "confirmed"
+                w.processed_at = w.processed_at or _dt.utcnow()
+                fee = res.get("fee")
+                if isinstance(fee, int) and fee > 0:
+                    w.fee_sats = int(fee)
+                    has_fee = db.session.query(func.count(LedgerEntry.id)).filter_by(ref_type="withdrawal", ref_id=w.id, entry_type="fee").scalar()
+                    if not has_fee:
+                        db.session.add(LedgerEntry(user_id=w.user_id, entry_type="fee", delta_sats=-int(fee), ref_type="withdrawal", ref_id=w.id, meta="network_fee"))
+                db.session.add(w)
+                db.session.commit()
+                flash("Withdrawal confirmed", "success")
+            else:
+                flash("Not confirmed yet", "info")
+        else:
+            flash("Invalid type", "error")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Repoll failed: {e}", "error")
+    return redirect(url_for("admin.payments"))
+
+
+@admin_bp.route("/payments/logs/export.csv")
+@require_admin
+def payments_logs_export():
+    from flask import Response
+    action = request.args.get("action", type=str)
+    success_q = request.args.get("success", type=str)
+    ref_type = request.args.get("ref_type", type=str)
+    q = request.args.get("q", type=str)
+    start_s = request.args.get("start", type=str)
+    end_s = request.args.get("end", type=str)
+
+    from datetime import datetime as _dt
+    def _parse_dt(val):
+        if not val:
+            return None
+        s = val.strip()
+        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                return _dt.strptime(s, fmt)
+            except Exception:
+                pass
+        try:
+            return _dt.fromisoformat(s)
+        except Exception:
+            return None
+
+    start_dt = _parse_dt(start_s)
+    end_dt = _parse_dt(end_s)
+    if end_dt and (end_s and len(end_s) == 10):
+        from datetime import timedelta as _td
+        end_dt = end_dt + _td(days=1)
+
+    stmt = select(ProviderLog).order_by(ProviderLog.created_at.desc())
+    if action:
+        stmt = stmt.where(ProviderLog.action.ilike(f"%{action}%"))
+    if ref_type:
+        stmt = stmt.where(ProviderLog.ref_type == ref_type)
+    if success_q in {"0", "1"}:
+        stmt = stmt.where(ProviderLog.success == (success_q == "1"))
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(or_(ProviderLog.ref_id.ilike(like), ProviderLog.response_payload.ilike(like)))
+    if start_dt:
+        stmt = stmt.where(ProviderLog.created_at >= start_dt)
+    if end_dt:
+        if end_s and len(end_s) == 10:
+            stmt = stmt.where(ProviderLog.created_at < end_dt)
+        else:
+            stmt = stmt.where(ProviderLog.created_at <= end_dt)
+
+    rows = ["id,action,success,ref_type,ref_id,status,created_at"]
+    for log in db.session.execute(stmt).scalars():
+        rows.append(f"{log.id},{log.action},{1 if log.success else 0},{log.ref_type or ''},{log.ref_id or ''},{log.response_status or ''},{(log.created_at.isoformat() + 'Z')} ")
+    csv_data = "\n".join(rows) + "\n"
+    return Response(csv_data, mimetype="text/csv", headers={"Content-Disposition": "attachment; filename=provider_logs.csv"})
 
 
 @admin_bp.route("/fees")
@@ -158,10 +650,35 @@ def fees_detail(pool_id: int):
                     cache.delete_memoized(_fee_summary_for_pool_cached, pool.id)
                 except Exception:
                     pass
+                log_action(g.admin_user.id, "fees_payout", meta=f"pool_id={pool.id} entity={entity} asset={asset} amount={amount}")
                 flash("Payout recorded", "success")
             except Exception as e:
                 db.session.rollback()
                 flash(f"Failed to payout: {e}", "error")
+            return redirect(url_for("admin.fees_detail", pool_id=pool.id))
+
+        if op == "force_payout":
+            try:
+                entity = request.form.get("entity")
+                asset = request.form.get("asset")
+                amount_s = request.form.get("amount")
+                if entity not in {"creator", "minter", "treasury"} or asset not in {"A", "B"}:
+                    raise ValueError("invalid payout params")
+                amount = Decimal(str(amount_s))
+                if amount <= 0:
+                    raise ValueError("amount must be positive")
+                payout = FeePayout(pool_id=pool.id, entity=entity, asset=asset, amount=amount, note=(request.form.get("note") or None))
+                db.session.add(payout)
+                db.session.commit()
+                try:
+                    cache.delete_memoized(_fee_summary_for_pool_cached, pool.id)
+                except Exception:
+                    pass
+                log_action(g.admin_user.id, "fees_force_payout", meta=f"pool_id={pool.id} entity={entity} asset={asset} amount={amount}")
+                flash("Force payout recorded", "success")
+            except Exception as e:
+                db.session.rollback()
+                flash(f"Failed to force payout: {e}", "error")
             return redirect(url_for("admin.fees_detail", pool_id=pool.id))
 
     # Compute summary (alloc, paid, pending) for display
@@ -223,6 +740,23 @@ def users_toggle_admin(user_id: int):
         db.session.commit()
         log_action(g.admin_user.id, "toggle_admin", meta=f"user_id={user_id} is_admin={user.is_admin}")
         flash("Updated user admin flag", "success")
+    except Exception:
+        db.session.rollback()
+        flash("Failed to update user", "error")
+    return redirect(url_for("admin.users"))
+
+
+@admin_bp.route("/users/toggle_withdraw/<int:user_id>", methods=["POST"])
+@require_admin
+def users_toggle_withdraw(user_id: int):
+    user = db.session.get(User, user_id)
+    if not user:
+        abort(404)
+    user.withdraw_frozen = not bool(getattr(user, "withdraw_frozen", False))
+    try:
+        db.session.commit()
+        log_action(g.admin_user.id, "toggle_withdraw_freeze", meta=f"user_id={user_id} withdraw_frozen={user.withdraw_frozen}")
+        flash("Updated user withdraw freeze", "success")
     except Exception:
         db.session.rollback()
         flash("Failed to update user", "error")
@@ -488,6 +1022,169 @@ def alerts_toggle(rule_id: int):
         db.session.rollback()
         flash("Failed to update rule", "error")
     return redirect(url_for("admin.alerts_admin"))
+
+
+# ---- Admin: Token flags: hidden/frozen and moderation ----
+@admin_bp.route("/tokens/toggle_hidden/<int:token_id>", methods=["POST"])
+@require_admin
+def tokens_toggle_hidden(token_id: int):
+    tok = db.session.get(Token, token_id)
+    if not tok:
+        abort(404)
+    tok.hidden = not bool(getattr(tok, "hidden", False))
+    try:
+        db.session.commit()
+        log_action(g.admin_user.id, "token_toggle_hidden", meta=f"token_id={token_id} hidden={tok.hidden}")
+        flash("Updated token hidden flag", "success")
+    except Exception:
+        db.session.rollback()
+        flash("Failed to update token", "error")
+    return redirect(url_for("admin.tokens"))
+
+
+@admin_bp.route("/tokens/toggle_frozen/<int:token_id>", methods=["POST"])
+@require_admin
+def tokens_toggle_frozen(token_id: int):
+    tok = db.session.get(Token, token_id)
+    if not tok:
+        abort(404)
+    tok.frozen = not bool(getattr(tok, "frozen", False))
+    try:
+        db.session.commit()
+        log_action(g.admin_user.id, "token_toggle_frozen", meta=f"token_id={token_id} frozen={tok.frozen}")
+        flash("Updated token frozen flag", "success")
+    except Exception:
+        db.session.rollback()
+        flash("Failed to update token", "error")
+    return redirect(url_for("admin.tokens"))
+
+
+@admin_bp.route("/tokens/moderate/<int:token_id>", methods=["POST"])
+@require_admin
+def tokens_moderate(token_id: int):
+    tok = db.session.get(Token, token_id)
+    if not tok:
+        abort(404)
+    info = TokenInfo.query.filter_by(token_id=token_id).first()
+    if not info:
+        info = TokenInfo(token_id=token_id)
+        db.session.add(info)
+    status = (request.form.get("status") or "").strip().lower()
+    notes = request.form.get("notes") or None
+    if status not in {"visible", "hidden", "flagged"}:
+        flash("Invalid moderation status", "error")
+        return redirect(url_for("admin.tokens"))
+    info.moderation_status = status
+    info.moderation_notes = notes
+    try:
+        db.session.add(info)
+        db.session.commit()
+        log_action(g.admin_user.id, "token_moderate", meta=f"token_id={token_id} status={status}")
+        flash("Moderation updated", "success")
+    except Exception:
+        db.session.rollback()
+        flash("Failed to update moderation", "error")
+    return redirect(url_for("admin.tokens"))
+
+
+# ---- Admin: Feature flags ----
+@admin_bp.route("/flags")
+@require_admin
+def flags_list():
+    flags = FeatureFlag.query.order_by(FeatureFlag.key.asc()).all()
+    return render_template("admin/flags.html", flags=flags)
+
+
+@admin_bp.route("/flags/save", methods=["POST"])
+@require_admin
+def flags_save():
+    fid = request.form.get("id")
+    key = (request.form.get("key") or "").strip()
+    val = (request.form.get("value") or None)
+    en = request.form.get("enabled")
+    enabled = True if (en in ("1", "true", "on", "yes")) else False
+    if not key:
+        flash("Key is required", "error")
+        return redirect(url_for("admin.flags_list"))
+    try:
+        if fid and str(fid).isdigit():
+            flag = db.session.get(FeatureFlag, int(fid))
+            if not flag:
+                flash("Flag not found", "error")
+                return redirect(url_for("admin.flags_list"))
+        else:
+            flag = FeatureFlag(key=key)
+            db.session.add(flag)
+        flag.key = key
+        flag.value = val
+        flag.enabled = enabled
+        db.session.add(flag)
+        db.session.commit()
+        log_action(g.admin_user.id, "flag_save", meta=f"key={key} enabled={enabled}")
+        flash("Flag saved", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Failed to save flag: {e}", "error")
+    return redirect(url_for("admin.flags_list"))
+
+
+@admin_bp.route("/flags/toggle/<int:flag_id>", methods=["POST"])
+@require_admin
+def flags_toggle(flag_id: int):
+    flag = db.session.get(FeatureFlag, flag_id)
+    if not flag:
+        abort(404)
+    flag.enabled = not bool(flag.enabled)
+    try:
+        db.session.commit()
+        log_action(g.admin_user.id, "flag_toggle", meta=f"id={flag_id} enabled={flag.enabled}")
+        flash("Flag toggled", "success")
+    except Exception:
+        db.session.rollback()
+        flash("Failed to toggle flag", "error")
+    return redirect(url_for("admin.flags_list"))
+
+
+@admin_bp.route("/flags/delete/<int:flag_id>", methods=["POST"])
+@require_admin
+def flags_delete(flag_id: int):
+    flag = db.session.get(FeatureFlag, flag_id)
+    if not flag:
+        abort(404)
+    try:
+        db.session.delete(flag)
+        db.session.commit()
+        log_action(g.admin_user.id, "flag_delete", meta=f"id={flag_id}")
+        flash("Flag deleted", "success")
+    except Exception:
+        db.session.rollback()
+        flash("Failed to delete flag", "error")
+    return redirect(url_for("admin.flags_list"))
+
+
+# ---- Admin: Metrics ----
+@admin_bp.route("/metrics")
+@require_admin
+def metrics_view():
+    req_5m = get_request_stats(window_seconds=300)
+    req_15m = get_request_stats(window_seconds=900)
+    sse = get_sse_counts()
+    dbh = db_health()
+    # Provider success last 1h
+    since = datetime.utcnow() - timedelta(hours=1)
+    logs = ProviderLog.query.filter(ProviderLog.created_at >= since)
+    tot = logs.count()
+    succ = logs.filter(ProviderLog.success == True).count()  # noqa: E712
+    success_rate = (succ / tot) if tot else None
+    return render_template(
+        "admin/metrics.html",
+        req_5m=req_5m,
+        req_15m=req_15m,
+        sse=sse,
+        dbh=dbh,
+        provider_success=success_rate,
+        log_total=tot,
+    )
 
 
 @admin_bp.route("/sse")

@@ -1,0 +1,365 @@
+{% extends 'base.html' %}
+{% block title %}Admin · Payments | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Payments & Reconciliation</h1>
+    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+      <div class="card">
+        <div>Pending Invoices</div>
+        <div class="pf-stat pf-success">{{ pending_invoices }}</div>
+        <form method="POST" action="{{ url_for('admin.payments_reconcile') }}">
+          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+          <input type="hidden" name="op" value="invoices" />
+          <button class="retro-button" type="submit">Reconcile Invoices</button>
+        </form>
+      </div>
+      <div class="card">
+        <div>Pending Withdrawals</div>
+        <div class="pf-stat pf-success">{{ pending_withdrawals }}</div>
+        <form method="POST" action="{{ url_for('admin.payments_reconcile') }}">
+          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+          <input type="hidden" name="op" value="withdrawals" />
+          <button class="retro-button" type="submit">Reconcile Withdrawals</button>
+        </form>
+      </div>
+      <div class="card">
+        <div>Provider Success (1h)</div>
+        <div class="pf-stat pf-success">{{ '%.1f%%'|format(success_rate_1h) if success_rate_1h is not none else '—' }}</div>
+      </div>
+      <div class="card">
+        <div>Balance Invariant (ledger - accounts)</div>
+        <div class="pf-stat pf-success">{{ invariant_diff }}</div>
+        <div style="font-size:12px; color: var(--dim-green);">Ledger Sum: {{ ledger_sum }} | Accounts Sum: {{ total_balance }}</div>
+      </div>
+      <div class="card">
+        <div>Negative Balances</div>
+        <div class="pf-stat {{ 'pf-danger' if negative_balances>0 else 'pf-success' }}">{{ negative_balances }}</div>
+      </div>
+      <div class="card">
+        <div>Uncredited Paid Invoices</div>
+        <div class="pf-stat {{ 'pf-danger' if uncredited_paid>0 else 'pf-success' }}">{{ uncredited_paid }}</div>
+      </div>
+      <div class="card">
+        <div>Confirmed Withdrawals Missing Fee</div>
+        <div class="pf-stat {{ 'pf-danger' if confirmed_missing_fee>0 else 'pf-success' }}">{{ confirmed_missing_fee }}</div>
+      </div>
+    </div>
+
+    <h2 style="margin-top:16px;">Duplicate Idempotency Keys Across Users</h2>
+    {% if not dupes %}
+      <div class="pf-dim">None detected</div>
+    {% else %}
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr>
+              <th>Scope</th>
+              <th>Idempotency Key</th>
+              <th>Distinct Users</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in dupes %}
+              <tr>
+                <td><code>{{ row[0] }}</code></td>
+                <td><code>{{ row[1][:10] }}…</code></td>
+                <td>{{ row[2] }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    <h2 style="margin-top:16px;">Admin Tools</h2>
+    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+      <div class="card">
+        <h3>Quick Fixes</h3>
+        <div style="display:flex; gap:8px; flex-wrap: wrap;">
+          <form method="POST" action="{{ url_for('admin.payments_fix') }}">
+            <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+            <input type="hidden" name="op" value="credit_uncredited" />
+            <button class="retro-button" type="submit">Bulk Credit Uncredited</button>
+          </form>
+          <form method="POST" action="{{ url_for('admin.payments_fix') }}">
+            <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+            <input type="hidden" name="op" value="fees_missing" />
+            <button class="retro-button" type="submit">Bulk Add Missing Fees</button>
+          </form>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Negative Balances (top 50)</h3>
+        {% if not negative_items %}
+          <div class="pf-dim">None</div>
+        {% else %}
+          <div class="pf-table-wrap">
+            <table class="pf-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Asset</th>
+                  <th>Balance</th>
+                  <th>Adjust</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for b in negative_items %}
+                  <tr>
+                    <td>{{ b.user_id }}</td>
+                    <td>{{ b.asset }}</td>
+                    <td class="pf-danger">{{ b.balance_sats }}</td>
+                    <td>
+                      <form method="POST" action="{{ url_for('admin.payments_balance_adjust') }}" style="display:flex; gap:6px;">
+                        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                        <input type="hidden" name="user_id" value="{{ b.user_id }}" />
+                        <input class="retro-input" type="number" name="delta_sats" placeholder="delta sats" style="width:120px;" />
+                        <input class="retro-input" type="text" name="note" placeholder="note" style="width:120px;" />
+                        <button class="retro-button" type="submit">Apply</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+      <div class="card">
+        <h3>Uncredited Paid Invoices (top 100)</h3>
+        {% if not uncredited_ids %}
+          <div class="pf-dim">None</div>
+        {% else %}
+          <div class="pf-table-wrap">
+            <table class="pf-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for iid in uncredited_ids %}
+                  <tr>
+                    <td><code>{{ iid }}</code></td>
+                    <td>
+                      <form method="POST" action="{{ url_for('admin.payments_invoice_credit') }}">
+                        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                        <input type="hidden" name="id" value="{{ iid }}" />
+                        <button class="retro-button" type="submit">Credit</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+      <div class="card">
+        <h3>Confirmed Withdrawals Missing Fee (top 100)</h3>
+        {% if not missing_fee_withdrawal_ids %}
+          <div class="pf-dim">None</div>
+        {% else %}
+          <div class="pf-table-wrap">
+            <table class="pf-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for wid in missing_fee_withdrawal_ids %}
+                  <tr>
+                    <td><code>{{ wid }}</code></td>
+                    <td>
+                      <form method="POST" action="{{ url_for('admin.payments_withdrawal_add_fee') }}">
+                        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                        <input type="hidden" name="id" value="{{ wid }}" />
+                        <button class="retro-button" type="submit">Add Fee</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <h2 style="margin-top:16px;">Provider Logs</h2>
+    <form method="GET" action="{{ url_for('admin.payments') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items:end; gap:8px;">
+      <div>
+        <label>Action</label>
+        <input class="retro-input" type="text" name="action" value="{{ action }}" placeholder="create_invoice, pay_invoice, get_status" />
+      </div>
+      <div>
+        <label>Success</label>
+        <select class="retro-input" name="success">
+          <option value="">All</option>
+          <option value="1" {% if success_q=='1' %}selected{% endif %}>Only Success</option>
+          <option value="0" {% if success_q=='0' %}selected{% endif %}>Only Failure</option>
+        </select>
+      </div>
+      <div>
+        <label>Ref Type</label>
+        <select class="retro-input" name="ref_type">
+          <option value="">Any</option>
+          <option value="invoice" {% if ref_type=='invoice' %}selected{% endif %}>invoice</option>
+          <option value="withdrawal" {% if ref_type=='withdrawal' %}selected{% endif %}>withdrawal</option>
+        </select>
+      </div>
+      <div>
+        <label>Query</label>
+        <input class="retro-input" type="text" name="q" value="{{ q }}" placeholder="ref_id or payment_hash" />
+      </div>
+      <div>
+        <label>Start</label>
+        <input class="retro-input" type="datetime-local" name="start" value="{{ start }}" />
+      </div>
+      <div>
+        <label>End</label>
+        <input class="retro-input" type="datetime-local" name="end" value="{{ end }}" />
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <div style="display:flex; gap:8px;">
+          <button class="retro-button" type="submit">Filter</button>
+          <a class="retro-button" href="{{ url_for('admin.payments_logs_export', action=action, success=success_q, ref_type=ref_type, q=q, start=start, end=end) }}">Export CSV</a>
+        </div>
+      </div>
+    </form>
+
+    {% if not logs_p.items %}
+      <div class="pf-dim">No logs.</div>
+    {% else %}
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Action</th>
+              <th>Success</th>
+              <th>Status</th>
+              <th>Ref</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in logs_p.items %}
+              <tr>
+                <td>{{ log.id }}</td>
+                <td>{{ log.action }}</td>
+                <td>{{ 'Yes' if log.success else 'No' }}</td>
+                <td>{{ log.response_status or '—' }}</td>
+                <td>{{ (log.ref_type or '') ~ ':' ~ (log.ref_id or '') }}</td>
+                <td>{{ log.created_at }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="pf-pagination">
+        {% set prev_url = url_for('admin.payments', page=logs_p.prev_num, action=action, success=success_q, ref_type=ref_type, q=q, start=start, end=end) if logs_p.has_prev else None %}
+        {% set next_url = url_for('admin.payments', page=logs_p.next_num, action=action, success=success_q, ref_type=ref_type, q=q, start=start, end=end) if logs_p.has_next else None %}
+        <div>Page {{ logs_p.page }} / {{ logs_p.pages or 1 }}</div>
+        <div style="display:flex; gap:8px;">
+          <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
+          <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+        </div>
+      </div>
+    {% endif %}
+
+    <h2 style="margin-top:16px;">Recent Invoices</h2>
+    {% if not invoices %}
+      <div class="pf-dim">No invoices</div>
+    {% else %}
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>User</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Credited</th>
+              <th>Hash</th>
+              <th>Created</th>
+              <th>Paid</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for inv in invoices %}
+              <tr>
+                <td><code>{{ inv.id }}</code></td>
+                <td>{{ inv.user_id }}</td>
+                <td>{{ inv.amount_sats }}</td>
+                <td>{{ inv.status }}</td>
+                <td>{{ 'Yes' if inv.credited else 'No' }}</td>
+                <td><code>{{ (inv.payment_hash or '')[:10] }}…</code></td>
+                <td>{{ inv.created_at }}</td>
+                <td>{{ inv.paid_at or '—' }}</td>
+                <td>
+                  <form method="POST" action="{{ url_for('admin.payments_repoll') }}">
+                    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                    <input type="hidden" name="type" value="invoice" />
+                    <input type="hidden" name="id" value="{{ inv.id }}" />
+                    <button class="retro-button" type="submit">Repoll</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    <h2 style="margin-top:16px;">Recent Withdrawals</h2>
+    {% if not withdrawals %}
+      <div class="pf-dim">No withdrawals</div>
+    {% else %}
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>User</th>
+              <th>Amount</th>
+              <th>Fee</th>
+              <th>Status</th>
+              <th>Hash</th>
+              <th>Created</th>
+              <th>Processed</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for w in withdrawals %}
+              <tr>
+                <td><code>{{ w.id }}</code></td>
+                <td>{{ w.user_id }}</td>
+                <td>{{ w.amount_sats }}</td>
+                <td>{{ w.fee_sats or '—' }}</td>
+                <td>{{ w.status }}</td>
+                <td><code>{{ (w.payment_hash or '')[:10] }}…</code></td>
+                <td>{{ w.created_at }}</td>
+                <td>{{ w.processed_at or '—' }}</td>
+                <td>
+                  <form method="POST" action="{{ url_for('admin.payments_repoll') }}">
+                    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                    <input type="hidden" name="type" value="withdrawal" />
+                    <input type="hidden" name="id" value="{{ w.id }}" />
+                    <button class="retro-button" type="submit">Repoll</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

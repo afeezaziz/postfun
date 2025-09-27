@@ -32,6 +32,7 @@
               <th>pubkey_hex</th>
               <th>Name</th>
               <th>Admin</th>
+              <th>Withdraw Frozen</th>
               <th>Created</th>
               <th>Action</th>
             </tr>
@@ -44,12 +45,19 @@
                 <td><code>{{ u.pubkey_hex }}</code></td>
                 <td>{{ u.display_name or '—' }}</td>
                 <td>{{ 'Yes' if u.is_admin else 'No' }}</td>
+                <td>{{ 'Yes' if getattr(u, 'withdraw_frozen', False) else 'No' }}</td>
                 <td>{{ u.created_at }}</td>
                 <td>
-                  <form method="POST" action="{{ url_for('admin.users_toggle_admin', user_id=u.id) }}">
-                    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-                    <button class="retro-button" type="submit">{{ 'Revoke admin' if u.is_admin else 'Make admin' }}</button>
-                  </form>
+                  <div style="display:flex; gap:6px;">
+                    <form method="POST" action="{{ url_for('admin.users_toggle_admin', user_id=u.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                      <button class="retro-button" type="submit">{{ 'Revoke admin' if u.is_admin else 'Make admin' }}</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin.users_toggle_withdraw', user_id=u.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                      <button class="retro-button" type="submit">{{ 'Unfreeze withdraw' if getattr(u, 'withdraw_frozen', False) else 'Freeze withdraw' }}</button>
+                    </form>
+                  </div>
                 </td>
               </tr>
             {% endfor %}

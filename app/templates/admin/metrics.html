@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Admin · Metrics | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <a class="retro-button" href="{{ url_for('admin.dashboard') }}" style="float:right;">← Dashboard</a>
+    <h1>System Metrics</h1>
+    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+      <div class="card">
+        <div>Requests (5m)</div>
+        <div class="pf-green" style="font-size: 22px;">{{ '%.0f'|format(req_5m.requests or 0) }} req</div>
+        <div>Error rate: {{ '%.2f'|format((req_5m.error_rate or 0) * 100) }}%</div>
+        <div>RPM: {{ '%.2f'|format(req_5m.rpm or 0) }}</div>
+      </div>
+      <div class="card">
+        <div>Requests (15m)</div>
+        <div class="pf-green" style="font-size: 22px;">{{ '%.0f'|format(req_15m.requests or 0) }} req</div>
+        <div>Error rate: {{ '%.2f'|format((req_15m.error_rate or 0) * 100) }}%</div>
+        <div>RPM: {{ '%.2f'|format(req_15m.rpm or 0) }}</div>
+      </div>
+      <div class="card">
+        <div>DB Health</div>
+        <div>Status: <strong class="{{ 'pf-green' if dbh.ok else 'pf-red' }}">{{ 'OK' if dbh.ok else 'DOWN' }}</strong></div>
+        <div>Latency: {{ '%.2f'|format(dbh.latency_ms or 0) }} ms</div>
+        {% if dbh.error %}<div>Error: <code>{{ dbh.error }}</code></div>{% endif %}
+      </div>
+      <div class="card">
+        <div>Provider Logs (1h)</div>
+        <div>Total: {{ log_total }}</div>
+        <div>Success rate: {{ '%.2f'|format((provider_success or 0) * 100) }}%</div>
+      </div>
+      <div class="card">
+        <div>SSE Clients</div>
+        {% if not sse %}
+          <div>None</div>
+        {% else %}
+          {% for k,v in sse.items() %}
+            <div>{{ k }}: <strong>{{ v }}</strong></div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

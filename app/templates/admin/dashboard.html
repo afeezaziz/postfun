@@ -35,9 +35,24 @@
         <a class="retro-button" href="{{ url_for('admin.fees') }}">Manage Fees</a>
       </div>
       <div class="card">
+        <div>Payments</div>
+        <div class="pf-green" style="font-size: 28px; font-weight: bold;">&nbsp;</div>
+        <a class="retro-button" href="{{ url_for('admin.payments') }}">View Payments</a>
+      </div>
+      <div class="card">
         <div>SSE Status</div>
         <div class="pf-green" style="font-size: 28px; font-weight: bold;">&nbsp;</div>
         <a class="retro-button" href="{{ url_for('admin.sse_status') }}">View SSE</a>
+      </div>
+      <div class="card">
+        <div>Feature Flags</div>
+        <div class="pf-green" style="font-size: 28px; font-weight: bold;">&nbsp;</div>
+        <a class="retro-button" href="{{ url_for('admin.flags_list') }}">Manage Flags</a>
+      </div>
+      <div class="card">
+        <div>Metrics</div>
+        <div class="pf-green" style="font-size: 28px; font-weight: bold;">&nbsp;</div>
+        <a class="retro-button" href="{{ url_for('admin.metrics_view') }}">View Metrics</a>
       </div>
     </div>
   </section>

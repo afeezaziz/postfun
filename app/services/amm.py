@@ -20,6 +20,9 @@ class Quote:
     fee_bps: int
     fee_amount: Decimal
     effective_in: Decimal
+    execution_price: Decimal  # out per in
+    mid_price: Decimal        # out per in at current reserves
+    price_impact_bps: int
 
 
 def _dec(v) -> Decimal:
@@ -30,6 +33,16 @@ def _dec(v) -> Decimal:
 
 def current_fee_bps(pool: SwapPool) -> int:
     return pool.current_fee_bps()
+
+
+def _cfg_decimal(key: str, default: str) -> Decimal:
+    try:
+        val = current_app.config.get(key)
+        if val is None:
+            return Decimal(default)
+        return Decimal(str(val))
+    except Exception:
+        return Decimal(default)
 
 
 def quote_swap(pool: SwapPool, side: str, amount_in: Decimal) -> Quote:
@@ -50,13 +63,52 @@ def quote_swap(pool: SwapPool, side: str, amount_in: Decimal) -> Quote:
         # Constant product x*y=K with virtual reserves
         # ΔB = (rb * ΔA_eff) / (ra + ΔA_eff)
         amount_out = (rb * effective_in) / (ra + effective_in)
+        # prices in units of B per A
+        mid_price = (rb / ra) if ra > 0 else Decimal("0")
+        execution_price = (amount_out / effective_in) if effective_in > 0 else Decimal("0")
     elif side == "BtoA":
         amount_out = (ra * effective_in) / (rb + effective_in)
+        # prices in units of A per B
+        mid_price = (ra / rb) if rb > 0 else Decimal("0")
+        execution_price = (amount_out / effective_in) if effective_in > 0 else Decimal("0")
     else:
         raise ValueError("side must be 'AtoB' or 'BtoA'")
 
+    # Basic safety checks at quote-time to avoid pathological outputs
     amount_out = amount_out.quantize(Decimal("1.000000000000000000"))
-    return Quote(amount_out=amount_out, fee_bps=fee_bps, fee_amount=fee_amount, effective_in=effective_in)
+    min_out = _cfg_decimal("AMM_MIN_TRADE_OUTPUT", "0.00000001")
+    min_reserve = _cfg_decimal("AMM_MIN_RESERVE", "0.000001")
+    if amount_out <= 0 or amount_out < min_out:
+        raise ValueError("insufficient_liquidity")
+
+    # Post-trade virtual reserves
+    if side == "AtoB":
+        ra_new = ra + effective_in
+        rb_new = rb - amount_out
+    else:
+        rb_new = rb + effective_in
+        ra_new = ra - amount_out
+    if ra_new <= 0 or rb_new <= 0 or ra_new < min_reserve or rb_new < min_reserve:
+        raise ValueError("insufficient_liquidity")
+
+    # Price impact
+    impact = Decimal("0")
+    if mid_price > 0 and execution_price > 0:
+        try:
+            impact = abs((mid_price - execution_price) / mid_price) * Decimal(10000)
+        except Exception:
+            impact = Decimal("0")
+    price_impact_bps = int(impact.quantize(Decimal("1")))
+
+    return Quote(
+        amount_out=amount_out,
+        fee_bps=fee_bps,
+        fee_amount=fee_amount,
+        effective_in=effective_in,
+        execution_price=execution_price.quantize(Decimal("1.000000000000000000")),
+        mid_price=mid_price.quantize(Decimal("1.000000000000000000")) if mid_price > 0 else Decimal("0"),
+        price_impact_bps=price_impact_bps,
+    )
 
 
 def _get_or_create_balance(session: Session, user_id: int, token_id: int) -> TokenBalance:
@@ -107,11 +159,18 @@ def _maybe_progress_stage_and_burn(session: Session, pool: SwapPool) -> None:
         session.add(pool)
 
 
-def execute_swap(session: Session, pool_id: int, user_id: int, side: str, amount_in: Decimal) -> Tuple[SwapTrade, Quote, SwapPool]:
+def execute_swap(session: Session, pool_id: int, user_id: int, side: str, amount_in: Decimal,
+                 min_amount_out: Optional[Decimal] = None,
+                 max_slippage_bps: Optional[int] = None) -> Tuple[SwapTrade, Quote, SwapPool]:
     # Lock pool row (best-effort; ignored on SQLite)
     pool = session.query(SwapPool).filter_by(id=pool_id).with_for_update().first()
     if not pool:
         raise ValueError("pool_not_found")
+    # Block swaps if either token is frozen
+    tA = session.get(Token, pool.token_a_id) if pool.token_a_id else None
+    tB = session.get(Token, pool.token_b_id) if pool.token_b_id else None
+    if (tA and getattr(tA, "frozen", False)) or (tB and getattr(tB, "frozen", False)):
+        raise ValueError("token_frozen")
 
     # Determine token ids for in/out
     token_a_id = pool.token_a_id
@@ -119,6 +178,16 @@ def execute_swap(session: Session, pool_id: int, user_id: int, side: str, amount
 
     # Quote
     q = quote_swap(pool, side, amount_in)
+    # Enforce slippage/min-out constraints at execution time
+    if min_amount_out is not None and q.amount_out < _dec(min_amount_out):
+        raise ValueError("slippage_too_high")
+    if isinstance(max_slippage_bps, int) and max_slippage_bps is not None:
+        try:
+            limit = int(max_slippage_bps)
+        except Exception:
+            limit = None
+        if isinstance(limit, int) and limit >= 0 and q.price_impact_bps > limit:
+            raise ValueError("price_impact_too_high")
 
     # Balances
     if side == "AtoB":

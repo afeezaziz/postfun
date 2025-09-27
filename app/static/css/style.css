@@ -87,6 +87,11 @@ body {
 /* Utility */
 .pf-green { color: var(--dim-green); }
 
+/* Stats */
+.pf-stat { font-size: 28px; font-weight: bold; }
+.pf-success { color: var(--green); }
+.pf-danger { color: #cc3333; }
+
 /* Flashes */
 .pf-flashes { margin-bottom: 12px; }
 .pf-flash { border: 1px solid var(--green); padding: 8px; margin-bottom: 6px; }

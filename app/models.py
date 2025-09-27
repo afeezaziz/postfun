@@ -12,6 +12,7 @@ class User(db.Model):
     npub = db.Column(db.String(120), unique=True, nullable=True, index=True)
     display_name = db.Column(db.String(120), nullable=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
+    withdraw_frozen = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
@@ -124,6 +125,8 @@ class Token(db.Model):
     price = db.Column(db.Numeric(20, 8), nullable=False, default=0)
     market_cap = db.Column(db.Numeric(20, 2), nullable=True)
     change_24h = db.Column(db.Numeric(10, 4), nullable=True)
+    hidden = db.Column(db.Boolean, nullable=False, default=False)
+    frozen = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -158,6 +161,8 @@ class TokenInfo(db.Model):
     total_supply = db.Column(db.Numeric(30, 18), nullable=True)
     launch_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     launch_at = db.Column(db.DateTime, nullable=True)
+    moderation_status = db.Column(db.String(16), nullable=False, default="visible")  # visible|hidden|flagged
+    moderation_notes = db.Column(db.Text, nullable=True)
 
     token = db.relationship("Token")
     launcher = db.relationship("User")
@@ -179,6 +184,7 @@ class TokenInfo(db.Model):
             "total_supply": float(self.total_supply) if self.total_supply is not None else None,
             "launch_user_id": self.launch_user_id,
             "launch_at": self.launch_at.isoformat() + "Z" if self.launch_at else None,
+            "moderation_status": self.moderation_status,
         }
 
 
@@ -486,3 +492,60 @@ class FeePayout(db.Model):
     __table_args__ = (
         db.Index('ix_fee_payouts_pool_entity_asset_created', 'pool_id', 'entity', 'asset', 'created_at'),
     )
+
+
+class IdempotencyKey(db.Model):
+    __tablename__ = "idempotency_keys"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    scope = db.Column(db.String(64), nullable=False)  # e.g., 'lightning_deposit', 'lightning_withdraw'
+    key = db.Column(db.String(128), nullable=False)
+    ref_type = db.Column(db.String(32), nullable=True)  # 'invoice' | 'withdrawal'
+    ref_id = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user = db.relationship("User")
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "scope", "key", name="uq_idempo_user_scope_key"),
+        db.Index('ix_idempo_scope_key', 'scope', 'key'),
+    )
+
+
+class ProviderLog(db.Model):
+    __tablename__ = "provider_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    provider = db.Column(db.String(32), nullable=False, default="lnbits")
+    action = db.Column(db.String(64), nullable=False)  # 'create_invoice' | 'get_status' | 'pay_invoice'
+    request_payload = db.Column(db.Text, nullable=True)
+    response_status = db.Column(db.Integer, nullable=True)
+    response_payload = db.Column(db.Text, nullable=True)
+    success = db.Column(db.Boolean, nullable=False, default=False)
+    ref_type = db.Column(db.String(32), nullable=True)  # 'invoice' | 'withdrawal'
+    ref_id = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.Index('ix_provider_logs_action_created', 'action', 'created_at'),
+        db.Index('ix_provider_logs_ref', 'ref_type', 'ref_id'),
+    )
+
+
+class FeatureFlag(db.Model):
+    __tablename__ = "feature_flags"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    value = db.Column(db.String(255), nullable=True)
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "key": self.key,
+            "value": self.value,
+            "enabled": bool(self.enabled),
+        }

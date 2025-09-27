@@ -286,5 +286,84 @@ curl -X POST -H "Content-Type: application/json" \
 curl -H "Authorization: Bearer $JWT" http://localhost:8000/api/lightning/withdrawals/$WITHDRAW_ID
 ```
 
+## Admin: Payments Dashboard and Workflows
+
+An admin Payments dashboard is available at `/admin/payments` and provides:
+
+- Summary stats: balances, counts, uncredited paid invoices, withdrawals missing fees, negative balances
+- Provider logs: inspect recent LNbits requests/responses and export as CSV
+- Manual tools:
+  - Credit a paid deposit invoice that was not auto-credited
+  - Add a missing network fee entry for a confirmed withdrawal
+  - Adjust user balances (admin-only; audited)
+  - Bulk fixes: credit up to N uncredited paid invoices; add missing fees for confirmed withdrawals
+  - Reconciliation: trigger a one-shot poll for invoices or withdrawals
+
+User management (`/admin/users`) also includes a Withdraw Frozen toggle per user to freeze/unfreeze withdrawals.
+
+### Admin-only API: Reconcile Now
+
+Endpoint: `POST /api/admin/reconcile-now`
+
+Body:
+
+```json
+{ "op": "invoices" }
+```
+
+or
+
+```json
+{ "op": "withdrawals" }
+```
+
+Requires an admin JWT. Responds with `{ ok, op, count }` indicating how many items were processed in that cycle.
+
+### Fraud Controls
+
+- Withdraw freeze: user-level boolean flag `users.withdraw_frozen` prevents any withdrawals while true. Toggle in `/admin/users`.
+- Withdrawal limits: enforced in `POST /api/lightning/withdraw`.
+  - Single-withdrawal cap: `WITHDRAW_MAX_SINGLE_SATS` (default 100_000)
+  - 24h total cap: `WITHDRAW_DAILY_MAX_SATS` (default 500_000)
+  - 24h count cap: `WITHDRAW_DAILY_MAX_COUNT` (default 10)
+  - All configurable via environment variables.
+
+Environment variables:
+
+```env
+# Withdraw controls
+WITHDRAW_MAX_SINGLE_SATS=100000
+WITHDRAW_DAILY_MAX_SATS=500000
+WITHDRAW_DAILY_MAX_COUNT=10
+```
+
+### Ops Alerts (optional)
+
+The background scheduler can send basic ops alerts to a webhook when enabled:
+
+- Provider success rate over last 15m falls below threshold
+- Ledger vs. account balance invariant deviation exceeds tolerance
+- Presence of negative balances, uncredited paid invoices, or confirmed withdrawals missing fee entries
+
+Configure via environment variables:
+
+```env
+SCHEDULER_ENABLED=1
+OP_ALERTS_ENABLED=1
+OP_ALERTS_WEBHOOK_URL=https://example.com/webhook
+OP_ALERTS_INTERVAL_SECONDS=300
+OP_ALERTS_MIN_SUCCESS_15M=0.8
+OP_ALERTS_INVARIANT_TOL_SATS=0
+```
+
+### Migrations
+
+New tables and columns supporting payments, reconciliation, and ops logging are included (e.g., `lightning_invoices`, `lightning_withdrawals`, `ledger_entries`, `account_balances`, `idempotency_keys`, `provider_logs`, and `users.withdraw_frozen`). Generate/apply migrations as usual:
+
+```bash
+uv run python -m flask --app wsgi db migrate -m "payments + reconcile tables"
+uv run python -m flask --app wsgi db upgrade
+```
+
 ## License
 MIT (or project license)

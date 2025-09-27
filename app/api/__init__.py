@@ -18,16 +18,19 @@ from ..models import (
     BurnEvent,
     FeeDistributionRule,
     FeePayout,
+    IdempotencyKey,
 )
 from ..extensions import cache, db, limiter, csrf
 from ..utils.jwt_utils import require_auth
 from ..services.lightning import LNBitsClient
 from datetime import datetime, timedelta
+from sqlalchemy.exc import IntegrityError
 import re
 from urllib.parse import urlparse
 from decimal import Decimal
 from ..services.amm import quote_swap, execute_swap
-from sqlalchemy import case
+from sqlalchemy import case, func
+from ..services.reconcile import reconcile_invoices_once, reconcile_withdrawals_once, _get_or_create_balance
 
 api_bp = Blueprint("api", __name__)
 
@@ -274,6 +277,130 @@ def tokens_trending():
     return jsonify({"items": items})
 
 
+@api_bp.get("/ohlc")
+@cache.cached(timeout=5, query_string=True)
+def ohlc():
+    """Aggregate OHLC candles from trades for a token's preferred pool.
+
+    Query params:
+      - symbol (required)
+      - interval: one of '1m','5m','1h' (default '1m')
+      - limit: number of buckets to return (default 300, max 1000)
+      - window: alternative to limit, e.g. '24h','7d' (optional)
+    """
+    symbol = request.args.get("symbol", type=str)
+    if not symbol:
+        return jsonify({"error": "symbol_required"}), 400
+    interval = (request.args.get("interval", default="1m", type=str) or "1m").lower()
+    limit = max(1, min(1000, request.args.get("limit", default=300, type=int)))
+    window = (request.args.get("window", type=str) or "").lower()
+
+    bucket_seconds = {"1m": 60, "5m": 300, "1h": 3600}.get(interval)
+    if not bucket_seconds:
+        return jsonify({"error": "invalid_interval"}), 400
+
+    tok = Token.query.filter_by(symbol=symbol).first()
+    if not tok:
+        return jsonify({"error": "token_not_found"}), 404
+
+    # Preferred pool with gUSD pairing if possible
+    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    pool = None
+    if gusd:
+        pool = SwapPool.query.filter(
+            ((SwapPool.token_a_id == tok.id) & (SwapPool.token_b_id == gusd.id))
+            | ((SwapPool.token_b_id == tok.id) & (SwapPool.token_a_id == gusd.id))
+        ).first()
+    if not pool:
+        pool = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).first()
+    if not pool:
+        return jsonify({"items": []})
+
+    now = datetime.utcnow()
+    if window in {"1h", "1hour"}:
+        since = now - timedelta(hours=1)
+    elif window in {"6h"}:
+        since = now - timedelta(hours=6)
+    elif window in {"24h", "1d"}:
+        since = now - timedelta(days=1)
+    elif window in {"7d", "1w"}:
+        since = now - timedelta(days=7)
+    elif window in {"30d", "1m"}:
+        since = now - timedelta(days=30)
+    else:
+        # Default to enough history for the requested number of buckets
+        since = now - timedelta(seconds=bucket_seconds * limit)
+
+    # Fetch trades in the window, oldest first
+    rows = (
+        SwapTrade.query
+        .filter(SwapTrade.pool_id == pool.id, SwapTrade.created_at >= since)
+        .order_by(SwapTrade.created_at.asc())
+        .all()
+    )
+
+    # Helper: compute price and volume in token units of the requested token
+    token_is_a = (pool.token_a_id == tok.id)
+    def trade_price_and_volume(t: SwapTrade):
+        pr = None
+        vol = None
+        if gusd and pool.token_b_id == gusd.id:
+            # price = gUSD per token (A is token, B is gUSD)
+            if t.side == "AtoB":
+                pr = (t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None
+                vol = t.amount_in if token_is_a else t.amount_out
+            else:
+                pr = (t.amount_in / t.amount_out) if (t.amount_in and t.amount_out) else None
+                vol = t.amount_out if token_is_a else t.amount_in
+        else:
+            # gUSD is token_a, token is B
+            if t.side == "AtoB":
+                pr = (t.amount_in / t.amount_out) if (t.amount_in and t.amount_out) else None
+                vol = t.amount_out if not token_is_a else t.amount_in
+            else:
+                pr = (t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None
+                vol = t.amount_in if not token_is_a else t.amount_out
+        return pr, vol
+
+    # Aggregate into OHLC buckets
+    from collections import OrderedDict
+    buckets = OrderedDict()
+    for t in rows:
+        pr, vol = trade_price_and_volume(t)
+        if pr is None:
+            continue
+        ts = int(t.created_at.timestamp())
+        bucket_ts = (ts // bucket_seconds) * bucket_seconds
+        start_at = datetime.utcfromtimestamp(bucket_ts)
+        key = start_at
+        b = buckets.get(key)
+        p = float(pr)
+        v = float(vol or 0)
+        if b is None:
+            buckets[key] = {"o": p, "h": p, "l": p, "c": p, "v": v}
+        else:
+            b["h"] = max(b["h"], p)
+            b["l"] = min(b["l"], p)
+            b["c"] = p
+            b["v"] += v
+
+    # Limit to requested number of buckets (most recent)
+    items = []
+    for start_at, b in buckets.items():
+        items.append({
+            "t": start_at.isoformat() + "Z",
+            "o": round(b["o"], 8),
+            "h": round(b["h"], 8),
+            "l": round(b["l"], 8),
+            "c": round(b["c"], 8),
+            "v": b["v"],
+        })
+    if len(items) > limit:
+        items = items[-limit:]
+
+    return jsonify({"items": items, "interval": interval, "symbol": tok.symbol})
+
+
 @api_bp.get("/og/preview")
 @cache.cached(timeout=60, query_string=True)
 def og_preview():
@@ -497,6 +624,7 @@ def lightning_deposit_create():
     data = request.get_json(silent=True) or {}
     amount_sats = data.get("amount_sats")
     memo = data.get("memo") or current_app.config.get("LNBITS_DEFAULT_MEMO", "Deposit")
+    idem_key = request.headers.get("Idempotency-Key") or data.get("idempotency_key")
     try:
         amount_sats = int(amount_sats)
     except Exception:
@@ -508,6 +636,24 @@ def lightning_deposit_create():
         client = LNBitsClient()
     except Exception as e:
         return jsonify({"error": "lightning_not_configured", "detail": str(e)}), 500
+
+    # Idempotency pre-insert (acts as a coarse lock)
+    idem_row = None
+    if idem_key:
+        try:
+            idem_row = IdempotencyKey(user_id=user.id, scope="lightning_deposit", key=str(idem_key))
+            db.session.add(idem_row)
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            # Existing idempotent request => return stored resource if available
+            idem_row = IdempotencyKey.query.filter_by(user_id=user.id, scope="lightning_deposit", key=str(idem_key)).first()
+            if idem_row and idem_row.ref_type == "invoice" and idem_row.ref_id:
+                inv0 = db.session.get(LightningInvoice, idem_row.ref_id)
+                if inv0:
+                    return jsonify(inv0.to_dict())
+            # In-flight: the first request hasn't persisted the invoice id yet
+            return jsonify({"error": "idempotency_in_progress"}), 409
 
     ok, res = client.create_invoice(amount_sats=amount_sats, memo=memo)
     if not ok:
@@ -531,6 +677,18 @@ def lightning_deposit_create():
     )
     db.session.add(inv)
     db.session.commit()
+
+    # Save idempotency reference
+    if idem_key:
+        try:
+            row = IdempotencyKey.query.filter_by(user_id=user.id, scope="lightning_deposit", key=str(idem_key)).with_for_update().first()
+            if row:
+                row.ref_type = "invoice"
+                row.ref_id = inv.id
+                db.session.add(row)
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
 
     return jsonify(inv.to_dict()), 201
 
@@ -593,9 +751,12 @@ def lightning_withdraw():
     user = _get_user_from_jwt()
     if not user:
         return jsonify({"error": "user_not_found"}), 404
+    if getattr(user, "withdraw_frozen", False):
+        return jsonify({"error": "withdraw_frozen"}), 403
     data = request.get_json(force=True)
     bolt11 = data.get("bolt11")
     amount_sats = data.get("amount_sats")  # optional; try to decode if missing
+    idem_key = request.headers.get("Idempotency-Key") or data.get("idempotency_key")
     if not isinstance(bolt11, str) or not bolt11:
         return jsonify({"error": "invalid_bolt11"}), 400
 
@@ -618,6 +779,22 @@ def lightning_withdraw():
     bal = _get_or_create_balance(user.id)
     if bal.balance_sats < amount_sats:
         return jsonify({"error": "insufficient_funds", "balance_sats": int(bal.balance_sats)}), 400
+
+    # Idempotency pre-insert (acts as a coarse lock)
+    idem_row = None
+    if idem_key:
+        try:
+            idem_row = IdempotencyKey(user_id=user.id, scope="lightning_withdraw", key=str(idem_key))
+            db.session.add(idem_row)
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            idem_row = IdempotencyKey.query.filter_by(user_id=user.id, scope="lightning_withdraw", key=str(idem_key)).first()
+            if idem_row and idem_row.ref_type == "withdrawal" and idem_row.ref_id:
+                w0 = db.session.get(LightningWithdrawal, idem_row.ref_id)
+                if w0:
+                    return jsonify(w0.to_dict())
+            return jsonify({"error": "idempotency_in_progress"}), 409
 
     w = LightningWithdrawal(
         user_id=user.id,
@@ -650,6 +827,17 @@ def lightning_withdraw():
         w.checking_id = res.get("checking_id") or w.checking_id
         db.session.add(w)
         db.session.commit()
+        # Save idempotency reference
+        if idem_key:
+            try:
+                row = IdempotencyKey.query.filter_by(user_id=user.id, scope="lightning_withdraw", key=str(idem_key)).with_for_update().first()
+                if row:
+                    row.ref_type = "withdrawal"
+                    row.ref_id = w.id
+                    db.session.add(row)
+                    db.session.commit()
+            except Exception:
+                db.session.rollback()
     except Exception as e:
         # Refund on failure
         bal = _get_or_create_balance(user.id)
@@ -669,6 +857,31 @@ def lightning_withdraw():
         return jsonify({"error": "withdraw_failed", "detail": str(e)}), 502
 
     return jsonify(w.to_dict()), 201
+
+
+@api_bp.post("/admin/reconcile-now")
+@require_auth
+@csrf.exempt
+def admin_reconcile_now():
+    """Admin-only: trigger a one-shot reconcile for invoices or withdrawals.
+
+    Body: { "op": "invoices" | "withdrawals" }
+    """
+    user = _get_user_from_jwt()
+    if not _is_admin(user):
+        return jsonify({"error": "forbidden"}), 403
+    data = request.get_json(silent=True) or {}
+    op = (data.get("op") or "").strip().lower()
+    try:
+        if op == "invoices":
+            count = reconcile_invoices_once()
+        elif op == "withdrawals":
+            count = reconcile_withdrawals_once()
+        else:
+            return jsonify({"error": "invalid_op"}), 400
+        return jsonify({"ok": True, "op": op, "count": int(count or 0)})
+    except Exception as e:
+        return jsonify({"error": "reconcile_failed", "detail": str(e)}), 500
 
 
 @api_bp.get("/lightning/withdrawals/<withdraw_id>")
@@ -764,32 +977,72 @@ def amm_get_pool(pool_id: int):
 
 
 @api_bp.post("/amm/quote")
-@require_auth
 @csrf.exempt
 def amm_quote():
     data = request.get_json(force=True)
     pool_id = data.get("pool_id")
-    side = data.get("side")
+    side = data.get("side")  # optional when routing by symbol+action
+    symbol = data.get("symbol")
+    action = (data.get("action") or "").lower()  # 'buy' | 'sell' when symbol is provided
     amount_in_raw = data.get("amount_in")
     try:
         amount_in = _parse_decimal(amount_in_raw)
     except Exception:
         return jsonify({"error": "invalid_amount_in"}), 400
+
     pool = db.session.get(SwapPool, int(pool_id)) if pool_id else None
-    if not pool:
-        return jsonify({"error": "pool_not_found"}), 404
-    try:
-        q = quote_swap(pool, side, amount_in)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+
+    # Routing by symbol + action
+    if not pool and isinstance(symbol, str):
+        tok = Token.query.filter_by(symbol=symbol).first()
+        if not tok:
+            return jsonify({"error": "token_not_found"}), 404
+        # Candidate pools that contain the token
+        cands = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).all()
+        if not cands:
+            return jsonify({"error": "pool_not_found"}), 404
+        gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+        best = None
+        for p in cands:
+            try:
+                # Determine side based on action
+                if action == "buy":
+                    # pay other token, receive 'symbol'
+                    side_p = "BtoA" if p.token_a_id == tok.id else "AtoB"
+                elif action == "sell":
+                    # pay 'symbol', receive other token
+                    side_p = "AtoB" if p.token_a_id == tok.id else "BtoA"
+                else:
+                    continue
+                qq = quote_swap(p, side_p, amount_in)
+                score = (float(qq.amount_out), 1 if (gusd and (p.token_a_id == (gusd.id) or p.token_b_id == (gusd.id))) else 0)
+                if best is None or score > best[0]:
+                    best = (score, p, side_p, qq)
+            except Exception:
+                continue
+        if not best:
+            return jsonify({"error": "insufficient_liquidity"}), 400
+        _, pool, side, q = best
+    else:
+        if not pool:
+            return jsonify({"error": "pool_not_found"}), 404
+        try:
+            q = quote_swap(pool, side, amount_in)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+
     return jsonify({
-        "pool_id": pool.id,
+        "pool_id": int(pool.id),
         "side": side,
         "amount_in": float(amount_in),
         "amount_out": float(q.amount_out),
-        "fee_bps": q.fee_bps,
+        "fee_bps": int(q.fee_bps),
         "fee_amount": float(q.fee_amount),
         "effective_in": float(q.effective_in),
+        "execution_price": float(q.execution_price),
+        "mid_price": float(q.mid_price),
+        "price_impact_bps": int(q.price_impact_bps),
+        "stage": int(pool.stage or 1),
     })
 
 
@@ -802,16 +1055,64 @@ def amm_swap():
         return jsonify({"error": "user_not_found"}), 404
     data = request.get_json(force=True)
     pool_id = data.get("pool_id")
-    side = data.get("side")
+    side = data.get("side")  # optional when routing
+    symbol = data.get("symbol")
+    action = (data.get("action") or "").lower()  # 'buy' | 'sell'
     amount_in_raw = data.get("amount_in")
-    if not pool_id or not side:
-        return jsonify({"error": "missing_params"}), 400
+    min_amount_out_raw = data.get("min_amount_out")
+    max_slippage_bps = data.get("max_slippage_bps")
     try:
         amount_in = _parse_decimal(amount_in_raw)
     except Exception:
         return jsonify({"error": "invalid_amount_in"}), 400
+
+    # Routing if needed
+    pool = db.session.get(SwapPool, int(pool_id)) if pool_id else None
+    if not pool and isinstance(symbol, str):
+        tok = Token.query.filter_by(symbol=symbol).first()
+        if not tok:
+            return jsonify({"error": "token_not_found"}), 404
+        cands = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).all()
+        if not cands:
+            return jsonify({"error": "pool_not_found"}), 404
+        best = None
+        for p in cands:
+            try:
+                if action == "buy":
+                    side_p = "BtoA" if p.token_a_id == tok.id else "AtoB"
+                elif action == "sell":
+                    side_p = "AtoB" if p.token_a_id == tok.id else "BtoA"
+                else:
+                    continue
+                qq = quote_swap(p, side_p, amount_in)
+                score = float(qq.amount_out)
+                if best is None or score > best[0]:
+                    best = (score, p, side_p)
+            except Exception:
+                continue
+        if not best:
+            return jsonify({"error": "insufficient_liquidity"}), 400
+        _, pool, side = best
+    if not pool or not side:
+        return jsonify({"error": "missing_params"}), 400
+
+    # Parse optional constraints
+    min_amount_out = None
+    if min_amount_out_raw is not None:
+        try:
+            min_amount_out = _parse_decimal(min_amount_out_raw)
+        except Exception:
+            return jsonify({"error": "invalid_min_amount_out"}), 400
     try:
-        trade, q, pool = execute_swap(db.session, int(pool_id), user.id, side, amount_in)
+        trade, q, pool = execute_swap(
+            db.session,
+            int(pool.id),
+            user.id,
+            side,
+            amount_in,
+            min_amount_out=min_amount_out,
+            max_slippage_bps=int(max_slippage_bps) if max_slippage_bps is not None else None,
+        )
         db.session.commit()
         # Invalidate hot caches affected by trades
         try:
@@ -828,11 +1129,27 @@ def amm_swap():
                 "fee_bps": q.fee_bps,
                 "fee_amount": float(q.fee_amount),
                 "effective_in": float(q.effective_in),
+                "execution_price": float(q.execution_price),
+                "mid_price": float(q.mid_price),
+                "price_impact_bps": int(q.price_impact_bps),
             },
         }), 201
     except ValueError as ve:
         db.session.rollback()
-        return jsonify({"error": str(ve)}), 400
+        # Friendlier error codes
+        code = str(ve)
+        mapping = {
+            "insufficient_balance": ("insufficient_balance", 400),
+            "insufficient_liquidity": ("insufficient_liquidity", 400),
+            "pool_exhausted": ("pool_exhausted", 400),
+            "slippage_too_high": ("slippage_too_high", 400),
+            "price_impact_too_high": ("price_impact_too_high", 400),
+            "invalid_side": ("invalid_side", 400),
+            "pool_not_found": ("pool_not_found", 404),
+            "token_frozen": ("token_frozen", 400),
+        }
+        err, status = mapping.get(code, (code or "bad_request", 400))
+        return jsonify({"error": err}), status
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "swap_failed", "detail": str(e)}), 500

@@ -11,6 +11,8 @@ from .web import web_bp
 from .admin import admin_bp
 from .api import api_bp
 from flask_wtf.csrf import generate_csrf
+from .services.reconcile import start_scheduler
+from .services.metrics import record_response
 
 
 def create_app(config_class: type = Config) -> Flask:
@@ -89,6 +91,15 @@ def create_app(config_class: type = Config) -> Flask:
             app.logger.debug(f"CSRF cookie set skipped: {e}")
         return response
 
+    # Capture simple request metrics (per-process)
+    @app.after_request
+    def capture_metrics(response):
+        try:
+            record_response(getattr(response, "status_code", 200))
+        except Exception:
+            pass
+        return response
+
     # Auto-create tables in dev (SQLite fallback) to keep onboarding simple
     with app.app_context():
         try:
@@ -111,5 +122,11 @@ def create_app(config_class: type = Config) -> Flask:
         except Exception as e:
             # On MariaDB without schema privileges, skip auto-create
             app.logger.warning(f"DB create_all skipped: {e}")
+
+    # Start background reconciliation scheduler (if enabled)
+    try:
+        start_scheduler(app)
+    except Exception as e:
+        app.logger.warning(f"Scheduler start failed: {e}")
 
     return app

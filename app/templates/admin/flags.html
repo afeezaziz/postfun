@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Admin · Feature Flags | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <a class="retro-button" href="{{ url_for('admin.dashboard') }}" style="float:right;">← Dashboard</a>
+    <h1>Feature Flags</h1>
+    <div class="pf-grid" style="grid-template-columns: 1fr; gap: 16px;">
+      <div class="card">
+        <h2>Create / Update Flag</h2>
+        <form method="POST" action="{{ url_for('admin.flags_save') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items:end;">
+          <div>
+            <label>ID (optional for edit)</label>
+            <input class="retro-input" type="text" name="id" placeholder="leave blank to create" />
+          </div>
+          <div>
+            <label>Key</label>
+            <input class="retro-input" type="text" name="key" placeholder="e.g. pro_mode" required />
+          </div>
+          <div>
+            <label>Value</label>
+            <input class="retro-input" type="text" name="value" placeholder="optional metadata" />
+          </div>
+          <div>
+            <label>Enabled</label>
+            <select class="retro-input" name="enabled">
+              <option value="1">Yes</option>
+              <option value="0">No</option>
+            </select>
+          </div>
+          <div>
+            <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+            <button class="retro-button" type="submit">Save Flag</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>All Flags</h2>
+        {% if not flags %}
+          <div>No flags.</div>
+        {% else %}
+          <div class="pf-table-wrap">
+            <table class="pf-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Key</th>
+                  <th>Value</th>
+                  <th>Enabled</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for f in flags %}
+                  <tr>
+                    <td>{{ f.id }}</td>
+                    <td><code>{{ f.key }}</code></td>
+                    <td>{{ f.value or '' }}</td>
+                    <td>{{ 'Yes' if f.enabled else 'No' }}</td>
+                    <td>
+                      <div style="display:flex; gap:6px;">
+                        <form method="POST" action="{{ url_for('admin.flags_toggle', flag_id=f.id) }}">
+                          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                          <button class="retro-button" type="submit">{{ 'Disable' if f.enabled else 'Enable' }}</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('admin.flags_delete', flag_id=f.id) }}" onsubmit="return confirm('Delete flag '+ '{{ f.key }}' + '?');">
+                          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                          <button class="retro-button" type="submit" style="background:#b14a4a;">Delete</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

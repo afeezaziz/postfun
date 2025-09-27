@@ -52,6 +52,34 @@
       </div>
 
       <div class="card">
+        <h2>Moderate Token</h2>
+        <form method="POST" action="{{ url_for('admin.tokens_moderate', token_id=0) }}" onsubmit="this.action=this.action.replace('/0', '/' + document.getElementById('mod_token_id').value);">
+          <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items:end;">
+            <div>
+              <label>Token ID</label>
+              <input id="mod_token_id" class="retro-input" type="number" min="1" placeholder="e.g. 12" />
+            </div>
+            <div>
+              <label>Status</label>
+              <select class="retro-input" name="status">
+                <option value="visible">Visible</option>
+                <option value="hidden">Hidden</option>
+                <option value="flagged">Flagged</option>
+              </select>
+            </div>
+            <div>
+              <label>Notes</label>
+              <input class="retro-input" type="text" name="notes" placeholder="optional" />
+            </div>
+            <div>
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+              <button class="retro-button" type="submit">Save Moderation</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
         <h2>Import CSV</h2>
         <form method="POST" action="{{ url_for('admin.tokens_import') }}">
           <p>CSV columns: <code>symbol,name,price,market_cap,change_24h</code>. One row per token.</p>
@@ -73,21 +101,40 @@
             <table class="pf-table">
               <thead>
                 <tr>
+                  <th>ID</th>
                   <th>Symbol</th>
                   <th>Name</th>
                   <th>Price</th>
                   <th>Market Cap</th>
                   <th>24h</th>
+                  <th>Hidden</th>
+                  <th>Frozen</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {% for t in tokens_p.items %}
                   <tr>
+                    <td>{{ t.id }}</td>
                     <td><strong>{{ t.symbol }}</strong></td>
                     <td>{{ t.name }}</td>
                     <td>{{ '%.8f'|format(t.price or 0) }}</td>
                     <td>{{ '%.2f'|format(t.market_cap or 0) }}</td>
                     <td>{{ '%.4f'|format(t.change_24h or 0) }}%</td>
+                    <td>{{ 'Yes' if getattr(t, 'hidden', False) else 'No' }}</td>
+                    <td>{{ 'Yes' if getattr(t, 'frozen', False) else 'No' }}</td>
+                    <td>
+                      <div style="display:flex; gap:6px;">
+                        <form method="POST" action="{{ url_for('admin.tokens_toggle_hidden', token_id=t.id) }}">
+                          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                          <button class="retro-button" type="submit">{{ 'Unhide' if getattr(t, 'hidden', False) else 'Hide' }}</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('admin.tokens_toggle_frozen', token_id=t.id) }}">
+                          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                          <button class="retro-button" type="submit">{{ 'Unfreeze' if getattr(t, 'frozen', False) else 'Freeze' }}</button>
+                        </form>
+                      </div>
+                    </td>
                   </tr>
                 {% endfor %}
               </tbody>
