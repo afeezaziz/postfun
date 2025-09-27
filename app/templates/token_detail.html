@@ -19,6 +19,21 @@
         <div>24h Change: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
         {% if launcher %}
         <div>Creator: <a class="pf-green" href="{{ url_for('web.creator_profile', user_id=launcher.id) }}">{{ launcher.npub or launcher.pubkey_hex }}</a></div>
+        {% if current_user and current_user.id != launcher.id %}
+        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+          {% if is_following %}
+            <form method="POST" action="{{ url_for('web.creator_unfollow', user_id=launcher.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+              <button class="retro-button" type="submit">Unfollow</button>
+            </form>
+          {% else %}
+            <form method="POST" action="{{ url_for('web.creator_follow', user_id=launcher.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+              <button class="retro-button" type="submit">Follow</button>
+            </form>
+          {% endif %}
+        </div>
+        {% endif %}
         {% endif %}
       </div>
       <div class="card pf-token-panel">
@@ -56,6 +71,42 @@
           </div>
         {% endif %}
       </div>
+      {% if fee_summary %}
+      <div class="card pf-token-panel">
+        <h2>Protocol Fee Summary</h2>
+        <div class="pf-table-wrap">
+          <table class="pf-table">
+            <thead>
+              <tr>
+                <th>Entity</th>
+                <th>Alloc A</th>
+                <th>Alloc B</th>
+                <th>Paid A</th>
+                <th>Paid B</th>
+                <th>Pending A</th>
+                <th>Pending B</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for key in ['creator','minter','treasury'] %}
+                {% set row = fee_summary.get(key) %}
+                {% if row %}
+                <tr>
+                  <td><strong>{{ key|capitalize }}</strong></td>
+                  <td>{{ '%.8f'|format(row.alloc['A'] or 0) }}</td>
+                  <td>{{ '%.8f'|format(row.alloc['B'] or 0) }}</td>
+                  <td>{{ '%.8f'|format(row.paid['A'] or 0) }}</td>
+                  <td>{{ '%.8f'|format(row.paid['B'] or 0) }}</td>
+                  <td>{{ '%.8f'|format(row.pending['A'] or 0) }}</td>
+                  <td>{{ '%.8f'|format(row.pending['B'] or 0) }}</td>
+                </tr>
+                {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
     </div>
   </section>
 {% endblock %}

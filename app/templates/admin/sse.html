@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}Admin — SSE Status | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>SSE Status</h1>
+    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+      <div class="card">
+        <div>Launches (15m)</div>
+        <div class="pf-green" style="font-size: 28px; font-weight: bold;">{{ launch_15 }}</div>
+      </div>
+      <div class="card">
+        <div>Launches (1h)</div>
+        <div class="pf-green" style="font-size: 28px; font-weight: bold;">{{ launch_60 }}</div>
+      </div>
+      <div class="card">
+        <div>Stage Events (15m)</div>
+        <div class="pf-green" style="font-size: 28px; font-weight: bold;">{{ burns_15 }}</div>
+      </div>
+      <div class="card">
+        <div>Stage Events (1h)</div>
+        <div class="pf-green" style="font-size: 28px; font-weight: bold;">{{ burns_60 }}</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Recent Launches</h2>
+    {% if launches and launches|length > 0 %}
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Name</th>
+              <th>Creator</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in launches %}
+              <tr>
+                <td>{{ r.symbol }}</td>
+                <td>{{ r.name }}</td>
+                <td>{{ r.creator }}</td>
+                <td>{{ r.time }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div>No recent launches.</div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Recent Stage Changes</h2>
+    {% if burns and burns|length > 0 %}
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Pool</th>
+              <th>Stage</th>
+              <th>Amount</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in burns %}
+              <tr>
+                <td>{{ r.symbol }}</td>
+                <td>#{{ r.pool_id }}</td>
+                <td>{{ r.stage }}</td>
+                <td>{{ '%.8f'|format(r.amount or 0) }}</td>
+                <td>{{ r.time }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div>No recent stage changes.</div>
+    {% endif %}
+  </section>
+{% endblock %}

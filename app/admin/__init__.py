@@ -7,9 +7,9 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, render_template, request, redirect, url_for, abort, flash, g
 
-from ..extensions import db
-from ..models import User, Token, AlertRule, AlertEvent, AuditLog, SwapPool, FeeDistributionRule, FeePayout
-from ..web import get_jwt_from_cookie
+from ..extensions import db, cache
+from ..models import User, Token, AlertRule, AlertEvent, AuditLog, SwapPool, FeeDistributionRule, FeePayout, TokenInfo, BurnEvent
+from ..web import get_jwt_from_cookie, _fee_summary_for_pool_cached
 from ..services.audit import log_action
 from sqlalchemy import select, or_, case
 
@@ -110,6 +110,10 @@ def fees_detail(pool_id: int):
                 rule.bps_treasury = bps_treasury
                 db.session.add(rule)
                 db.session.commit()
+                try:
+                    cache.delete_memoized(_fee_summary_for_pool_cached, pool.id)
+                except Exception:
+                    pass
                 flash("Fee rule saved", "success")
             except Exception as e:
                 db.session.rollback()
@@ -150,6 +154,10 @@ def fees_detail(pool_id: int):
                 payout = FeePayout(pool_id=pool.id, entity=entity, asset=asset, amount=amount, note=(request.form.get("note") or None))
                 db.session.add(payout)
                 db.session.commit()
+                try:
+                    cache.delete_memoized(_fee_summary_for_pool_cached, pool.id)
+                except Exception:
+                    pass
                 flash("Payout recorded", "success")
             except Exception as e:
                 db.session.rollback()
@@ -480,6 +488,73 @@ def alerts_toggle(rule_id: int):
         db.session.rollback()
         flash("Failed to update rule", "error")
     return redirect(url_for("admin.alerts_admin"))
+
+
+@admin_bp.route("/sse")
+@require_admin
+def sse_status():
+    now = datetime.utcnow()
+    since_15 = now - timedelta(minutes=15)
+    since_60 = now - timedelta(hours=1)
+
+    # Launch summaries
+    recent_launches = (
+        TokenInfo.query
+        .filter(TokenInfo.launch_at != None)  # noqa: E711
+        .order_by(TokenInfo.launch_at.desc())
+        .limit(50)
+        .all()
+    )
+    launches = []
+    for info in recent_launches:
+        tok = db.session.get(Token, info.token_id)
+        creator = db.session.get(User, info.launch_user_id) if info.launch_user_id else None
+        launches.append({
+            "symbol": tok.symbol if tok else None,
+            "name": tok.name if tok else None,
+            "time": (info.launch_at.isoformat() + "Z") if info.launch_at else None,
+            "creator": (creator.display_name or creator.npub or creator.pubkey_hex) if creator else None,
+        })
+    launch_15 = db.session.query(db.func.count(TokenInfo.id)).filter(TokenInfo.launch_at != None, TokenInfo.launch_at >= since_15).scalar()  # noqa: E711
+    launch_60 = db.session.query(db.func.count(TokenInfo.id)).filter(TokenInfo.launch_at != None, TokenInfo.launch_at >= since_60).scalar()  # noqa: E711
+
+    # Burn/stage summaries
+    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    burns_q = (
+        db.session.query(BurnEvent, SwapPool)
+        .join(SwapPool, BurnEvent.pool_id == SwapPool.id)
+        .order_by(BurnEvent.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    burns = []
+    for ev, pool in burns_q:
+        tokA = db.session.get(Token, pool.token_a_id)
+        tokB = db.session.get(Token, pool.token_b_id)
+        disp = tokA
+        if gusd and tokA and tokA.id == gusd.id:
+            disp = tokB
+        elif gusd and tokB and tokB.id == gusd.id:
+            disp = tokA
+        burns.append({
+            "symbol": disp.symbol if disp else (tokA.symbol if tokA else None),
+            "stage": int(ev.stage),
+            "amount": float(ev.amount or 0),
+            "time": ev.created_at.isoformat() + "Z",
+            "pool_id": pool.id,
+        })
+    burns_15 = db.session.query(db.func.count(BurnEvent.id)).filter(BurnEvent.created_at >= since_15).scalar()
+    burns_60 = db.session.query(db.func.count(BurnEvent.id)).filter(BurnEvent.created_at >= since_60).scalar()
+
+    return render_template(
+        "admin/sse.html",
+        launch_15=int(launch_15 or 0),
+        launch_60=int(launch_60 or 0),
+        burns_15=int(burns_15 or 0),
+        burns_60=int(burns_60 or 0),
+        launches=launches,
+        burns=burns,
+    )
 
 
 @admin_bp.route("/alerts/bulk", methods=["POST"])

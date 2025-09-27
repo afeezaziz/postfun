@@ -257,6 +257,39 @@ def _cached_stats():
         "watchlists": int(watchlists_count or 0),
     }
 
+
+# Short-cache fee summary builder for a pool (used on pool and token pages)
+@cache.memoize(timeout=5)
+def _fee_summary_for_pool_cached(pool_id: int):
+    from decimal import Decimal as _D
+    pool = db.session.get(SwapPool, pool_id)
+    if not pool:
+        return None
+    rule = FeeDistributionRule.query.filter_by(pool_id=pool.id).first()
+    bps_c = int(rule.bps_creator if rule else 5000)
+    bps_m = int(rule.bps_minter if rule else 3000)
+    bps_t = int(rule.bps_treasury if rule else 2000)
+    fa = _D(pool.fee_accum_a or 0)
+    fb = _D(pool.fee_accum_b or 0)
+    def _allocs(bps: int):
+        return {"A": (fa * _D(bps) / _D(10000)), "B": (fb * _D(bps) / _D(10000))}
+    def _paid(entity: str):
+        rows = FeePayout.query.filter_by(pool_id=pool.id, entity=entity).all()
+        totA = _D("0"); totB = _D("0")
+        for p in rows:
+            if p.asset == "A": totA += _D(p.amount or 0)
+            elif p.asset == "B": totB += _D(p.amount or 0)
+        return {"A": totA, "B": totB}
+    summary = {}
+    for ent, bps in (("creator", bps_c), ("minter", bps_m), ("treasury", bps_t)):
+        a = _allocs(bps); p = _paid(ent)
+        summary[ent] = {
+            "alloc": {"A": float(a["A"]), "B": float(a["B"])},
+            "paid": {"A": float(p["A"]), "B": float(p["B"])},
+            "pending": {"A": float(max(_D("0"), a["A"] - p["A"])), "B": float(max(_D("0"), a["B"] - p["B"]))},
+        }
+    return summary
+
 @web_bp.route("/")
 def home():
     # Cached trending list
@@ -420,12 +453,39 @@ def token_detail(symbol: str):
     except Exception:
         pass
 
+    # Follow status (for quick follow/unfollow from token page)
+    is_following = False
+    if launcher and payload and isinstance(payload.get("uid"), int):
+        me = db.session.get(User, int(payload["uid"]))
+        if me:
+            row = CreatorFollow.query.filter_by(follower_user_id=me.id, creator_user_id=launcher.id).first()
+            is_following = row is not None
+
+    # Preferred pool to compute fee summary (gUSD pair if possible)
+    fee_summary = None
+    try:
+        gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+        pool = None
+        if gusd:
+            pool = SwapPool.query.filter(
+                ((SwapPool.token_a_id == token.id) & (SwapPool.token_b_id == gusd.id))
+                | ((SwapPool.token_b_id == token.id) & (SwapPool.token_a_id == gusd.id))
+            ).first()
+        if not pool:
+            pool = SwapPool.query.filter((SwapPool.token_a_id == token.id) | (SwapPool.token_b_id == token.id)).first()
+        if pool:
+            fee_summary = _fee_summary_for_pool_cached(pool.id)
+    except Exception:
+        pass
+
     return render_template(
         "token_detail.html",
         token=token,
         watchlisted=watchlisted,
         price=price,
         launcher=launcher,
+        is_following=is_following,
+        fee_summary=fee_summary,
         meta_title=meta_title,
         meta_description=meta_description,
         meta_image=meta_image,
@@ -1234,30 +1294,7 @@ def pool(symbol: str):
     # Fee summary for this pool (if exists)
     summary = None
     if pool:
-        from decimal import Decimal as _D
-        rule = FeeDistributionRule.query.filter_by(pool_id=pool.id).first()
-        bps_c = int(rule.bps_creator if rule else 5000)
-        bps_m = int(rule.bps_minter if rule else 3000)
-        bps_t = int(rule.bps_treasury if rule else 2000)
-        fa = _D(pool.fee_accum_a or 0)
-        fb = _D(pool.fee_accum_b or 0)
-        def _allocs(bps: int):
-            return {"A": (fa * _D(bps) / _D(10000)), "B": (fb * _D(bps) / _D(10000))}
-        def _paid(entity: str):
-            rows = FeePayout.query.filter_by(pool_id=pool.id, entity=entity).all()
-            totA = _D("0"); totB = _D("0")
-            for p in rows:
-                if p.asset == "A": totA += _D(p.amount or 0)
-                elif p.asset == "B": totB += _D(p.amount or 0)
-            return {"A": totA, "B": totB}
-        summary = {}
-        for ent, bps in (("creator", bps_c), ("minter", bps_m), ("treasury", bps_t)):
-            a = _allocs(bps); p = _paid(ent)
-            summary[ent] = {
-                "alloc": {"A": float(a["A"]), "B": float(a["B"])},
-                "paid": {"A": float(p["A"]), "B": float(p["B"])},
-                "pending": {"A": float(max(_D("0"), a["A"] - p["A"])), "B": float(max(_D("0"), a["B"] - p["B"]))},
-            }
+        summary = _fee_summary_for_pool_cached(pool.id)
 
     return render_template(
         "pool.html",
