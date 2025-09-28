@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en" data-theme="admin-terminal">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Panel </title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}" />
+  <script defer src="{{ url_for('static', filename='js/app.js') }}?v=20250928-2"></script>
+</head>
+<body class="bg-admin-black">
+  <!-- Admin Header -->
+  <nav class="navbar bg-admin-black border-b border-admin-blue shadow-lg fixed top-0 w-full z-50">
+    <div class="navbar-start">
+      <!-- Mobile menu toggle -->
+      <div class="dropdown lg:hidden">
+        <div tabindex="0" role="button" class="btn btn-ghost text-admin-blue">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+          </svg>
+        </div>
+        <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-admin-black rounded-box w-64 border border-admin-blue">
+          <li><a href="{{ url_for('admin.dashboard') }}" class="{% if request.endpoint == 'admin.dashboard' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">📊 Dashboard</a></li>
+          <li><a href="{{ url_for('admin.users') }}" class="{% if request.endpoint == 'admin.users' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">👥 Users</a></li>
+          <li><a href="{{ url_for('admin.tokens') }}" class="{% if request.endpoint == 'admin.tokens' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">🪙 Tokens</a></li>
+          <li><a href="{{ url_for('admin.payments') }}" class="{% if request.endpoint == 'admin.payments' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">⚡ Payments</a></li>
+          <li><a href="{{ url_for('admin.fees') }}" class="{% if request.endpoint == 'admin.fees' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">💰 Fees</a></li>
+          <li><a href="{{ url_for('admin.alerts_admin') }}" class="{% if request.endpoint == 'admin.alerts_admin' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">🚨 Alerts</a></li>
+          <li><a href="{{ url_for('admin.audit') }}" class="{% if request.endpoint == 'admin.audit' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">🔍 Audit</a></li>
+          <li><a href="{{ url_for('admin.flags_list') }}" class="{% if request.endpoint == 'admin.flags_list' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">🚩 Flags</a></li>
+          <li><a href="{{ url_for('admin.metrics_view') }}" class="{% if request.endpoint == 'admin.metrics_view' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">📈 Metrics</a></li>
+          <li><a href="{{ url_for('admin.sse_status') }}" class="{% if request.endpoint == 'admin.sse_status' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">🚀 SSE</a></li>
+          <li class="menu-title text-admin-blue">System</li>
+          <li><a href="{{ url_for('web.home') }}" class="text-admin-blue hover:text-admin-cyan">🏠 Main Site</a></li>
+          <li><a href="https://docs.postfun.com" target="_blank" class="text-admin-blue hover:text-admin-cyan">📚 Docs</a></li>
+        </ul>
+      </div>
+
+      <!-- Admin Logo -->
+      <a href="{{ url_for('admin.dashboard') }}" class="btn btn-ghost text-xl font-bold text-admin-blue hover:text-admin-cyan transition-colors flex items-center gap-2">
+        <span class="text-2xl">⚡</span>
+        <span>Admin Panel</span>
+      </a>
+    </div>
+
+    <div class="navbar-center hidden lg:flex">
+      <div class="text-admin-cyan font-mono text-sm">
+        {% if g.admin_user %}
+          Admin: {{ g.admin_user.display_name or g.admin_user.npub[:16] }}...{{ g.admin_user.npub[-4:] if g.admin_user.npub else '' }}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="navbar-end">
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-outline border-admin-blue text-admin-blue hover:bg-admin-blue hover:text-admin-black">
+          Admin Menu
+        </div>
+        <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-admin-black rounded-box w-72 border border-admin-blue">
+          <li class="menu-title text-admin-blue font-bold">
+            {% if g.admin_user %}
+              {{ g.admin_user.display_name or 'Admin' }}
+            {% endif %}
+          </li>
+          <li><a class="text-admin-blue hover:text-admin-cyan" href="{{ url_for('web.user_profile', user_id=g.admin_user.id) }}">👤 Profile</a></li>
+          <li><a class="text-admin-blue hover:text-admin-cyan" href="{{ url_for('web.portfolio') }}">💼 Portfolio</a></li>
+          <li><a class="text-admin-blue hover:text-admin-cyan" href="{{ url_for('web.wallet') }}">⚡ Wallet</a></li>
+          <div class="divider border-admin-blue/30"></div>
+          <li class="menu-title text-admin-blue font-bold">Admin Navigation</li>
+          <li><a href="{{ url_for('admin.dashboard') }}" class="{% if request.endpoint == 'admin.dashboard' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">📊 Dashboard</a></li>
+          <li><a href="{{ url_for('admin.users') }}" class="{% if request.endpoint == 'admin.users' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">👥 Users</a></li>
+          <li><a href="{{ url_for('admin.tokens') }}" class="{% if request.endpoint == 'admin.tokens' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">🪙 Tokens</a></li>
+          <li><a href="{{ url_for('admin.payments') }}" class="{% if request.endpoint == 'admin.payments' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">⚡ Payments</a></li>
+          <li><a href="{{ url_for('admin.fees') }}" class="{% if request.endpoint == 'admin.fees' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">💰 Fees</a></li>
+          <li><a href="{{ url_for('admin.alerts_admin') }}" class="{% if request.endpoint == 'admin.alerts_admin' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">🚨 Alerts</a></li>
+          <li><a href="{{ url_for('admin.audit') }}" class="{% if request.endpoint == 'admin.audit' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">🔍 Audit</a></li>
+          <li><a href="{{ url_for('admin.flags_list') }}" class="{% if request.endpoint == 'admin.flags_list' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">🚩 Flags</a></li>
+          <li><a href="{{ url_for('admin.metrics_view') }}" class="{% if request.endpoint == 'admin.metrics_view' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">📈 Metrics</a></li>
+          <li><a href="{{ url_for('admin.sse_status') }}" class="{% if request.endpoint == 'admin.sse_status' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">🚀 SSE</a></li>
+          <div class="divider border-admin-blue/30"></div>
+          <li class="menu-title text-admin-blue font-bold">System</li>
+          <li><a href="{{ url_for('web.home') }}" class="text-admin-blue hover:text-admin-cyan">🏠 Main Site</a></li>
+          <li><a href="https://docs.postfun.com" target="_blank" class="text-admin-blue hover:text-admin-cyan">📚 Docs</a></li>
+          <div class="divider border-admin-blue/30"></div>
+          <li><button onclick="pfLogout()" class="text-admin-red hover:text-red-400 font-bold">🚪 Logout</button></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 min-h-screen relative z-30">
+      <!-- Breadcrumb -->
+      <div class="bg-admin-black border-b border-admin-blue px-6 py-4 sticky top-16 z-20">
+        <nav class="flex items-center space-x-2 text-sm">
+          <a href="{{ url_for('admin.dashboard') }}" class="text-admin-blue hover:text-admin-cyan">Admin</a>
+          {% block breadcrumb %}
+          <span class="text-admin-cyan">Dashboard</span>
+          {% endblock %}
+        </nav>
+      </div>
+
+      <!-- Page Content -->
+      <div class="p-6">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="mb-6 space-y-2">
+              {% for category, message in messages %}
+                <div class="alert {% if category == 'success' %}bg-admin-green/20 border-admin-green text-admin-green{% elif category == 'error' %}bg-admin-red/20 border-admin-red text-admin-red{% else %}bg-admin-blue/20 border-admin-blue text-admin-blue{% endif %}">
+                  {{ message }}
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+
+  <!-- Admin Footer -->
+  <footer class="bg-admin-black border-t border-admin-blue relative z-30">
+    <div class="px-6 py-4">
+      <div class="flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
+        <div class="flex items-center space-x-4 text-xs text-admin-dim-blue">
+          <span>Postfun Admin Panel v1.0</span>
+          <span class="hidden sm:inline">•</span>
+          <span>Secure Access Only</span>
+        </div>
+        <div class="flex items-center space-x-4 text-xs text-admin-dim-blue">
+          <span>Built with 🔧 for administrators</span>
+          <span class="hidden sm:inline">•</span>
+          <span class="text-admin-blue">System Status: <span class="text-admin-green">Online</span></span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <style>
+    /* Admin-specific color scheme */
+    :root {
+      --admin-black: #000000;
+      --admin-blue: #0080ff;
+      --admin-cyan: #00ffff;
+      --admin-green: #00ff00;
+      --admin-red: #ff0040;
+      --admin-dim-blue: #004080;
+    }
+
+    body {
+      background-color: var(--admin-black);
+      color: var(--admin-blue);
+      font-family: 'VT323', monospace;
+    }
+
+    .bg-admin-black { background-color: var(--admin-black); }
+    .border-admin-blue { border-color: var(--admin-blue); }
+    .text-admin-blue { color: var(--admin-blue); }
+    .text-admin-cyan { color: var(--admin-cyan); }
+    .text-admin-green { color: var(--admin-green); }
+    .text-admin-red { color: var(--admin-red); }
+    .text-admin-dim-blue { color: var(--admin-dim-blue); }
+
+    .admin-nav-link {
+      color: var(--admin-blue);
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .admin-nav-link:hover {
+      color: var(--admin-cyan);
+      background-color: rgba(0, 128, 255, 0.1);
+    }
+
+    /* Admin button styles */
+    .btn-admin {
+      background-color: var(--admin-black);
+      border: 2px solid var(--admin-blue);
+      color: var(--admin-blue);
+      padding: 0.5rem 1rem;
+      font-family: 'VT323', monospace;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-admin:hover {
+      background-color: var(--admin-blue);
+      color: var(--admin-black);
+    }
+
+    /* Admin card styles */
+    .admin-card {
+      background-color: var(--admin-black);
+      border: 2px solid var(--admin-blue);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      box-shadow: 0 4px 6px rgba(0, 128, 255, 0.3);
+    }
+
+    /* Admin input styles */
+    .admin-input {
+      background-color: var(--admin-black);
+      border: 2px solid var(--admin-blue);
+      color: var(--admin-blue);
+      padding: 0.5rem 1rem;
+      font-family: 'VT323', monospace;
+      width: 100%;
+      transition: all 0.2s ease;
+    }
+
+    .admin-input:focus {
+      outline: none;
+      border-color: var(--admin-cyan);
+      background-color: rgba(0, 128, 255, 0.1);
+    }
+
+    /* Responsive adjustments */
+  </style>
+
+  <script>
+    // Auto-refresh for admin pages
+    let refreshInterval;
+
+    function startAutoRefresh(interval = 30000) {
+      refreshInterval = setInterval(() => {
+        if (document.hasFocus()) {
+          location.reload();
+        }
+      }, interval);
+    }
+
+    function stopAutoRefresh() {
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+      }
+    }
+
+    // Start auto-refresh on pages that need it
+    document.addEventListener('DOMContentLoaded', function() {
+      if (document.body.dataset.autoRefresh === 'true') {
+        startAutoRefresh();
+      }
+    });
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', stopAutoRefresh);
+  </script>
+</body>
+</html>

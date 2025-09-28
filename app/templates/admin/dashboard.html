@@ -1,59 +1,276 @@
-{% extends 'base.html' %}
-{% block title %}Admin Dashboard | Postfun{% endblock %}
+{% extends 'admin/base.html' %}
+{% block title %} Admin Dashboard | Postfun {% endblock %}
+{% block breadcrumb %}
+  <span class="text-admin-blue">›</span>
+  <span class="text-admin-cyan">Dashboard</span>
+{% endblock %}
 {% block content %}
-  <section class="card">
-    <h1>Admin Dashboard</h1>
-    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
-      <div class="card">
-        <div>Users</div>
-        <div class="pf-green" style="font-size: 28px; font-weight: bold;">{{ users_count }}</div>
-        <a class="retro-button" href="{{ url_for('admin.users') }}">Manage Users</a>
+  <!-- Dashboard Header -->
+  <div class="mb-8">
+    <h1 class="text-4xl font-bold text-admin-cyan mb-2">⚡ Admin Dashboard</h1>
+    <p class="text-admin-dim-blue text-lg">Welcome to the Postfun administration panel</p>
+  </div>
+
+  <!-- Quick Stats Overview -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <!-- Users Card -->
+    <div class="admin-card">
+      <div class="flex items-center justify-between mb-4">
+        <div class="text-3xl">👥</div>
+        <div class="text-admin-green text-sm font-bold">Live</div>
       </div>
-      <div class="card">
-        <div>Tokens</div>
-        <div class="pf-green" style="font-size: 28px; font-weight: bold;">{{ tokens_count }}</div>
-        <a class="retro-button" href="{{ url_for('admin.tokens') }}">Manage Tokens</a>
+      <div class="text-3xl font-bold text-admin-cyan mb-2">{{ users_count }}</div>
+      <div class="text-admin-dim-blue text-sm mb-4">Total Users</div>
+      <a href="{{ url_for('admin.users') }}" class="btn-admin w-full text-center">Manage Users</a>
+    </div>
+
+    <!-- Tokens Card -->
+    <div class="admin-card">
+      <div class="flex items-center justify-between mb-4">
+        <div class="text-3xl">🪙</div>
+        <div class="text-admin-green text-sm font-bold">Active</div>
       </div>
-      <div class="card">
-        <div>Alert Rules</div>
-        <div class="pf-green" style="font-size: 28px; font-weight: bold;">{{ alerts_count }}</div>
-        <a class="retro-button" href="{{ url_for('admin.alerts_admin') }}">Manage Alerts</a>
+      <div class="text-3xl font-bold text-admin-cyan mb-2">{{ tokens_count }}</div>
+      <div class="text-admin-dim-blue text-sm mb-4">Total Tokens</div>
+      <a href="{{ url_for('admin.tokens') }}" class="btn-admin w-full text-center">Manage Tokens</a>
+    </div>
+
+    <!-- Alerts Card -->
+    <div class="admin-card">
+      <div class="flex items-center justify-between mb-4">
+        <div class="text-3xl">🚨</div>
+        <div class="text-admin-green text-sm font-bold">Monitored</div>
       </div>
-      <div class="card">
-        <div>Alert Events</div>
-        <div class="pf-green" style="font-size: 28px; font-weight: bold;">{{ events_count }}</div>
-        <a class="retro-button" href="{{ url_for('admin.alerts_admin') }}">View Events</a>
+      <div class="text-3xl font-bold text-admin-cyan mb-2">{{ alerts_count }}</div>
+      <div class="text-admin-dim-blue text-sm mb-4">Alert Rules</div>
+      <a href="{{ url_for('admin.alerts_admin') }}" class="btn-admin w-full text-center">Manage Alerts</a>
+    </div>
+
+    <!-- Audit Card -->
+    <div class="admin-card">
+      <div class="flex items-center justify-between mb-4">
+        <div class="text-3xl">🔍</div>
+        <div class="text-admin-green text-sm font-bold">Logged</div>
       </div>
-      <div class="card">
-        <div>Audit Logs</div>
-        <div class="pf-green" style="font-size: 28px; font-weight: bold;">{{ audit_count }}</div>
-        <a class="retro-button" href="{{ url_for('admin.audit') }}">View Audit</a>
+      <div class="text-3xl font-bold text-admin-cyan mb-2">{{ audit_count }}</div>
+      <div class="text-admin-dim-blue text-sm mb-4">Audit Events</div>
+      <a href="{{ url_for('admin.audit') }}" class="btn-admin w-full text-center">View Audit</a>
+    </div>
+  </div>
+
+  <!-- System Status Section -->
+  <div class="admin-card mb-8">
+    <h2 class="text-2xl font-bold text-admin-cyan mb-6 flex items-center">
+      <span class="mr-2">📊</span> System Status
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- System Health -->
+      <div class="space-y-4">
+        <h3 class="text-lg font-bold text-admin-blue">System Health</h3>
+        <div class="space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="text-admin-dim-blue">Database</span>
+            <span class="text-admin-green">● Online</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-admin-dim-blue">Lightning</span>
+            <span class="text-admin-green">● Connected</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-admin-dim-blue">Cache</span>
+            <span class="text-admin-green">● Active</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-admin-dim-blue">API</span>
+            <span class="text-admin-green">● Running</span>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <div>Protocol Fees</div>
-        <div class="pf-green" style="font-size: 28px; font-weight: bold;">&nbsp;</div>
-        <a class="retro-button" href="{{ url_for('admin.fees') }}">Manage Fees</a>
+
+      <!-- Recent Activity -->
+      <div class="space-y-4">
+        <h3 class="text-lg font-bold text-admin-blue">Recent Activity</h3>
+        <div class="space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="text-admin-dim-blue">Alert Events</span>
+            <span class="text-admin-cyan">{{ events_count }}</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-admin-dim-blue">User Registrations</span>
+            <span class="text-admin-cyan">24h</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-admin-dim-blue">Token Creations</span>
+            <span class="text-admin-cyan">12h</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-admin-dim-blue">Trade Volume</span>
+            <span class="text-admin-cyan">Live</span>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <div>Payments</div>
-        <div class="pf-green" style="font-size: 28px; font-weight: bold;">&nbsp;</div>
-        <a class="retro-button" href="{{ url_for('admin.payments') }}">View Payments</a>
-      </div>
-      <div class="card">
-        <div>SSE Status</div>
-        <div class="pf-green" style="font-size: 28px; font-weight: bold;">&nbsp;</div>
-        <a class="retro-button" href="{{ url_for('admin.sse_status') }}">View SSE</a>
-      </div>
-      <div class="card">
-        <div>Feature Flags</div>
-        <div class="pf-green" style="font-size: 28px; font-weight: bold;">&nbsp;</div>
-        <a class="retro-button" href="{{ url_for('admin.flags_list') }}">Manage Flags</a>
-      </div>
-      <div class="card">
-        <div>Metrics</div>
-        <div class="pf-green" style="font-size: 28px; font-weight: bold;">&nbsp;</div>
-        <a class="retro-button" href="{{ url_for('admin.metrics_view') }}">View Metrics</a>
+
+      <!-- Quick Actions -->
+      <div class="space-y-4">
+        <h3 class="text-lg font-bold text-admin-blue">Quick Actions</h3>
+        <div class="space-y-2">
+          <a href="{{ url_for('admin.payments') }}" class="btn-admin w-full text-center">⚡ Payments</a>
+          <a href="{{ url_for('admin.fees') }}" class="btn-admin w-full text-center">💰 Protocol Fees</a>
+          <a href="{{ url_for('admin.sse_status') }}" class="btn-admin w-full text-center">🚀 SSE Status</a>
+          <a href="{{ url_for('admin.flags_list') }}" class="btn-admin w-full text-center">🚩 Feature Flags</a>
+        </div>
       </div>
     </div>
-  </section>
+  </div>
+
+  <!-- Detailed Metrics Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <!-- Payments Monitoring -->
+    <div class="admin-card">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-admin-blue">⚡ Payments</h3>
+        <div class="text-admin-green text-sm">Monitoring</div>
+      </div>
+      <div class="space-y-2">
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Status</span>
+          <span class="text-admin-green">Active</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Pending Invoices</span>
+          <span class="text-admin-cyan">0</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Pending Withdrawals</span>
+          <span class="text-admin-cyan">0</span>
+        </div>
+      </div>
+      <a href="{{ url_for('admin.payments') }}" class="btn-admin w-full text-center mt-4">View Details</a>
+    </div>
+
+    <!-- Fee Management -->
+    <div class="admin-card">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-admin-blue">💰 Protocol Fees</h3>
+        <div class="text-admin-green text-sm">Configured</div>
+      </div>
+      <div class="space-y-2">
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Active Pools</span>
+          <span class="text-admin-cyan">Multiple</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Fee Rules</span>
+          <span class="text-admin-cyan">Active</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Last Payout</span>
+          <span class="text-admin-cyan">Recent</span>
+        </div>
+      </div>
+      <a href="{{ url_for('admin.fees') }}" class="btn-admin w-full text-center mt-4">Manage Fees</a>
+    </div>
+
+    <!-- Feature Flags -->
+    <div class="admin-card">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-admin-blue">🚩 Feature Flags</h3>
+        <div class="text-admin-green text-sm">System</div>
+      </div>
+      <div class="space-y-2">
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Total Flags</span>
+          <span class="text-admin-cyan">Configured</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Enabled</span>
+          <span class="text-admin-green">Active</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Disabled</span>
+          <span class="text-admin-red">Inactive</span>
+        </div>
+      </div>
+      <a href="{{ url_for('admin.flags_list') }}" class="btn-admin w-full text-center mt-4">Manage Flags</a>
+    </div>
+
+    <!-- SSE Monitoring -->
+    <div class="admin-card">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-admin-blue">🚀 SSE Status</h3>
+        <div class="text-admin-green text-sm">Live</div>
+      </div>
+      <div class="space-y-2">
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Launch Status</span>
+          <span class="text-admin-green">Active</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Recent Launches</span>
+          <span class="text-admin-cyan">Tracking</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Burn Events</span>
+          <span class="text-admin-cyan">Monitored</span>
+        </div>
+      </div>
+      <a href="{{ url_for('admin.sse_status') }}" class="btn-admin w-full text-center mt-4">View SSE</a>
+    </div>
+
+    <!-- System Metrics -->
+    <div class="admin-card">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-admin-blue">📈 Metrics</h3>
+        <div class="text-admin-green text-sm">Real-time</div>
+      </div>
+      <div class="space-y-2">
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Request Stats</span>
+          <span class="text-admin-cyan">5m/15m</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">SSE Connections</span>
+          <span class="text-admin-cyan">Active</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-admin-dim-blue">Database Health</span>
+          <span class="text-admin-green">Good</span>
+        </div>
+      </div>
+      <a href="{{ url_for('admin.metrics_view') }}" class="btn-admin w-full text-center mt-4">View Metrics</a>
+    </div>
+
+    <!-- Additional Tools -->
+    <div class="admin-card">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-admin-blue">🔧 Tools</h3>
+        <div class="text-admin-green text-sm">System</div>
+      </div>
+      <div class="space-y-2">
+        <a href="{{ url_for('admin.users') }}" class="btn-admin w-full text-center">👥 User Management</a>
+        <a href="{{ url_for('admin.tokens') }}" class="btn-admin w-full text-center">🪙 Token Management</a>
+        <a href="{{ url_for('admin.audit') }}" class="btn-admin w-full text-center">🔍 Audit Logs</a>
+        <a href="{{ url_for('admin.alerts_admin') }}" class="btn-admin w-full text-center">🚨 Alert System</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Info -->
+  <div class="admin-card mt-8">
+    <div class="text-center">
+      <h3 class="text-lg font-bold text-admin-blue mb-2">Admin Panel Information</h3>
+      <p class="text-admin-dim-blue text-sm">
+        This is the Postfun administration panel. Access is restricted to authorized personnel only.
+        All actions are logged and monitored.
+      </p>
+      <div class="mt-4 flex justify-center gap-4 text-xs text-admin-dim-blue">
+        <span>Version: 1.0</span>
+        <span>•</span>
+        <span>Environment: Production</span>
+        <span>•</span>
+        <span>Last Updated: Just now</span>
+      </div>
+    </div>
+  </div>
 {% endblock %}

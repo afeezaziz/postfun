@@ -1,5 +1,9 @@
-{% extends 'base.html' %}
+{% extends 'admin/base.html' %}
 {% block title %}Admin · Payments | Postfun{% endblock %}
+{% block breadcrumb %}
+  <span class="text-admin-cyan">/</span>
+  <a href="{{ url_for('admin.payments') }}" class="text-admin-blue hover:text-admin-cyan">Payments</a>
+{% endblock %}
 {% block content %}
   <section class="card">
     <h1>Payments & Reconciliation</h1>
@@ -45,31 +49,51 @@
       </div>
     </div>
 
-    <h2 style="margin-top:16px;">Duplicate Idempotency Keys Across Users</h2>
-    {% if not dupes %}
-      <div class="pf-dim">None detected</div>
-    {% else %}
-      <div class="pf-table-wrap">
-        <table class="pf-table">
-          <thead>
-            <tr>
-              <th>Scope</th>
-              <th>Idempotency Key</th>
-              <th>Distinct Users</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in dupes %}
-              <tr>
-                <td><code>{{ row[0] }}</code></td>
-                <td><code>{{ row[1][:10] }}…</code></td>
-                <td>{{ row[2] }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <div class="admin-table-container">
+      <div class="admin-table-header">
+        <div class="admin-table-title">Duplicate Idempotency Keys Across Users</div>
+        <div class="admin-table-stats">
+          <span class="admin-stat-badge {{ 'admin-badge-warning' if dupes else 'admin-badge-success' }}">
+            {{ dupes|length }} Duplicates
+          </span>
+        </div>
       </div>
-    {% endif %}
+
+      {% if not dupes %}
+        <div class="admin-empty-state">
+          <div class="admin-empty-icon">✅</div>
+          <div class="admin-empty-text">No duplicates detected</div>
+        </div>
+      {% else %}
+        <div class="admin-table-wrapper">
+          <table class="admin-data-table" id="dupesTable">
+            <thead>
+              <tr>
+                <th class="sortable" data-column="scope">Scope <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="key">Idempotency Key <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="users">Distinct Users <span class="sort-arrow">↕</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in dupes %}
+                <tr class="admin-warning-row">
+                  <td><span class="admin-badge id-badge">{{ row[0] }}</span></td>
+                  <td>
+                    <div class="admin-idempotency-key">
+                      <code class="admin-code">{{ row[1][:16] }}…{{ row[1][-4:] }}</code>
+                      <button class="admin-copy-btn" onclick="copyToClipboard('{{ row[1] }}')" title="Copy full key">📋</button>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="admin-status-badge admin-badge-warning">{{ row[2] }}</span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
 
     <h2 style="margin-top:16px;">Admin Tools</h2>
     <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
@@ -88,34 +112,49 @@
           </form>
         </div>
       </div>
-      <div class="card">
-        <h3>Negative Balances (top 50)</h3>
+      <div class="admin-table-container">
+        <div class="admin-table-header">
+          <div class="admin-table-title">Negative Balances (top 50)</div>
+          <div class="admin-table-stats">
+            <span class="admin-stat-badge {{ 'admin-badge-danger' if negative_items else 'admin-badge-success' }}">
+              {{ negative_items|length }} Issues
+            </span>
+          </div>
+        </div>
+
         {% if not negative_items %}
-          <div class="pf-dim">None</div>
+          <div class="admin-empty-state">
+            <div class="admin-empty-icon">✅</div>
+            <div class="admin-empty-text">No negative balances</div>
+          </div>
         {% else %}
-          <div class="pf-table-wrap">
-            <table class="pf-table">
+          <div class="admin-table-wrapper">
+            <table class="admin-data-table" id="negativeBalancesTable">
               <thead>
                 <tr>
-                  <th>User</th>
-                  <th>Asset</th>
-                  <th>Balance</th>
+                  <th class="sortable" data-column="user">User <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="asset">Asset <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="balance">Balance <span class="sort-arrow">↕</span></th>
                   <th>Adjust</th>
                 </tr>
               </thead>
               <tbody>
                 {% for b in negative_items %}
-                  <tr>
-                    <td>{{ b.user_id }}</td>
-                    <td>{{ b.asset }}</td>
-                    <td class="pf-danger">{{ b.balance_sats }}</td>
+                  <tr class="admin-negative-row">
+                    <td><span class="admin-badge user-badge">{{ b.user_id }}</span></td>
                     <td>
-                      <form method="POST" action="{{ url_for('admin.payments_balance_adjust') }}" style="display:flex; gap:6px;">
+                      <span class="admin-asset">{{ b.asset }}</span>
+                    </td>
+                    <td>
+                      <span class="admin-balance admin-balance-negative">{{ b.balance_sats }}</span>
+                    </td>
+                    <td>
+                      <form method="POST" action="{{ url_for('admin.payments_balance_adjust') }}" class="admin-balance-form">
                         <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
                         <input type="hidden" name="user_id" value="{{ b.user_id }}" />
-                        <input class="retro-input" type="number" name="delta_sats" placeholder="delta sats" style="width:120px;" />
-                        <input class="retro-input" type="text" name="note" placeholder="note" style="width:120px;" />
-                        <button class="retro-button" type="submit">Apply</button>
+                        <input class="admin-input" type="number" name="delta_sats" placeholder="delta sats" />
+                        <input class="admin-input" type="text" name="note" placeholder="note" />
+                        <button class="admin-btn admin-btn-primary" type="submit">Apply</button>
                       </form>
                     </td>
                   </tr>
@@ -232,134 +271,645 @@
       </div>
     </form>
 
-    {% if not logs_p.items %}
-      <div class="pf-dim">No logs.</div>
-    {% else %}
-      <div class="pf-table-wrap">
-        <table class="pf-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Action</th>
-              <th>Success</th>
-              <th>Status</th>
-              <th>Ref</th>
-              <th>Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for log in logs_p.items %}
-              <tr>
-                <td>{{ log.id }}</td>
-                <td>{{ log.action }}</td>
-                <td>{{ 'Yes' if log.success else 'No' }}</td>
-                <td>{{ log.response_status or '—' }}</td>
-                <td>{{ (log.ref_type or '') ~ ':' ~ (log.ref_id or '') }}</td>
-                <td>{{ log.created_at }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <div class="pf-pagination">
-        {% set prev_url = url_for('admin.payments', page=logs_p.prev_num, action=action, success=success_q, ref_type=ref_type, q=q, start=start, end=end) if logs_p.has_prev else None %}
-        {% set next_url = url_for('admin.payments', page=logs_p.next_num, action=action, success=success_q, ref_type=ref_type, q=q, start=start, end=end) if logs_p.has_next else None %}
-        <div>Page {{ logs_p.page }} / {{ logs_p.pages or 1 }}</div>
-        <div style="display:flex; gap:8px;">
-          <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
-          <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+    <div class="admin-table-container">
+      <div class="admin-table-header">
+        <div class="admin-table-title">Provider Logs</div>
+        <div class="admin-table-stats">
+          <span class="admin-stat-badge">{{ logs_p.total }} Total Logs</span>
+          <span class="admin-stat-badge">{{ logs_p.page }} / {{ logs_p.pages or 1 }} Pages</span>
         </div>
       </div>
-    {% endif %}
 
-    <h2 style="margin-top:16px;">Recent Invoices</h2>
-    {% if not invoices %}
-      <div class="pf-dim">No invoices</div>
-    {% else %}
-      <div class="pf-table-wrap">
-        <table class="pf-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>User</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th>Credited</th>
-              <th>Hash</th>
-              <th>Created</th>
-              <th>Paid</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for inv in invoices %}
+      {% if not logs_p.items %}
+        <div class="admin-empty-state">
+          <div class="admin-empty-icon">📝</div>
+          <div class="admin-empty-text">No logs found</div>
+        </div>
+      {% else %}
+        <div class="admin-table-wrapper">
+          <table class="admin-data-table" id="logsTable">
+            <thead>
               <tr>
-                <td><code>{{ inv.id }}</code></td>
-                <td>{{ inv.user_id }}</td>
-                <td>{{ inv.amount_sats }}</td>
-                <td>{{ inv.status }}</td>
-                <td>{{ 'Yes' if inv.credited else 'No' }}</td>
-                <td><code>{{ (inv.payment_hash or '')[:10] }}…</code></td>
-                <td>{{ inv.created_at }}</td>
-                <td>{{ inv.paid_at or '—' }}</td>
-                <td>
-                  <form method="POST" action="{{ url_for('admin.payments_repoll') }}">
-                    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-                    <input type="hidden" name="type" value="invoice" />
-                    <input type="hidden" name="id" value="{{ inv.id }}" />
-                    <button class="retro-button" type="submit">Repoll</button>
-                  </form>
-                </td>
+                <th class="sortable" data-column="id">ID <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="action">Action <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="success">Success <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="status">Status <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="ref">Ref <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="time">Time <span class="sort-arrow">↕</span></th>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% endif %}
+            </thead>
+            <tbody>
+              {% for log in logs_p.items %}
+                <tr {% if not log.success %}class="admin-error-row"{% endif %}>
+                  <td><span class="admin-badge id-badge">{{ log.id }}</span></td>
+                  <td>
+                    <span class="admin-action">{{ log.action }}</span>
+                  </td>
+                  <td>
+                    <span class="admin-status-badge {% if log.success %}admin-badge-success{% else %}admin-badge-danger{% endif %}">
+                      {{ 'Yes' if log.success else 'No' }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="admin-status">{{ log.response_status or '—' }}</span>
+                  </td>
+                  <td>
+                    <div class="admin-ref">
+                      <span class="admin-ref-type">{{ log.ref_type or '—' }}</span>
+                      {% if log.ref_id %}
+                        <span class="admin-ref-id">:{{ log.ref_id[:8] }}…</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="admin-time">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else '—' }}</div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
 
-    <h2 style="margin-top:16px;">Recent Withdrawals</h2>
-    {% if not withdrawals %}
-      <div class="pf-dim">No withdrawals</div>
-    {% else %}
-      <div class="pf-table-wrap">
-        <table class="pf-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>User</th>
-              <th>Amount</th>
-              <th>Fee</th>
-              <th>Status</th>
-              <th>Hash</th>
-              <th>Created</th>
-              <th>Processed</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for w in withdrawals %}
-              <tr>
-                <td><code>{{ w.id }}</code></td>
-                <td>{{ w.user_id }}</td>
-                <td>{{ w.amount_sats }}</td>
-                <td>{{ w.fee_sats or '—' }}</td>
-                <td>{{ w.status }}</td>
-                <td><code>{{ (w.payment_hash or '')[:10] }}…</code></td>
-                <td>{{ w.created_at }}</td>
-                <td>{{ w.processed_at or '—' }}</td>
-                <td>
-                  <form method="POST" action="{{ url_for('admin.payments_repoll') }}">
-                    <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-                    <input type="hidden" name="type" value="withdrawal" />
-                    <input type="hidden" name="id" value="{{ w.id }}" />
-                    <button class="retro-button" type="submit">Repoll</button>
-                  </form>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <div class="admin-pagination">
+          {% set prev_url = url_for('admin.payments', page=logs_p.prev_num, action=action, success=success_q, ref_type=ref_type, q=q, start=start, end=end) if logs_p.has_prev else None %}
+          {% set next_url = url_for('admin.payments', page=logs_p.next_num, action=action, success=success_q, ref_type=ref_type, q=q, start=start, end=end) if logs_p.has_next else None %}
+
+          <div class="admin-pagination-info">
+            <span class="admin-pagination-text">Page {{ logs_p.page }} of {{ logs_p.pages or 1 }}</span>
+            <span class="admin-pagination-total">({{ logs_p.total }} total logs)</span>
+          </div>
+
+          <div class="admin-pagination-controls">
+            {% if prev_url %}
+              <a href="{{ prev_url }}" class="admin-pagination-btn admin-pagination-prev">
+                ← Previous
+              </a>
+            {% else %}
+              <span class="admin-pagination-btn admin-pagination-prev admin-pagination-disabled">
+                ← Previous
+              </span>
+            {% endif %}
+
+            <div class="admin-pagination-pages">
+              {% set start_page = logs_p.page - 2 %}
+              {% set end_page = logs_p.page + 2 %}
+
+              {% if start_page < 1 %}
+                {% set start_page = 1 %}
+              {% endif %}
+
+              {% if end_page > logs_p.pages %}
+                {% set end_page = logs_p.pages %}
+              {% endif %}
+
+              {% for p in range(start_page, end_page + 1) %}
+                {% if p == logs_p.page %}
+                  <span class="admin-pagination-number admin-pagination-current">{{ p }}</span>
+                {% else %}
+                  <a href="{{ url_for('admin.payments', page=p, action=action, success=success_q, ref_type=ref_type, q=q, start=start, end=end) }}" class="admin-pagination-number">{{ p }}</a>
+                {% endif %}
+              {% endfor %}
+            </div>
+
+            {% if next_url %}
+              <a href="{{ next_url }}" class="admin-pagination-btn admin-pagination-next">
+                Next →
+              </a>
+            {% else %}
+              <span class="admin-pagination-btn admin-pagination-next admin-pagination-disabled">
+                Next →
+              </span>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="admin-table-container">
+      <div class="admin-table-header">
+        <div class="admin-table-title">Recent Invoices</div>
+        <div class="admin-table-stats">
+          <span class="admin-stat-badge">{{ invoices|length }} Invoices</span>
+        </div>
       </div>
-    {% endif %}
+
+      {% if not invoices %}
+        <div class="admin-empty-state">
+          <div class="admin-empty-icon">📄</div>
+          <div class="admin-empty-text">No invoices found</div>
+        </div>
+      {% else %}
+        <div class="admin-table-wrapper">
+          <table class="admin-data-table" id="invoicesTable">
+            <thead>
+              <tr>
+                <th class="sortable" data-column="id">ID <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="user">User <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="amount">Amount <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="status">Status <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="credited">Credited <span class="sort-arrow">↕</span></th>
+                <th>Hash</th>
+                <th class="sortable" data-column="created">Created <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="paid">Paid <span class="sort-arrow">↕</span></th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for inv in invoices %}
+                <tr {% if inv.status == 'paid' and not inv.credited %}class="admin-warning-row"{% endif %}>
+                  <td><span class="admin-badge id-badge">{{ inv.id }}</span></td>
+                  <td><span class="admin-badge user-badge">{{ inv.user_id }}</span></td>
+                  <td>
+                    <span class="admin-amount">{{ inv.amount_sats }}</span>
+                    <span class="admin-unit">sats</span>
+                  </td>
+                  <td>
+                    <span class="admin-status-badge {% if inv.status == 'paid' %}admin-badge-success{% elif inv.status == 'expired' %}admin-badge-warning{% else %}admin-badge-inactive{% endif %}">
+                      {{ inv.status }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="admin-status-badge {% if inv.credited %}admin-badge-success{% else %}admin-badge-warning{% endif %}">
+                      {{ 'Yes' if inv.credited else 'No' }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="admin-hash">
+                      {% if inv.payment_hash %}
+                        <code class="admin-code">{{ inv.payment_hash[:16] }}…{{ inv.payment_hash[-4:] }}</code>
+                        <button class="admin-copy-btn" onclick="copyToClipboard('{{ inv.payment_hash }}')" title="Copy full hash">📋</button>
+                      {% else %}
+                        <span class="admin-empty">—</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="admin-time">{{ inv.created_at.strftime('%Y-%m-%d %H:%M:%S') if inv.created_at else '—' }}</div>
+                  </td>
+                  <td>
+                    <div class="admin-time">{{ inv.paid_at.strftime('%Y-%m-%d %H:%M:%S') if inv.paid_at else '—' }}</div>
+                  </td>
+                  <td>
+                    <div class="admin-actions">
+                      <form method="POST" action="{{ url_for('admin.payments_repoll') }}" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                        <input type="hidden" name="type" value="invoice" />
+                        <input type="hidden" name="id" value="{{ inv.id }}" />
+                        <button class="admin-btn admin-btn-primary" type="submit" title="Repoll invoice">🔄</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="admin-table-container">
+      <div class="admin-table-header">
+        <div class="admin-table-title">Recent Withdrawals</div>
+        <div class="admin-table-stats">
+          <span class="admin-stat-badge">{{ withdrawals|length }} Withdrawals</span>
+        </div>
+      </div>
+
+      {% if not withdrawals %}
+        <div class="admin-empty-state">
+          <div class="admin-empty-icon">💸</div>
+          <div class="admin-empty-text">No withdrawals found</div>
+        </div>
+      {% else %}
+        <div class="admin-table-wrapper">
+          <table class="admin-data-table" id="withdrawalsTable">
+            <thead>
+              <tr>
+                <th class="sortable" data-column="id">ID <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="user">User <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="amount">Amount <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="fee">Fee <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="status">Status <span class="sort-arrow">↕</span></th>
+                <th>Hash</th>
+                <th class="sortable" data-column="created">Created <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="processed">Processed <span class="sort-arrow">↕</span></th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for w in withdrawals %}
+                <tr {% if w.status == 'completed' %}class="admin-success-row"{% elif w.status == 'failed' %}class="admin-error-row"{% endif %}>
+                  <td><span class="admin-badge id-badge">{{ w.id }}</span></td>
+                  <td><span class="admin-badge user-badge">{{ w.user_id }}</span></td>
+                  <td>
+                    <span class="admin-amount">{{ w.amount_sats }}</span>
+                    <span class="admin-unit">sats</span>
+                  </td>
+                  <td>
+                    {% if w.fee_sats %}
+                      <span class="admin-fee">{{ w.fee_sats }}</span>
+                      <span class="admin-unit">sats</span>
+                    {% else %}
+                      <span class="admin-empty">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <span class="admin-status-badge {% if w.status == 'completed' %}admin-badge-success{% elif w.status == 'failed' %}admin-badge-danger{% elif w.status == 'processing' %}admin-badge-warning{% else %}admin-badge-inactive{% endif %}">
+                      {{ w.status }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="admin-hash">
+                      {% if w.payment_hash %}
+                        <code class="admin-code">{{ w.payment_hash[:16] }}…{{ w.payment_hash[-4:] }}</code>
+                        <button class="admin-copy-btn" onclick="copyToClipboard('{{ w.payment_hash }}')" title="Copy full hash">📋</button>
+                      {% else %}
+                        <span class="admin-empty">—</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="admin-time">{{ w.created_at.strftime('%Y-%m-%d %H:%M:%S') if w.created_at else '—' }}</div>
+                  </td>
+                  <td>
+                    <div class="admin-time">{{ w.processed_at.strftime('%Y-%m-%d %H:%M:%S') if w.processed_at else '—' }}</div>
+                  </td>
+                  <td>
+                    <div class="admin-actions">
+                      <form method="POST" action="{{ url_for('admin.payments_repoll') }}" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                        <input type="hidden" name="type" value="withdrawal" />
+                        <input type="hidden" name="id" value="{{ w.id }}" />
+                        <button class="admin-btn admin-btn-primary" type="submit" title="Repoll withdrawal">🔄</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
   </section>
+
+  <style>
+    /* Payment-specific styles */
+    .admin-warning-row {
+      background: rgba(255, 165, 0, 0.1);
+    }
+
+    .admin-warning-row:hover {
+      background: rgba(255, 165, 0, 0.2);
+    }
+
+    .admin-error-row {
+      background: rgba(255, 0, 64, 0.1);
+    }
+
+    .admin-error-row:hover {
+      background: rgba(255, 0, 64, 0.2);
+    }
+
+    .admin-negative-row {
+      background: rgba(255, 0, 64, 0.1);
+    }
+
+    .admin-negative-row:hover {
+      background: rgba(255, 0, 64, 0.2);
+    }
+
+    .admin-success-row {
+      background: rgba(0, 255, 0, 0.1);
+    }
+
+    .admin-success-row:hover {
+      background: rgba(0, 255, 0, 0.2);
+    }
+
+    .admin-idempotency-key {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .admin-asset {
+      color: var(--admin-cyan);
+      font-weight: bold;
+    }
+
+    .admin-balance {
+      font-family: monospace;
+      font-weight: bold;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+    }
+
+    .admin-balance-negative {
+      background: rgba(255, 0, 64, 0.2);
+      color: var(--admin-red);
+      border: 1px solid var(--admin-red);
+    }
+
+    .admin-balance-form {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .admin-action {
+      font-family: monospace;
+      color: var(--admin-blue);
+    }
+
+    .admin-status {
+      font-family: monospace;
+      font-size: 0.875rem;
+    }
+
+    .admin-ref {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .admin-ref-type {
+      color: var(--admin-cyan);
+      font-weight: bold;
+    }
+
+    .admin-ref-id {
+      color: var(--admin-dim-blue);
+      font-family: monospace;
+      font-size: 0.875rem;
+    }
+
+    .admin-amount {
+      color: var(--admin-green);
+      font-weight: bold;
+      font-family: monospace;
+    }
+
+    .admin-unit {
+      color: var(--admin-dim-blue);
+      font-size: 0.875rem;
+      margin-left: 0.25rem;
+    }
+
+    .admin-fee {
+      color: var(--admin-blue);
+      font-family: monospace;
+    }
+
+    .admin-hash {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .admin-time {
+      font-family: monospace;
+      font-size: 0.875rem;
+      color: var(--admin-blue);
+    }
+
+    .admin-badge.user-badge {
+      background: rgba(0, 255, 255, 0.2);
+      border-color: var(--admin-cyan);
+      color: var(--admin-cyan);
+    }
+
+    .admin-badge-danger {
+      background: rgba(255, 0, 64, 0.2);
+      border-color: var(--admin-red);
+      color: var(--admin-red);
+    }
+
+    /* Stats dashboard improvements */
+    .admin-dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .admin-stat-card {
+      background: var(--admin-black);
+      border: 2px solid var(--admin-blue);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      text-align: center;
+    }
+
+    .admin-stat-label {
+      color: var(--admin-blue);
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .admin-stat-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      margin-bottom: 1rem;
+    }
+
+    .admin-stat-value.success {
+      color: var(--admin-green);
+    }
+
+    .admin-stat-value.warning {
+      color: #ffa500;
+    }
+
+    .admin-stat-value.danger {
+      color: var(--admin-red);
+    }
+
+    .admin-stat-details {
+      font-size: 0.75rem;
+      color: var(--admin-dim-blue);
+      margin-bottom: 1rem;
+    }
+
+    /* Mobile responsiveness */
+    @media (max-width: 768px) {
+      .admin-balance-form {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .admin-hash {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+      }
+
+      .admin-idempotency-key {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .admin-amount,
+      .admin-fee {
+        font-size: 0.875rem;
+      }
+
+      .admin-unit {
+        font-size: 0.75rem;
+      }
+
+      .admin-time {
+        font-size: 0.75rem;
+      }
+
+      .admin-stat-card {
+        padding: 1rem;
+      }
+
+      .admin-stat-value {
+        font-size: 1.25rem;
+      }
+    }
+  </style>
+
+  <script>
+    // Sorting functionality for all payment tables
+    document.addEventListener('DOMContentLoaded', function() {
+      // Function to add sorting to any table
+      function addSorting(tableId, dataExtractor) {
+        const table = document.getElementById(tableId);
+        if (!table) return;
+
+        const headers = table.querySelectorAll('th.sortable');
+        let sortColumn = null;
+        let sortDirection = 'asc';
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const tableData = rows.map(row => dataExtractor(row));
+
+        headers.forEach(header => {
+          header.addEventListener('click', () => {
+            const column = header.dataset.column;
+
+            // Update sort direction
+            if (sortColumn === column) {
+              sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+              sortColumn = column;
+              sortDirection = 'asc';
+            }
+
+            // Update header styles
+            headers.forEach(h => {
+              h.classList.remove('sort-asc', 'sort-desc');
+            });
+            header.classList.add(sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+
+            // Sort the data
+            sortTable(column, sortDirection);
+          });
+        });
+
+        function sortTable(column, direction) {
+          const sortedData = [...tableData].sort((a, b) => {
+            let aVal = a[column];
+            let bVal = b[column];
+
+            // Handle numeric values
+            if (typeof aVal === 'number' && typeof bVal === 'number') {
+              return direction === 'asc' ? aVal - bVal : bVal - aVal;
+            }
+
+            // Handle string values
+            aVal = (aVal || '').toString().toLowerCase();
+            bVal = (bVal || '').toString().toLowerCase();
+
+            if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+            return 0;
+          });
+
+          // Reorder table rows
+          const tbody = table.querySelector('tbody');
+          sortedData.forEach(item => {
+            tbody.appendChild(item.element);
+          });
+        }
+      }
+
+      // Add sorting to dupes table
+      addSorting('dupesTable', (row) => ({
+        element: row,
+        scope: row.querySelector('td:first-child .admin-badge').textContent.trim(),
+        key: row.querySelector('.admin-code').textContent.trim(),
+        users: parseInt(row.querySelector('td:last-child .admin-status-badge').textContent.trim())
+      }));
+
+      // Add sorting to negative balances table
+      addSorting('negativeBalancesTable', (row) => ({
+        element: row,
+        user: parseInt(row.querySelector('td:first-child .admin-badge').textContent.trim()),
+        asset: row.querySelector('.admin-asset').textContent.trim(),
+        balance: parseInt(row.querySelector('.admin-balance').textContent.trim())
+      }));
+
+      // Add sorting to logs table
+      addSorting('logsTable', (row) => ({
+        element: row,
+        id: parseInt(row.querySelector('td:first-child .admin-badge').textContent.trim()),
+        action: row.querySelector('.admin-action').textContent.trim(),
+        success: row.querySelector('td:nth-child(3) .admin-status-badge').textContent.trim(),
+        status: row.querySelector('.admin-status').textContent.trim(),
+        ref: row.querySelector('.admin-ref').textContent.trim(),
+        time: row.querySelector('.admin-time').textContent.trim()
+      }));
+
+      // Add sorting to invoices table
+      addSorting('invoicesTable', (row) => ({
+        element: row,
+        id: parseInt(row.querySelector('td:first-child .admin-badge').textContent.trim()),
+        user: parseInt(row.querySelector('td:nth-child(2) .admin-badge').textContent.trim()),
+        amount: parseInt(row.querySelector('.admin-amount').textContent.trim()),
+        status: row.querySelector('td:nth-child(4) .admin-status-badge').textContent.trim(),
+        credited: row.querySelector('td:nth-child(5) .admin-status-badge').textContent.trim(),
+        created: row.querySelector('td:nth-child(7) .admin-time').textContent.trim(),
+        paid: row.querySelector('td:nth-child(8) .admin-time').textContent.trim()
+      }));
+
+      // Add sorting to withdrawals table
+      addSorting('withdrawalsTable', (row) => ({
+        element: row,
+        id: parseInt(row.querySelector('td:first-child .admin-badge').textContent.trim()),
+        user: parseInt(row.querySelector('td:nth-child(2) .admin-badge').textContent.trim()),
+        amount: parseInt(row.querySelector('td:nth-child(3) .admin-amount').textContent.trim()),
+        fee: row.querySelector('.admin-fee').textContent.trim() || '0',
+        status: row.querySelector('td:nth-child(5) .admin-status-badge').textContent.trim(),
+        created: row.querySelector('td:nth-child(7) .admin-time').textContent.trim(),
+        processed: row.querySelector('td:nth-child(8) .admin-time').textContent.trim()
+      }));
+    });
+
+    // Copy to clipboard functionality
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        const button = event.target;
+        const originalText = button.textContent;
+        button.textContent = '✓';
+        button.style.background = 'var(--admin-green)';
+        button.style.color = 'var(--admin-black)';
+
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.background = '';
+          button.style.color = '';
+        }, 1000);
+      }).catch(err => {
+        console.error('Failed to copy: ', err);
+      });
+    }
+  </script>
 {% endblock %}

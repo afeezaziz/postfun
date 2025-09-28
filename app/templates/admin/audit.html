@@ -1,9 +1,13 @@
-{% extends 'base.html' %}
+{% extends 'admin/base.html' %}
 {% block title %}Admin · Audit Logs | Postfun{% endblock %}
+{% block breadcrumb %}
+  <span class="text-admin-cyan">/</span>
+  <a href="{{ url_for('admin.audit') }}" class="text-admin-blue hover:text-admin-cyan">Audit Logs</a>
+{% endblock %}
 {% block content %}
   <section class="card">
     <h1>Audit Logs</h1>
-    <form method="GET" action="{{ url_for('admin.audit') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; margin-bottom: 12px; gap: 8px;">
+    <form method="GET" action="{{ url_for('admin.audit') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; margin-bottom: 12px;">
       <div>
         <label>User ID</label>
         <input class="retro-input" type="text" name="user_id" value="{{ user_id }}" />
@@ -28,47 +32,285 @@
           {% endfor %}
         </select>
       </div>
-      <div style="display:flex; gap:8px; align-items: center;">
+      <div>
         <button class="retro-button" type="submit">Filter</button>
-        <a class="retro-button" href="{{ url_for('admin.audit_export', user_id=user_id, action=action, start=start, end=end) }}">Export CSV</a>
       </div>
     </form>
+    <div style="margin-bottom: 12px;">
+      <a class="retro-button" href="{{ url_for('admin.audit_export', user_id=user_id, action=action, start=start, end=end) }}">Export CSV</a>
+    </div>
     {% if not logs_p.items %}
-      <div>No audit entries.</div>
-    {% else %}
-      <div class="pf-table-wrap">
-        <table class="pf-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>User</th>
-              <th>Action</th>
-              <th>Meta</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for log in logs_p.items %}
-              <tr>
-                <td>{{ log.id }}</td>
-                <td>{{ log.user_id or '—' }}</td>
-                <td>{{ log.action }}</td>
-                <td><code style="white-space: pre-wrap;">{{ log.meta or '—' }}</code></td>
-                <td>{{ log.created_at }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="admin-empty-state">
+        <div class="admin-empty-icon">🔍</div>
+        <div class="admin-empty-text">No audit entries found.</div>
       </div>
-      <div class="pf-pagination">
+    {% else %}
+      <div class="admin-table-container">
+        <div class="admin-table-header">
+          <div class="admin-table-title">Audit Logs Management</div>
+          <div class="admin-table-stats">
+            <span class="admin-stat-badge">{{ logs_p.total }} Total Logs</span>
+            <span class="admin-stat-badge">{{ logs_p.page }} / {{ logs_p.pages or 1 }} Pages</span>
+          </div>
+        </div>
+
+        <div class="admin-table-wrapper">
+          <table class="admin-data-table" id="auditTable">
+            <thead>
+              <tr>
+                <th class="sortable" data-column="id">ID <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="user">User ID <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="action">Action <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="meta">Meta <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="created">Created <span class="sort-arrow">↕</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for log in logs_p.items %}
+                <tr data-log-id="{{ log.id }}">
+                  <td><span class="admin-badge id-badge">{{ log.id }}</span></td>
+                  <td>
+                    <div class="admin-user-id">
+                      {% if log.user_id %}
+                        <span class="admin-user-id-value">{{ log.user_id }}</span>
+                      {% else %}
+                        <span class="admin-empty">—</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="admin-action-text">{{ log.action }}</div>
+                  </td>
+                  <td>
+                    <div class="admin-meta-data">
+                      {% if log.meta %}
+                        <code class="admin-code">{{ log.meta }}</code>
+                        <button class="admin-copy-btn" onclick="copyToClipboard('{{ log.meta | replace("'", "\\'") | replace('"', '\\"') }}')" title="Copy meta data">📋</button>
+                      {% else %}
+                        <span class="admin-empty">—</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="admin-date">{{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') if log.created_at else '—' }}</div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-pagination">
         {% set prev_url = url_for('admin.audit', page=logs_p.prev_num, user_id=user_id, action=action, start=start, end=end, per=request.args.get('per')) if logs_p.has_prev else None %}
         {% set next_url = url_for('admin.audit', page=logs_p.next_num, user_id=user_id, action=action, start=start, end=end, per=request.args.get('per')) if logs_p.has_next else None %}
-        <div>Page {{ logs_p.page }} / {{ logs_p.pages or 1 }}</div>
-        <div style="display:flex; gap:8px;">
-          <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
-          <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+
+        <div class="admin-pagination-info">
+          <span class="admin-pagination-text">Page {{ logs_p.page }} of {{ logs_p.pages or 1 }}</span>
+          <span class="admin-pagination-total">({{ logs_p.total }} total logs)</span>
+        </div>
+
+        <div class="admin-pagination-controls">
+          {% if prev_url %}
+            <a href="{{ prev_url }}" class="admin-pagination-btn admin-pagination-prev">
+              ← Previous
+            </a>
+          {% else %}
+            <span class="admin-pagination-btn admin-pagination-prev admin-pagination-disabled">
+              ← Previous
+            </span>
+          {% endif %}
+
+          <div class="admin-pagination-pages">
+            {% set start_page = logs_p.page - 2 %}
+            {% set end_page = logs_p.page + 2 %}
+
+            {% if start_page < 1 %}
+              {% set start_page = 1 %}
+            {% endif %}
+
+            {% if end_page > logs_p.pages %}
+              {% set end_page = logs_p.pages %}
+            {% endif %}
+
+            {% for p in range(start_page, end_page + 1) %}
+              {% if p == logs_p.page %}
+                <span class="admin-pagination-number admin-pagination-current">{{ p }}</span>
+              {% else %}
+                <a href="{{ url_for('admin.audit', page=p, user_id=user_id, action=action, start=start, end=end, per=request.args.get('per')) }}" class="admin-pagination-number">{{ p }}</a>
+              {% endif %}
+            {% endfor %}
+          </div>
+
+          {% if next_url %}
+            <a href="{{ next_url }}" class="admin-pagination-btn admin-pagination-next">
+              Next →
+            </a>
+          {% else %}
+            <span class="admin-pagination-btn admin-pagination-next admin-pagination-disabled">
+              Next →
+            </span>
+          {% endif %}
         </div>
       </div>
     {% endif %}
   </section>
+
+  <style>
+    /* Audit-specific styles */
+    .admin-user-id {
+      font-family: monospace;
+    }
+
+    .admin-user-id-value {
+      color: var(--admin-blue);
+    }
+
+    .admin-action-text {
+      font-weight: bold;
+      color: var(--admin-cyan);
+    }
+
+    .admin-meta-data {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .admin-meta-data .admin-code {
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: var(--admin-green);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .admin-meta-data:hover .admin-code {
+      white-space: normal;
+      word-wrap: break-word;
+      max-width: none;
+    }
+
+    /* Mobile responsiveness for audit-specific elements */
+    @media (max-width: 768px) {
+      .admin-meta-data {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .admin-meta-data .admin-code {
+        max-width: 100%;
+      }
+    }
+  </style>
+
+  <script>
+    // Sorting functionality for audit data table
+    document.addEventListener('DOMContentLoaded', function() {
+      const table = document.getElementById('auditTable');
+      if (!table) return;
+
+      const headers = table.querySelectorAll('th.sortable');
+      let sortColumn = null;
+      let sortDirection = 'asc';
+
+      // Initialize table data
+      const rows = Array.from(table.querySelectorAll('tbody tr'));
+      const tableData = rows.map(row => ({
+        element: row,
+        id: parseInt(row.querySelector('td:first-child .admin-badge').textContent.trim()),
+        user: row.querySelector('td:nth-child(2)').textContent.trim(),
+        action: row.querySelector('td:nth-child(3)').textContent.trim(),
+        meta: row.querySelector('td:nth-child(4) .admin-code')?.textContent.trim() || '',
+        created: row.querySelector('td:nth-child(5)').textContent.trim()
+      }));
+
+      headers.forEach(header => {
+        header.addEventListener('click', () => {
+          const column = header.dataset.column;
+
+          // Update sort direction
+          if (sortColumn === column) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortColumn = column;
+            sortDirection = 'asc';
+          }
+
+          // Update header styles
+          headers.forEach(h => {
+            h.classList.remove('sort-asc', 'sort-desc');
+          });
+          header.classList.add(sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+
+          // Sort the data
+          sortTable(column, sortDirection);
+        });
+      });
+
+      function sortTable(column, direction) {
+        const sortedData = [...tableData].sort((a, b) => {
+          let aVal, bVal;
+
+          switch (column) {
+            case 'id':
+              aVal = a.id;
+              bVal = b.id;
+              break;
+            case 'user':
+              aVal = a.user || '';
+              bVal = b.user || '';
+              break;
+            case 'action':
+              aVal = a.action || '';
+              bVal = b.action || '';
+              break;
+            case 'meta':
+              aVal = a.meta || '';
+              bVal = b.meta || '';
+              break;
+            case 'created':
+              aVal = new Date(a.created);
+              bVal = new Date(b.created);
+              break;
+            default:
+              return 0;
+          }
+
+          // Compare values
+          if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+          if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+
+        // Reorder table rows
+        const tbody = table.querySelector('tbody');
+        sortedData.forEach(item => {
+          tbody.appendChild(item.element);
+        });
+      }
+    });
+
+    // Copy to clipboard functionality
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        // Show success feedback
+        const button = event.target;
+        const originalText = button.textContent;
+        button.textContent = '✓';
+        button.style.background = 'var(--admin-green)';
+        button.style.color = 'var(--admin-black)';
+
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.background = '';
+          button.style.color = '';
+        }, 1000);
+      }).catch(err => {
+        console.error('Failed to copy: ', err);
+      });
+    }
+  </script>
 {% endblock %}

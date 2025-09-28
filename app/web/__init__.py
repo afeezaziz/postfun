@@ -27,6 +27,8 @@ from ..models import (
     FeePayout,
     BurnEvent,
     OHLCCandle,
+    LightningInvoice,
+    LightningWithdrawal,
 )
 from ..services.amm import execute_swap, quote_swap
 from sqlalchemy import case, exists, or_, func
@@ -2318,6 +2320,24 @@ def wallet():
     # Get price map for tokens
     price_by_symbol = {balance.token.symbol: (_amm_price_for_token(balance.token) or float(balance.token.price or 0)) for balance in balances}
 
+    # Get lightning invoices
+    lightning_invoices = (
+        LightningInvoice.query
+        .filter_by(user_id=user.id)
+        .order_by(LightningInvoice.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    # Get lightning withdrawals
+    lightning_withdrawals = (
+        LightningWithdrawal.query
+        .filter_by(user_id=user.id)
+        .order_by(LightningWithdrawal.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
     # Get recent activity (mock data for now)
     recent_activity = []
 
@@ -2328,6 +2348,8 @@ def wallet():
         total_balance=total_balance,
         price_by_symbol=price_by_symbol,
         recent_activity=recent_activity,
+        lightning_invoices=lightning_invoices,
+        lightning_withdrawals=lightning_withdrawals,
         meta_title="Wallet — Postfun",
         meta_description="Your wallet balances and activity on Postfun.",
         meta_url=url_for("web.wallet", _external=True),
@@ -2345,3 +2367,163 @@ def api_auth_check():
         return {"authenticated": True, "user_id": payload.get("uid")}
     print("[DEBUG] User not authenticated", file=sys.stderr)
     return {"authenticated": False}
+
+
+@web_bp.route("/api/lightning/invoice", methods=["POST"])
+@require_auth_web
+def api_lightning_invoice():
+    """Create a lightning invoice for receiving payments."""
+    payload = g.jwt_payload
+    uid = payload.get("uid")
+    user = db.session.get(User, uid) if isinstance(uid, int) else None
+    if not user:
+        return {"error": "User not found"}, 404
+
+    try:
+        data = request.get_json()
+        amount_sats = int(data.get("amount", 0))
+        memo = data.get("memo", "")
+
+        if amount_sats < 100:
+            return {"error": "Minimum amount is 100 sats"}, 400
+
+        # Import lightning service
+        from ..services.lightning import LNBitsClient
+
+        client = LNBitsClient()
+        result = client.create_invoice(amount_sats, memo)
+
+        if result:
+            # Create invoice record
+            invoice = LightningInvoice(
+                user_id=user.id,
+                amount_sats=amount_sats,
+                memo=memo,
+                payment_request=result["payment_request"],
+                payment_hash=result["payment_hash"],
+                checking_id=result.get("checking_id"),
+                status="pending",
+                expires_at=datetime.utcnow() + timedelta(minutes=30)
+            )
+            db.session.add(invoice)
+            db.session.commit()
+
+            return {
+                "id": invoice.id,
+                "payment_request": invoice.payment_request,
+                "payment_hash": invoice.payment_hash,
+                "amount_sats": invoice.amount_sats,
+                "memo": invoice.memo,
+                "status": invoice.status,
+                "expires_at": invoice.expires_at.isoformat() + "Z" if invoice.expires_at else None
+            }
+        else:
+            return {"error": "Failed to create invoice"}, 500
+
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+
+@web_bp.route("/api/lightning/pay", methods=["POST"])
+@require_auth_web
+def api_lightning_pay():
+    """Pay a lightning invoice."""
+    payload = g.jwt_payload
+    uid = payload.get("uid")
+    user = db.session.get(User, uid) if isinstance(uid, int) else None
+    if not user:
+        return {"error": "User not found"}, 404
+
+    try:
+        data = request.get_json()
+        bolt11 = data.get("invoice", "")
+
+        if not bolt11 or not bolt11.startswith("lnbc"):
+            return {"error": "Invalid lightning invoice"}, 400
+
+        # Import lightning service
+        from ..services.lightning import LNBitsClient
+
+        client = LNBitsClient()
+        result = client.pay_invoice(bolt11)
+
+        if result:
+            # Create withdrawal record
+            withdrawal = LightningWithdrawal(
+                user_id=user.id,
+                amount_sats=result.get("amount_sats", 0),
+                bolt11=bolt11,
+                fee_sats=result.get("fee_sats"),
+                payment_hash=result.get("payment_hash"),
+                checking_id=result.get("checking_id"),
+                status="confirmed",
+                processed_at=datetime.utcnow()
+            )
+            db.session.add(withdrawal)
+            db.session.commit()
+
+            return {
+                "id": withdrawal.id,
+                "amount_sats": withdrawal.amount_sats,
+                "fee_sats": withdrawal.fee_sats,
+                "payment_hash": withdrawal.payment_hash,
+                "status": withdrawal.status,
+                "processed_at": withdrawal.processed_at.isoformat() + "Z" if withdrawal.processed_at else None
+            }
+        else:
+            return {"error": "Failed to pay invoice"}, 500
+
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+
+@web_bp.route("/api/lightning/invoices", methods=["GET"])
+@require_auth_web
+def api_lightning_invoices():
+    """Get user's lightning invoices."""
+    payload = g.jwt_payload
+    uid = payload.get("uid")
+    user = db.session.get(User, uid) if isinstance(uid, int) else None
+    if not user:
+        return {"error": "User not found"}, 404
+
+    try:
+        invoices = (
+            LightningInvoice.query
+            .filter_by(user_id=user.id)
+            .order_by(LightningInvoice.created_at.desc())
+            .all()
+        )
+
+        return {
+            "invoices": [invoice.to_dict() for invoice in invoices]
+        }
+
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+
+@web_bp.route("/api/lightning/withdrawals", methods=["GET"])
+@require_auth_web
+def api_lightning_withdrawals():
+    """Get user's lightning withdrawals."""
+    payload = g.jwt_payload
+    uid = payload.get("uid")
+    user = db.session.get(User, uid) if isinstance(uid, int) else None
+    if not user:
+        return {"error": "User not found"}, 404
+
+    try:
+        withdrawals = (
+            LightningWithdrawal.query
+            .filter_by(user_id=user.id)
+            .order_by(LightningWithdrawal.created_at.desc())
+            .all()
+        )
+
+        return {
+            "withdrawals": [withdrawal.to_dict() for withdrawal in withdrawals]
+        }
+
+    except Exception as e:
+        return {"error": str(e)}, 500

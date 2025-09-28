@@ -1,5 +1,9 @@
-{% extends 'base.html' %}
+{% extends 'admin/base.html' %}
 {% block title %}Admin · Tokens | Postfun{% endblock %}
+{% block breadcrumb %}
+  <span class="text-admin-cyan">/</span>
+  <a href="{{ url_for('admin.tokens') }}" class="text-admin-blue hover:text-admin-cyan">Tokens</a>
+{% endblock %}
 {% block content %}
   <section class="card">
     <h1>Tokens</h1>
@@ -92,59 +96,95 @@
         </form>
       </div>
 
-      <div class="card">
-        <h2>All Tokens</h2>
+      <div class="admin-table-container">
+        <div class="admin-table-header">
+          <div class="admin-table-title">Tokens Management</div>
+          <div class="admin-table-stats">
+            <span class="admin-stat-badge">{{ tokens_p.total }} Total Tokens</span>
+            <span class="admin-stat-badge">{{ tokens_p.page }} / {{ tokens_p.pages or 1 }} Pages</span>
+          </div>
+        </div>
+
         {% if not tokens_p.items %}
-          <div>No tokens.</div>
+          <div class="admin-empty-state">
+            <div class="admin-empty-icon">🪙</div>
+            <div class="admin-empty-text">No tokens found.</div>
+          </div>
         {% else %}
-          <div class="pf-table-wrap">
-            <table class="pf-table">
+          <div class="admin-table-wrapper">
+            <table class="admin-data-table" id="tokensTable">
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Symbol</th>
-                  <th>Name</th>
-                  <th>Price</th>
-                  <th>Market Cap</th>
-                  <th>24h</th>
+                  <th class="sortable" data-column="id">ID <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="symbol">Symbol <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="name">Name <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="price">Price <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="market_cap">Market Cap <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="change">24h <span class="sort-arrow">↕</span></th>
                   <th>Categories</th>
-                  <th>Hidden</th>
-                  <th>Frozen</th>
+                  <th class="sortable" data-column="hidden">Hidden <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="frozen">Frozen <span class="sort-arrow">↕</span></th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {% for t in tokens_p.items %}
-                  <tr>
-                    <td>{{ t.id }}</td>
-                    <td><strong>{{ t.symbol }}</strong></td>
-                    <td>{{ t.name }}</td>
-                    <td>{{ '%.8f'|format(t.price or 0) }}</td>
-                    <td>{{ '%.2f'|format(t.market_cap or 0) }}</td>
-                    <td>{{ '%.4f'|format(t.change_24h or 0) }}%</td>
+                  <tr data-token-id="{{ t.id }}" {% if t.hidden %}class="hidden-token-row"{% endif %}>
+                    <td><span class="admin-badge id-badge">{{ t.id }}</span></td>
                     <td>
-                      <div style="display:flex; flex-direction:column; gap:6px;">
-                        <div style="font-size:12px; color: var(--dim-green);">
+                      <div class="admin-token-symbol">
+                        <strong class="admin-symbol">{{ t.symbol }}</strong>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="admin-token-name">{{ t.name }}</div>
+                    </td>
+                    <td>
+                      <div class="admin-token-price">{{ '%.8f'|format(t.price or 0) }}</div>
+                    </td>
+                    <td>
+                      <div class="admin-token-market-cap">{{ '%.2f'|format(t.market_cap or 0) }}</div>
+                    </td>
+                    <td>
+                      <div class="admin-token-change {% if (t.change_24h or 0) > 0 %}positive-change{% elif (t.change_24h or 0) < 0 %}negative-change{% else %}neutral-change{% endif %}">
+                        {{ '%.4f'|format(t.change_24h or 0) }}%
+                      </div>
+                    </td>
+                    <td>
+                      <div class="admin-token-categories">
+                        <div class="admin-categories-display">
                           {{ (infos_by_token_id.get(t.id).categories if infos_by_token_id and infos_by_token_id.get(t.id) else '') or '—' }}
                         </div>
-                        <form method="POST" action="{{ url_for('admin.tokens_set_categories', token_id=t.id) }}" style="display:flex; gap:6px; align-items:end;">
-                          <input class="retro-input" type="text" name="categories" placeholder="comma,separated,tags" value="{{ (infos_by_token_id.get(t.id).categories if infos_by_token_id and infos_by_token_id.get(t.id) else '') }}" />
+                        <form method="POST" action="{{ url_for('admin.tokens_set_categories', token_id=t.id) }}" class="admin-categories-form">
+                          <input class="admin-categories-input" type="text" name="categories" placeholder="comma,separated,tags" value="{{ (infos_by_token_id.get(t.id).categories if infos_by_token_id and infos_by_token_id.get(t.id) else '') }}" />
                           <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-                          <button class="retro-button" type="submit">Save</button>
+                          <button class="admin-btn admin-btn-primary" type="submit">💾</button>
                         </form>
                       </div>
                     </td>
-                    <td>{{ 'Yes' if getattr(t, 'hidden', False) else 'No' }}</td>
-                    <td>{{ 'Yes' if getattr(t, 'frozen', False) else 'No' }}</td>
                     <td>
-                      <div style="display:flex; gap:6px;">
-                        <form method="POST" action="{{ url_for('admin.tokens_toggle_hidden', token_id=t.id) }}">
+                      <span class="admin-status-badge {% if t.hidden %}admin-badge-warning{% else %}admin-badge-success{% endif %}">
+                        {{ 'Yes' if t.hidden else 'No' }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="admin-status-badge {% if t.frozen %}admin-badge-warning{% else %}admin-badge-success{% endif %}">
+                        {{ 'Yes' if t.frozen else 'No' }}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="admin-actions">
+                        <form method="POST" action="{{ url_for('admin.tokens_toggle_hidden', token_id=t.id) }}" class="admin-action-form">
                           <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-                          <button class="retro-button" type="submit">{{ 'Unhide' if getattr(t, 'hidden', False) else 'Hide' }}</button>
+                          <button class="admin-btn {% if t.hidden %}admin-btn-success{% else %}admin-btn-warning{% endif %}" type="submit" title="{{ 'Unhide' if t.hidden else 'Hide' }}">
+                            {{ '👁️' if t.hidden else '🚫' }}
+                          </button>
                         </form>
-                        <form method="POST" action="{{ url_for('admin.tokens_toggle_frozen', token_id=t.id) }}">
+                        <form method="POST" action="{{ url_for('admin.tokens_toggle_frozen', token_id=t.id) }}" class="admin-action-form">
                           <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-                          <button class="retro-button" type="submit">{{ 'Unfreeze' if getattr(t, 'frozen', False) else 'Freeze' }}</button>
+                          <button class="admin-btn {% if t.frozen %}admin-btn-success{% else %}admin-btn-warning{% endif %}" type="submit" title="{{ 'Unfreeze' if t.frozen else 'Freeze' }}">
+                            {{ '🔓' if t.frozen else '🔒' }}
+                          </button>
                         </form>
                       </div>
                     </td>
@@ -153,17 +193,301 @@
               </tbody>
             </table>
           </div>
-          <div class="pf-pagination">
+
+          <div class="admin-pagination">
             {% set prev_url = url_for('admin.tokens', page=tokens_p.prev_num, q=q, per=request.args.get('per')) if tokens_p.has_prev else None %}
             {% set next_url = url_for('admin.tokens', page=tokens_p.next_num, q=q, per=request.args.get('per')) if tokens_p.has_next else None %}
-            <div>Page {{ tokens_p.page }} / {{ tokens_p.pages or 1 }}</div>
-            <div style="display:flex; gap:8px;">
-              <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
-              <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+
+            <div class="admin-pagination-info">
+              <span class="admin-pagination-text">Page {{ tokens_p.page }} of {{ tokens_p.pages or 1 }}</span>
+              <span class="admin-pagination-total">({{ tokens_p.total }} total tokens)</span>
+            </div>
+
+            <div class="admin-pagination-controls">
+              {% if prev_url %}
+                <a href="{{ prev_url }}" class="admin-pagination-btn admin-pagination-prev">
+                  ← Previous
+                </a>
+              {% else %}
+                <span class="admin-pagination-btn admin-pagination-prev admin-pagination-disabled">
+                  ← Previous
+                </span>
+              {% endif %}
+
+              <div class="admin-pagination-pages">
+                {% set start_page = tokens_p.page - 2 %}
+                {% set end_page = tokens_p.page + 2 %}
+
+                {% if start_page < 1 %}
+                  {% set start_page = 1 %}
+                {% endif %}
+
+                {% if end_page > tokens_p.pages %}
+                  {% set end_page = tokens_p.pages %}
+                {% endif %}
+
+                {% for p in range(start_page, end_page + 1) %}
+                  {% if p == tokens_p.page %}
+                    <span class="admin-pagination-number admin-pagination-current">{{ p }}</span>
+                  {% else %}
+                    <a href="{{ url_for('admin.tokens', page=p, q=q, per=request.args.get('per')) }}" class="admin-pagination-number">{{ p }}</a>
+                  {% endif %}
+                {% endfor %}
+              </div>
+
+              {% if next_url %}
+                <a href="{{ next_url }}" class="admin-pagination-btn admin-pagination-next">
+                  Next →
+                </a>
+              {% else %}
+                <span class="admin-pagination-btn admin-pagination-next admin-pagination-disabled">
+                  Next →
+                </span>
+              {% endif %}
             </div>
           </div>
         {% endif %}
       </div>
     </div>
   </section>
+
+  <style>
+    /* Token-specific styles */
+    .admin-token-symbol {
+      font-weight: bold;
+    }
+
+    .admin-symbol {
+      color: var(--admin-cyan);
+      font-size: 1.1rem;
+    }
+
+    .admin-token-name {
+      color: var(--admin-blue);
+    }
+
+    .admin-token-price {
+      font-family: monospace;
+      color: var(--admin-green);
+      font-weight: bold;
+    }
+
+    .admin-token-market-cap {
+      font-family: monospace;
+      color: var(--admin-blue);
+    }
+
+    .admin-token-change {
+      font-family: monospace;
+      font-weight: bold;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+    }
+
+    .positive-change {
+      background: rgba(0, 255, 0, 0.2);
+      color: var(--admin-green);
+      border: 1px solid var(--admin-green);
+    }
+
+    .negative-change {
+      background: rgba(255, 0, 0, 0.2);
+      color: var(--admin-red);
+      border: 1px solid var(--admin-red);
+    }
+
+    .neutral-change {
+      background: rgba(0, 128, 255, 0.2);
+      color: var(--admin-blue);
+      border: 1px solid var(--admin-blue);
+    }
+
+    .admin-token-categories {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .admin-categories-display {
+      font-size: 0.875rem;
+      color: var(--admin-dim-blue);
+      max-width: 150px;
+      word-wrap: break-word;
+    }
+
+    .admin-categories-form {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .admin-categories-input {
+      background: var(--admin-black);
+      border: 1px solid var(--admin-blue);
+      color: var(--admin-blue);
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-family: 'VT323', monospace;
+      font-size: 0.875rem;
+      flex: 1;
+    }
+
+    .admin-categories-input:focus {
+      outline: none;
+      border-color: var(--admin-cyan);
+      background: rgba(0, 128, 255, 0.1);
+    }
+
+    .admin-data-table tr.hidden-token-row {
+      background: rgba(255, 165, 0, 0.1);
+    }
+
+    .admin-data-table tr.hidden-token-row:hover {
+      background: rgba(255, 165, 0, 0.2);
+    }
+
+    .admin-empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--admin-dim-blue);
+    }
+
+    .admin-empty-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .admin-empty-text {
+      font-size: 1.25rem;
+      color: var(--admin-blue);
+    }
+
+    /* Mobile responsiveness for token-specific elements */
+    @media (max-width: 768px) {
+      .admin-categories-form {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .admin-categories-input {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .admin-token-change {
+        font-size: 0.75rem;
+        padding: 0.125rem 0.25rem;
+      }
+
+      .admin-categories-display {
+        max-width: 100px;
+        font-size: 0.75rem;
+      }
+    }
+  </style>
+
+  <script>
+    // Sorting functionality for tokens data table
+    document.addEventListener('DOMContentLoaded', function() {
+      const table = document.getElementById('tokensTable');
+      if (!table) return;
+
+      const headers = table.querySelectorAll('th.sortable');
+      let sortColumn = null;
+      let sortDirection = 'asc';
+
+      // Initialize table data
+      const rows = Array.from(table.querySelectorAll('tbody tr'));
+      const tableData = rows.map(row => ({
+        element: row,
+        id: parseInt(row.querySelector('td:first-child .admin-badge').textContent.trim()),
+        symbol: row.querySelector('.admin-symbol').textContent.trim(),
+        name: row.querySelector('.admin-token-name').textContent.trim(),
+        price: parseFloat(row.querySelector('.admin-token-price').textContent.trim()),
+        market_cap: parseFloat(row.querySelector('.admin-token-market-cap').textContent.trim().replace(/,/g, '')),
+        change: parseFloat(row.querySelector('.admin-token-change').textContent.trim().replace('%', '')),
+        hidden: row.querySelector('td:nth-child(8) .admin-status-badge').textContent.trim(),
+        frozen: row.querySelector('td:nth-child(9) .admin-status-badge').textContent.trim()
+      }));
+
+      headers.forEach(header => {
+        header.addEventListener('click', () => {
+          const column = header.dataset.column;
+
+          // Update sort direction
+          if (sortColumn === column) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortColumn = column;
+            sortDirection = 'asc';
+          }
+
+          // Update header styles
+          headers.forEach(h => {
+            h.classList.remove('sort-asc', 'sort-desc');
+          });
+          header.classList.add(sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+
+          // Sort the data
+          sortTable(column, sortDirection);
+        });
+      });
+
+      function sortTable(column, direction) {
+        const sortedData = [...tableData].sort((a, b) => {
+          let aVal, bVal;
+
+          switch (column) {
+            case 'id':
+              aVal = a.id;
+              bVal = b.id;
+              break;
+            case 'symbol':
+              aVal = a.symbol || '';
+              bVal = b.symbol || '';
+              break;
+            case 'name':
+              aVal = a.name || '';
+              bVal = b.name || '';
+              break;
+            case 'price':
+              aVal = a.price || 0;
+              bVal = b.price || 0;
+              break;
+            case 'market_cap':
+              aVal = a.market_cap || 0;
+              bVal = b.market_cap || 0;
+              break;
+            case 'change':
+              aVal = a.change || 0;
+              bVal = b.change || 0;
+              break;
+            case 'hidden':
+              aVal = a.hidden;
+              bVal = b.hidden;
+              break;
+            case 'frozen':
+              aVal = a.frozen;
+              bVal = b.frozen;
+              break;
+            default:
+              return 0;
+          }
+
+          // Compare values
+          if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+          if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+
+        // Reorder table rows
+        const tbody = table.querySelector('tbody');
+        sortedData.forEach(item => {
+          tbody.appendChild(item.element);
+        });
+      }
+    });
+  </script>
 {% endblock %}

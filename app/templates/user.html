@@ -1,20 +1,242 @@
 {% extends 'base.html' %}
-{% block title %}User {{ user.id }} | Postfun{% endblock %}
+{% block title %}{{ user.display_name or user.npub or 'User' }} | Postfun{% endblock %}
 {% block content %}
-  <section class="card">
-    <h1>User Profile</h1>
-    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-      <div class="card">
-        <div>ID: <span class="pf-green">{{ user.id }}</span></div>
-        <div>npub: <span class="pf-green">{{ user.npub or '—' }}</span></div>
-        <div>pubkey: <span class="pf-green">{{ user.pubkey_hex }}</span></div>
-        <div>display: <span class="pf-green">{{ user.display_name or '—' }}</span></div>
-        <div>joined: <span class="pf-green">{{ user.created_at.strftime('%Y-%m-%d') }}</span></div>
-      </div>
-      <div class="card">
-        <h3>Actions</h3>
-        <a class="retro-button" href="{{ url_for('web.portfolio') }}">View Portfolio</a>
+  <!-- User Profile Header -->
+  <section class="hero bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg mb-8">
+    <div class="hero-content">
+      <div class="flex flex-col md:flex-row items-center gap-6">
+        <!-- Profile Avatar -->
+        <div class="w-24 h-24 rounded-full bg-terminal-black border-4 border-terminal-green flex items-center justify-center">
+          <span class="text-4xl text-terminal-green">👤</span>
+        </div>
+
+        <!-- Profile Info -->
+        <div class="text-center md:text-left flex-1">
+          <h1 class="text-3xl md:text-4xl font-bold text-terminal-green font-terminal mb-2">
+            {{ user.display_name or 'Nostr User' }}
+          </h1>
+          <p class="text-terminal-dim-green text-lg mb-4">
+            {{ user.npub[:16] }}...{{ user.npub[-4:] if user.npub else 'Unknown' }}
+          </p>
+
+          <!-- Quick Stats -->
+          <div class="flex flex-wrap gap-3 justify-center md:justify-start">
+            <div class="terminal-badge border-2 border-terminal-green px-3 py-1">
+              <span class="text-terminal-green">📅 Joined {{ user.created_at.strftime('%b %Y') }}</span>
+            </div>
+            <div class="terminal-badge border-2 border-terminal-green px-3 py-1">
+              <span class="text-terminal-green">🆔 ID: {{ user.id }}</span>
+            </div>
+            {% if user.is_active %}
+              <div class="terminal-badge border-2 border-terminal-green px-3 py-1">
+                <span class="text-terminal-green">✅ Active</span>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col gap-2">
+          <a href="{{ url_for('web.portfolio') }}" class="terminal-button">
+            💼 Portfolio
+          </a>
+          <a href="{{ url_for('web.wallet') }}" class="terminal-button">
+            ⚡ Wallet
+          </a>
+        </div>
       </div>
     </div>
   </section>
+
+  <!-- User Details Grid -->
+  <section class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg mb-8">
+    <h2 class="text-2xl font-bold text-terminal-green font-terminal mb-6 flex items-center">
+      <span class="mr-2">📋</span> User Details
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Identity Information -->
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg">
+        <h3 class="text-lg font-bold text-terminal-green mb-4 flex items-center">
+          <span class="mr-2">🔐</span> Identity
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Display Name</label>
+            <div class="text-terminal-green font-terminal">{{ user.display_name or 'Not set' }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Nostr Public Key (npub)</label>
+            <div class="text-terminal-green font-terminal text-sm break-all">{{ user.npub or 'Not available' }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Hex Public Key</label>
+            <div class="text-terminal-green font-terminal text-sm break-all">{{ user.pubkey_hex }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Account Information -->
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg">
+        <h3 class="text-lg font-bold text-terminal-green mb-4 flex items-center">
+          <span class="mr-2">⚙️</span> Account
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">User ID</label>
+            <div class="text-terminal-green font-terminal">{{ user.id }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Joined Date</label>
+            <div class="text-terminal-green font-terminal">{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Account Status</label>
+            <div class="text-terminal-green font-terminal">
+              {% if user.is_active %}Active{% else %}Inactive{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Activity Overview -->
+  <section class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg mb-8">
+    <h2 class="text-2xl font-bold text-terminal-green font-terminal mb-6 flex items-center">
+      <span class="mr-2">📊</span> Activity Overview
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- Trading Activity -->
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg text-center">
+        <div class="text-3xl text-terminal-green mb-2">📈</div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Trading</h3>
+        <div class="space-y-2">
+          <div class="text-terminal-dim-green text-sm">Total Trades</div>
+          <div class="text-terminal-green font-bold text-xl">{{ user_stats.total_trades or 0 }}</div>
+          <div class="text-terminal-dim-green text-sm">Volume</div>
+          <div class="text-terminal-green font-bold">{{ user_stats.total_volume or 0 | round(2) }} gUSD</div>
+        </div>
+      </div>
+
+      <!-- Token Activity -->
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg text-center">
+        <div class="text-3xl text-terminal-green mb-2">🪙</div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Tokens</h3>
+        <div class="space-y-2">
+          <div class="text-terminal-dim-green text-sm">Tokens Created</div>
+          <div class="text-terminal-green font-bold text-xl">{{ user_stats.tokens_created or 0 }}</div>
+          <div class="text-terminal-dim-green text-sm">Holdings</div>
+          <div class="text-terminal-green font-bold">{{ user_stats.holdings_count or 0 }}</div>
+        </div>
+      </div>
+
+      <!-- Portfolio Value -->
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg text-center">
+        <div class="text-3xl text-terminal-green mb-2">💰</div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Portfolio</h3>
+        <div class="space-y-2">
+          <div class="text-terminal-dim-green text-sm">Total Value</div>
+          <div class="text-terminal-green font-bold text-xl">{{ user_stats.portfolio_value or 0 | round(2) }} gUSD</div>
+          <div class="text-terminal-dim-green text-sm">24h Change</div>
+          <div class="text-terminal-green font-bold">
+            {% if user_stats.portfolio_change_24h >= 0 %}+{% endif %}
+            {{ user_stats.portfolio_change_24h or 0 | round(2) }}%
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recent Activity -->
+  <section class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-2xl font-bold text-terminal-green font-terminal flex items-center">
+        <span class="mr-2">🕐</span> Recent Activity
+      </h2>
+      <div class="terminal-badge border-2 border-terminal-green px-3 py-1">
+        <span class="text-terminal-green">Last 7 days</span>
+      </div>
+    </div>
+
+    {% if recent_activities %}
+      <div class="space-y-4">
+        {% for activity in recent_activities %}
+          <div class="terminal-card bg-terminal-black border border-terminal-green p-4 rounded-lg">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-4">
+                <div class="text-2xl text-terminal-green">
+                  {% if activity.type == 'trade' %}📊
+                  {% elif activity.type == 'token_created' %}🚀
+                  {% elif activity.type == 'wallet' %}⚡
+                  {% else %}📝
+                  {% endif %}
+                </div>
+                <div>
+                  <div class="text-terminal-green font-bold">{{ activity.title }}</div>
+                  <div class="text-terminal-dim-green text-sm">{{ activity.description }}</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="text-terminal-green text-sm">{{ activity.timestamp.strftime('%m/%d %H:%M') }}</div>
+                {% if activity.value %}
+                  <div class="text-terminal-green font-bold">{{ activity.value }}</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-center py-12">
+        <div class="text-terminal-dim-green text-lg mb-4">No recent activity</div>
+        <p class="text-terminal-dim-green mb-6">Start trading or creating tokens to see your activity here</p>
+        <div class="flex gap-4 justify-center">
+          <a href="{{ url_for('web.tokens_list') }}" class="terminal-button">
+            Browse Tokens
+          </a>
+          <a href="{{ url_for('web.launchpad') }}" class="terminal-button">
+            Create Token
+          </a>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+  <!-- Nostr Profile Information -->
+  {% if user.nostr_profile %}
+  <section class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg mt-8">
+    <h2 class="text-2xl font-bold text-terminal-green font-terminal mb-6 flex items-center">
+      <span class="mr-2">🌐</span> Nostr Profile
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {% if user.nostr_profile.about %}
+      <div>
+        <label class="block text-terminal-dim-green text-sm mb-2">About</label>
+        <div class="terminal-card bg-terminal-black border border-terminal-green p-4 rounded-lg">
+          <div class="text-terminal-green">{{ user.nostr_profile.about }}</div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if user.nostr_profile.website %}
+      <div>
+        <label class="block text-terminal-dim-green text-sm mb-2">Website</label>
+        <a href="{{ user.nostr_profile.website }}" target="_blank" class="terminal-button block text-center">
+          🌐 Visit Website
+        </a>
+      </div>
+      {% endif %}
+
+      {% if user.nostr_profile.picture %}
+      <div>
+        <label class="block text-terminal-dim-green text-sm mb-2">Profile Picture</label>
+        <img src="{{ user.nostr_profile.picture }}" alt="Profile" class="w-20 h-20 rounded-full border-2 border-terminal-green" />
+      </div>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
 {% endblock %}

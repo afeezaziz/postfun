@@ -1,5 +1,9 @@
-{% extends 'base.html' %}
+{% extends 'admin/base.html' %}
 {% block title %}Admin · Users | Postfun{% endblock %}
+{% block breadcrumb %}
+  <span class="text-admin-cyan">/</span>
+  <a href="{{ url_for('admin.users') }}" class="text-admin-blue hover:text-admin-cyan">Users</a>
+{% endblock %}
 {% block content %}
   <section class="card">
     <h1>Users</h1>
@@ -23,56 +27,689 @@
     {% if not users_p.items %}
       <div>No users found.</div>
     {% else %}
-      <div class="pf-table-wrap">
-        <table class="pf-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>npub</th>
-              <th>pubkey_hex</th>
-              <th>Name</th>
-              <th>Admin</th>
-              <th>Withdraw Frozen</th>
-              <th>Created</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for u in users_p.items %}
+      <div class="admin-table-container">
+        <div class="admin-table-header">
+          <div class="admin-table-title">Users Management</div>
+          <div class="admin-table-stats">
+            <span class="admin-stat-badge">{{ users_p.total }} Total Users</span>
+            <span class="admin-stat-badge">{{ users_p.page }} / {{ users_p.pages or 1 }} Pages</span>
+          </div>
+        </div>
+
+        <div class="admin-table-wrapper">
+          <table class="admin-data-table" id="usersTable">
+            <thead>
               <tr>
-                <td>{{ u.id }}</td>
-                <td>{{ u.npub or '—' }}</td>
-                <td><code>{{ u.pubkey_hex }}</code></td>
-                <td>{{ u.display_name or '—' }}</td>
-                <td>{{ 'Yes' if u.is_admin else 'No' }}</td>
-                <td>{{ 'Yes' if getattr(u, 'withdraw_frozen', False) else 'No' }}</td>
-                <td>{{ u.created_at }}</td>
-                <td>
-                  <div style="display:flex; gap:6px;">
-                    <form method="POST" action="{{ url_for('admin.users_toggle_admin', user_id=u.id) }}">
-                      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-                      <button class="retro-button" type="submit">{{ 'Revoke admin' if u.is_admin else 'Make admin' }}</button>
-                    </form>
-                    <form method="POST" action="{{ url_for('admin.users_toggle_withdraw', user_id=u.id) }}">
-                      <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-                      <button class="retro-button" type="submit">{{ 'Unfreeze withdraw' if getattr(u, 'withdraw_frozen', False) else 'Freeze withdraw' }}</button>
-                    </form>
-                  </div>
-                </td>
+                <th class="sortable" data-column="id">ID <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="npub">npub <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="pubkey">pubkey_hex <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="name">Name <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="admin">Admin <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="frozen">Withdraw Frozen <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="created">Created <span class="sort-arrow">↕</span></th>
+                <th>Actions</th>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {% for u in users_p.items %}
+                <tr data-user-id="{{ u.id }}" {% if u.is_admin %}class="admin-row"{% endif %}>
+                  <td><span class="admin-badge id-badge">{{ u.id }}</span></td>
+                  <td>
+                    <div class="admin-user-npub">
+                      {% if u.npub %}
+                        <span class="admin-npub">{{ u.npub[:16] }}...{{ u.npub[-4:] }}</span>
+                      {% else %}
+                        <span class="admin-empty">—</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="admin-pubkey">
+                      <code class="admin-code">{{ u.pubkey_hex[:16] }}...{{ u.pubkey_hex[-4:] }}</code>
+                      <button class="admin-copy-btn" onclick="copyToClipboard('{{ u.pubkey_hex }}')" title="Copy full pubkey">📋</button>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="admin-user-name">
+                      {% if u.display_name %}
+                        <span class="admin-display-name">{{ u.display_name }}</span>
+                      {% else %}
+                        <span class="admin-empty">—</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <span class="admin-status-badge {% if u.is_admin %}admin-badge-active{% else %}admin-badge-inactive{% endif %}">
+                      {{ 'Yes' if u.is_admin else 'No' }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="admin-status-badge {% if u.withdraw_frozen %}admin-badge-warning{% else %}admin-badge-success{% endif %}">
+                      {{ 'Yes' if u.withdraw_frozen else 'No' }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="admin-date">{{ u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '—' }}</div>
+                  </td>
+                  <td>
+                    <div class="admin-actions">
+                      <form method="POST" action="{{ url_for('admin.users_toggle_admin', user_id=u.id) }}" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                        <button class="admin-btn {% if u.is_admin %}admin-btn-danger{% else %}admin-btn-primary{% endif %}" type="submit" title="{{ 'Revoke admin' if u.is_admin else 'Make admin' }}">
+                          {{ '🔴' if u.is_admin else '🟢' }}
+                        </button>
+                      </form>
+                      <form method="POST" action="{{ url_for('admin.users_toggle_withdraw', user_id=u.id) }}" class="admin-action-form">
+                        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                        <button class="admin-btn {% if u.withdraw_frozen %}admin-btn-success{% else %}admin-btn-warning{% endif %}" type="submit" title="{{ 'Unfreeze withdraw' if u.withdraw_frozen else 'Freeze withdraw' }}">
+                          {{ '🔓' if u.withdraw_frozen else '🔒' }}
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="pf-pagination">
+      <div class="admin-pagination">
         {% set prev_url = url_for('admin.users', page=users_p.prev_num, q=q, per=request.args.get('per')) if users_p.has_prev else None %}
         {% set next_url = url_for('admin.users', page=users_p.next_num, q=q, per=request.args.get('per')) if users_p.has_next else None %}
-        <div>Page {{ users_p.page }} / {{ users_p.pages or 1 }}</div>
-        <div style="display:flex; gap:8px;">
-          <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
-          <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+
+        <div class="admin-pagination-info">
+          <span class="admin-pagination-text">Page {{ users_p.page }} of {{ users_p.pages or 1 }}</span>
+          <span class="admin-pagination-total">({{ users_p.total }} total users)</span>
+        </div>
+
+        <div class="admin-pagination-controls">
+          {% if prev_url %}
+            <a href="{{ prev_url }}" class="admin-pagination-btn admin-pagination-prev">
+              ← Previous
+            </a>
+          {% else %}
+            <span class="admin-pagination-btn admin-pagination-prev admin-pagination-disabled">
+              ← Previous
+            </span>
+          {% endif %}
+
+          <div class="admin-pagination-pages">
+            {% set start_page = users_p.page - 2 %}
+            {% set end_page = users_p.page + 2 %}
+
+            {% if start_page < 1 %}
+              {% set start_page = 1 %}
+            {% endif %}
+
+            {% if end_page > users_p.pages %}
+              {% set end_page = users_p.pages %}
+            {% endif %}
+
+            {% for p in range(start_page, end_page + 1) %}
+              {% if p == users_p.page %}
+                <span class="admin-pagination-number admin-pagination-current">{{ p }}</span>
+              {% else %}
+                <a href="{{ url_for('admin.users', page=p, q=q, per=request.args.get('per')) }}" class="admin-pagination-number">{{ p }}</a>
+              {% endif %}
+            {% endfor %}
+          </div>
+
+          {% if next_url %}
+            <a href="{{ next_url }}" class="admin-pagination-btn admin-pagination-next">
+              Next →
+            </a>
+          {% else %}
+            <span class="admin-pagination-btn admin-pagination-next admin-pagination-disabled">
+              Next →
+            </span>
+          {% endif %}
         </div>
       </div>
     {% endif %}
   </section>
+
+  <style>
+    /* Admin Data Table Styles */
+    .admin-table-container {
+      background: var(--admin-black);
+      border: 2px solid var(--admin-blue);
+      border-radius: 0.5rem;
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+
+    .admin-table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--admin-blue);
+      background: rgba(0, 128, 255, 0.1);
+    }
+
+    .admin-table-title {
+      font-size: 1.25rem;
+      font-weight: bold;
+      color: var(--admin-cyan);
+    }
+
+    .admin-table-stats {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .admin-stat-badge {
+      background: rgba(0, 128, 255, 0.2);
+      border: 1px solid var(--admin-blue);
+      color: var(--admin-blue);
+      padding: 0.25rem 0.75rem;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+      font-weight: bold;
+    }
+
+    .admin-table-wrapper {
+      overflow-x: auto;
+    }
+
+    .admin-data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'VT323', monospace;
+    }
+
+    .admin-data-table th {
+      background: rgba(0, 128, 255, 0.2);
+      color: var(--admin-cyan);
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 2px solid var(--admin-blue);
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .admin-data-table th:hover {
+      background: rgba(0, 128, 255, 0.3);
+    }
+
+    .admin-data-table th.sortable {
+      position: relative;
+    }
+
+    .admin-data-table th.sortable::after {
+      content: '↕';
+      margin-left: 0.5rem;
+      font-size: 0.875rem;
+      opacity: 0.5;
+    }
+
+    .admin-data-table th.sort-asc::after {
+      content: '↑';
+      opacity: 1;
+      color: var(--admin-cyan);
+    }
+
+    .admin-data-table th.sort-desc::after {
+      content: '↓';
+      opacity: 1;
+      color: var(--admin-cyan);
+    }
+
+    .admin-data-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(0, 128, 255, 0.3);
+      color: var(--admin-blue);
+    }
+
+    .admin-data-table tr:hover {
+      background: rgba(0, 128, 255, 0.1);
+    }
+
+    .admin-data-table tr.admin-row {
+      background: rgba(0, 255, 0, 0.1);
+    }
+
+    .admin-data-table tr.admin-row:hover {
+      background: rgba(0, 255, 0, 0.2);
+    }
+
+    /* Badge Styles */
+    .admin-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+      font-weight: bold;
+      border: 1px solid;
+    }
+
+    .admin-badge.id-badge {
+      background: rgba(0, 128, 255, 0.2);
+      border-color: var(--admin-blue);
+      color: var(--admin-blue);
+    }
+
+    .admin-status-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.875rem;
+      font-weight: bold;
+      border: 1px solid;
+    }
+
+    .admin-badge-active {
+      background: rgba(0, 255, 0, 0.2);
+      border-color: var(--admin-green);
+      color: var(--admin-green);
+    }
+
+    .admin-badge-inactive {
+      background: rgba(255, 0, 0, 0.2);
+      border-color: var(--admin-red);
+      color: var(--admin-red);
+    }
+
+    .admin-badge-warning {
+      background: rgba(255, 165, 0, 0.2);
+      border-color: #ffa500;
+      color: #ffa500;
+    }
+
+    .admin-badge-success {
+      background: rgba(0, 255, 0, 0.2);
+      border-color: var(--admin-green);
+      color: var(--admin-green);
+    }
+
+    /* User Info Styles */
+    .admin-user-npub {
+      font-family: monospace;
+    }
+
+    .admin-npub {
+      color: var(--admin-blue);
+    }
+
+    .admin-pubkey {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .admin-code {
+      font-family: monospace;
+      color: var(--admin-blue);
+      font-size: 0.875rem;
+    }
+
+    .admin-copy-btn {
+      background: none;
+      border: 1px solid var(--admin-blue);
+      color: var(--admin-blue);
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: all 0.2s ease;
+    }
+
+    .admin-copy-btn:hover {
+      background: var(--admin-blue);
+      color: var(--admin-black);
+    }
+
+    .admin-user-name {
+      font-weight: bold;
+    }
+
+    .admin-display-name {
+      color: var(--admin-cyan);
+    }
+
+    .admin-empty {
+      color: var(--admin-dim-blue);
+      font-style: italic;
+    }
+
+    .admin-date {
+      font-family: monospace;
+      font-size: 0.875rem;
+      color: var(--admin-blue);
+    }
+
+    /* Action Buttons */
+    .admin-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .admin-action-form {
+      margin: 0;
+    }
+
+    .admin-btn {
+      border: 1px solid;
+      padding: 0.5rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: all 0.2s ease;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .admin-btn-primary {
+      background: rgba(0, 128, 255, 0.2);
+      border-color: var(--admin-blue);
+      color: var(--admin-blue);
+    }
+
+    .admin-btn-primary:hover {
+      background: var(--admin-blue);
+      color: var(--admin-black);
+    }
+
+    .admin-btn-danger {
+      background: rgba(255, 0, 64, 0.2);
+      border-color: var(--admin-red);
+      color: var(--admin-red);
+    }
+
+    .admin-btn-danger:hover {
+      background: var(--admin-red);
+      color: var(--admin-black);
+    }
+
+    .admin-btn-warning {
+      background: rgba(255, 165, 0, 0.2);
+      border-color: #ffa500;
+      color: #ffa500;
+    }
+
+    .admin-btn-warning:hover {
+      background: #ffa500;
+      color: var(--admin-black);
+    }
+
+    .admin-btn-success {
+      background: rgba(0, 255, 0, 0.2);
+      border-color: var(--admin-green);
+      color: var(--admin-green);
+    }
+
+    .admin-btn-success:hover {
+      background: var(--admin-green);
+      color: var(--admin-black);
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .admin-table-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start;
+      }
+
+      .admin-table-stats {
+        flex-wrap: wrap;
+      }
+
+      .admin-data-table th,
+      .admin-data-table td {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+      }
+
+      .admin-actions {
+        flex-direction: column;
+      }
+
+      .admin-btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+
+    /* Pagination Styles */
+    .admin-pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--admin-blue);
+      background: rgba(0, 128, 255, 0.05);
+    }
+
+    .admin-pagination-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .admin-pagination-text {
+      color: var(--admin-cyan);
+      font-weight: bold;
+    }
+
+    .admin-pagination-total {
+      color: var(--admin-dim-blue);
+      font-size: 0.875rem;
+    }
+
+    .admin-pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .admin-pagination-btn {
+      padding: 0.5rem 1rem;
+      background: rgba(0, 128, 255, 0.2);
+      border: 1px solid var(--admin-blue);
+      color: var(--admin-blue);
+      text-decoration: none;
+      border-radius: 0.25rem;
+      font-weight: bold;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .admin-pagination-btn:hover {
+      background: var(--admin-blue);
+      color: var(--admin-black);
+    }
+
+    .admin-pagination-disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .admin-pagination-pages {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .admin-pagination-number {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      background: rgba(0, 128, 255, 0.1);
+      border: 1px solid var(--admin-blue);
+      color: var(--admin-blue);
+      text-decoration: none;
+      border-radius: 0.25rem;
+      font-weight: bold;
+      transition: all 0.2s ease;
+    }
+
+    .admin-pagination-number:hover {
+      background: rgba(0, 128, 255, 0.2);
+      color: var(--admin-cyan);
+    }
+
+    .admin-pagination-current {
+      background: var(--admin-blue);
+      color: var(--admin-black);
+    }
+
+    @media (max-width: 480px) {
+      .admin-table-wrapper {
+        font-size: 0.75rem;
+      }
+
+      .admin-data-table th,
+      .admin-data-table td {
+        padding: 0.25rem 0.5rem;
+      }
+
+      .admin-btn {
+        width: 2rem;
+        height: 2rem;
+        font-size: 0.75rem;
+      }
+
+      .admin-pagination {
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .admin-pagination-controls {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .admin-pagination-pages {
+        order: 2;
+      }
+
+      .admin-pagination-prev,
+      .admin-pagination-next {
+        order: 1;
+      }
+    }
+  </style>
+
+  <script>
+    // Sorting functionality for admin data table
+    document.addEventListener('DOMContentLoaded', function() {
+      const table = document.getElementById('usersTable');
+      const headers = table.querySelectorAll('th.sortable');
+      let sortColumn = null;
+      let sortDirection = 'asc';
+
+      // Initialize table data
+      const rows = Array.from(table.querySelectorAll('tbody tr'));
+      const tableData = rows.map(row => ({
+        element: row,
+        id: parseInt(row.querySelector('td:first-child').textContent.trim()),
+        npub: row.querySelector('td:nth-child(2)').textContent.trim(),
+        pubkey: row.querySelector('td:nth-child(3) code').textContent.trim(),
+        name: row.querySelector('td:nth-child(4)').textContent.trim(),
+        admin: row.querySelector('td:nth-child(5) .admin-status-badge').textContent.trim(),
+        frozen: row.querySelector('td:nth-child(6) .admin-status-badge').textContent.trim(),
+        created: row.querySelector('td:nth-child(7)').textContent.trim()
+      }));
+
+      headers.forEach(header => {
+        header.addEventListener('click', () => {
+          const column = header.dataset.column;
+
+          // Update sort direction
+          if (sortColumn === column) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortColumn = column;
+            sortDirection = 'asc';
+          }
+
+          // Update header styles
+          headers.forEach(h => {
+            h.classList.remove('sort-asc', 'sort-desc');
+          });
+          header.classList.add(sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+
+          // Sort the data
+          sortTable(column, sortDirection);
+        });
+      });
+
+      function sortTable(column, direction) {
+        const sortedData = [...tableData].sort((a, b) => {
+          let aVal, bVal;
+
+          switch (column) {
+            case 'id':
+              aVal = a.id;
+              bVal = b.id;
+              break;
+            case 'npub':
+              aVal = a.npub || '';
+              bVal = b.npub || '';
+              break;
+            case 'pubkey':
+              aVal = a.pubkey || '';
+              bVal = b.pubkey || '';
+              break;
+            case 'name':
+              aVal = a.name || '';
+              bVal = b.name || '';
+              break;
+            case 'admin':
+              aVal = a.admin;
+              bVal = b.admin;
+              break;
+            case 'frozen':
+              aVal = a.frozen;
+              bVal = b.frozen;
+              break;
+            case 'created':
+              aVal = new Date(a.created);
+              bVal = new Date(b.created);
+              break;
+            default:
+              return 0;
+          }
+
+          // Compare values
+          if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+          if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+
+        // Reorder table rows
+        const tbody = table.querySelector('tbody');
+        sortedData.forEach(item => {
+          tbody.appendChild(item.element);
+        });
+      }
+    });
+
+    // Copy to clipboard functionality
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        // Show success feedback
+        const button = event.target;
+        const originalText = button.textContent;
+        button.textContent = '✓';
+        button.style.background = 'var(--admin-green)';
+        button.style.color = 'var(--admin-black)';
+
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.background = '';
+          button.style.color = '';
+        }, 1000);
+      }).catch(err => {
+        console.error('Failed to copy: ', err);
+      });
+    }
+  </script>
 {% endblock %}

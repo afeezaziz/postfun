@@ -1,71 +1,818 @@
 {% extends 'base.html' %}
 {% block title %}Wallet | Postfun{% endblock %}
 {% block content %}
-  <section class="card">
-    <h1>Your Wallet</h1>
-    {% if user %}
-      <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-        <div class="card">
-          <h3>Account</h3>
-          <div>npub: <span class="pf-green">{{ user.npub or '—' }}</span></div>
-          <div>pubkey: <span class="pf-green">{{ user.pubkey_hex }}</span></div>
-          <div>display: <span class="pf-green">{{ user.display_name or '—' }}</span></div>
+  <!-- Header Section -->
+  <section class="hero bg-base-100 border border-terminal-green p-8 rounded-lg shadow-lg mb-8">
+    <div class="hero-content text-center">
+      <div class="max-w-4xl">
+        <h1 class="text-4xl md:text-5xl font-bold text-terminal-green mb-4 font-terminal">⚡ Lightning Wallet</h1>
+        <p class="text-lg text-terminal-dim-green mb-6">{{ user.display_name or user.npub[:16] }}...{{ user.npub[-4:] }}</p>
+
+        <div class="flex flex-col sm:flex-row gap-6 justify-center items-center mb-6">
+          <div class="text-center">
+            <div class="text-terminal-dim-green text-sm uppercase tracking-widest mb-2">Total Transactions</div>
+            <div class="text-terminal-green text-3xl font-bold">{{ lightning_invoices|length + lightning_withdrawals|length }}</div>
+          </div>
+          <div class="text-center">
+            <div class="text-terminal-dim-green text-sm uppercase tracking-widest mb-2">Invoices</div>
+            <div class="text-terminal-green text-3xl font-bold">{{ lightning_invoices|length }}</div>
+          </div>
+          <div class="text-center">
+            <div class="text-terminal-dim-green text-sm uppercase tracking-widest mb-2">Withdrawals</div>
+            <div class="text-terminal-green text-3xl font-bold">{{ lightning_withdrawals|length }}</div>
+          </div>
         </div>
-        <div class="card">
-          <h3>Balance Summary</h3>
-          <div>Total Balance: <span class="pf-green">{{ '%.4f'|format(total_balance or 0) }}</span></div>
-          <div>Assets: <span class="pf-green">{{ balances|length }}</span></div>
+
+        <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <button class="terminal-button btn btn-outline" onclick="openReceiveModal()">
+            <span class="mr-2">⚡</span> Receive Lightning
+          </button>
+          <button class="terminal-button btn btn-outline" onclick="openSendModal()">
+            <span class="mr-2">📤</span> Send Lightning
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Lightning Activity Section -->
+  <section class="mb-8">
+    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal flex items-center gap-2">
+      <span class="text-yellow-500">⚡</span> Lightning Activity
+      <span class="badge badge-outline border-terminal-green text-terminal-green ml-2">{{ lightning_invoices|length + lightning_withdrawals|length }}</span>
+    </h2>
+
+    {% if lightning_invoices or lightning_withdrawals %}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recent Invoices -->
+        <div class="card bg-base-100 border border-terminal-green shadow-lg">
+          <div class="card-body">
+            <h3 class="text-lg font-bold text-terminal-green mb-4 flex items-center gap-2">
+              <span class="text-green-500">📥</span> Recent Invoices
+            </h3>
+            <div class="space-y-3">
+              {% for invoice in lightning_invoices[:8] %}
+                <div class="card bg-base-100 border border-terminal-green">
+                  <div class="card-body p-4">
+                    <div class="flex justify-between items-start mb-2">
+                      <div class="flex items-center gap-3">
+                        <span class="badge badge-outline border-terminal-green text-terminal-green">{{ invoice.status }}</span>
+                        <span class="text-terminal-green font-bold">+{{ invoice.amount_sats }} sats</span>
+                      </div>
+                      <span class="text-terminal-dim-green text-sm">{{ invoice.created_at.strftime('%m/%d %H:%M') }}</span>
+                    </div>
+                    {% if invoice.memo %}
+                      <div class="text-terminal-dim-green text-sm mb-2">{{ invoice.memo }}</div>
+                    {% endif %}
+                    <div class="pf-monospace text-sm mb-3">{{ invoice.payment_hash[:20] }}...</div>
+                    {% if invoice.status == 'pending' %}
+                      <div class="flex gap-2">
+                        <button class="terminal-button btn btn-outline btn-xs" onclick="copyInvoice('{{ invoice.payment_request }}')">Copy</button>
+                        <button class="terminal-button btn btn-outline btn-xs" onclick="showQR('{{ invoice.payment_request }}')">QR</button>
+                      </div>
+                    {% endif %}
+                  </div>
+                </div>
+              {% else %}
+                <div class="text-center text-terminal-dim-green py-4">No invoices yet.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Withdrawals -->
+        <div class="card bg-base-100 border border-terminal-green shadow-lg">
+          <div class="card-body">
+            <h3 class="text-lg font-bold text-terminal-green mb-4 flex items-center gap-2">
+              <span class="text-red-500">📤</span> Recent Withdrawals
+            </h3>
+            <div class="space-y-3">
+              {% for withdrawal in lightning_withdrawals[:8] %}
+                <div class="card bg-base-100 border border-terminal-green">
+                  <div class="card-body p-4">
+                    <div class="flex justify-between items-start mb-2">
+                      <div class="flex items-center gap-3">
+                        <span class="badge badge-outline border-terminal-green text-terminal-green">{{ withdrawal.status }}</span>
+                        <span class="text-terminal-red font-bold">-{{ withdrawal.amount_sats }} sats</span>
+                      </div>
+                      <span class="text-terminal-dim-green text-sm">{{ withdrawal.created_at.strftime('%m/%d %H:%M') }}</span>
+                    </div>
+                    {% if withdrawal.fee_sats %}
+                      <div class="text-terminal-dim-green text-sm mb-2">Fee: {{ withdrawal.fee_sats }} sats</div>
+                    {% endif %}
+                    {% if withdrawal.payment_hash %}
+                      <div class="pf-monospace text-sm">{{ withdrawal.payment_hash[:20] }}...</div>
+                    {% endif %}
+                  </div>
+                </div>
+              {% else %}
+                <div class="text-center text-terminal-dim-green py-4">No withdrawals yet.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="card bg-base-100 border border-terminal-green shadow-lg">
+        <div class="card-body text-center">
+          <div class="text-6xl mb-4">⚡</div>
+          <h3 class="text-xl font-bold text-terminal-green mb-2">No Lightning Activity Yet</h3>
+          <p class="text-terminal-dim-green mb-6">Start by receiving your first lightning payment</p>
+          <button class="terminal-button btn btn-outline" onclick="openReceiveModal()">Receive Lightning</button>
         </div>
       </div>
     {% endif %}
   </section>
 
-  <section class="card">
-    <h2>Your Balances</h2>
-    <div class="pf-grid">
-      {% for balance in balances %}
-        <div class="card pf-token-card">
-          <div class="pf-token-header">
-            <span class="badge">{{ balance.token.symbol }}</span>
-            <span>{{ balance.token.name }}</span>
-          </div>
-          <div class="pf-token-body">
-            <div>Amount: <span class="pf-green">{{ '%.4f'|format(balance.amount or 0) }}</span></div>
-            <div>Value: <span class="pf-green">{{ '%.2f'|format(balance.value or 0) }}</span></div>
-            <div>Price: <span class="pf-green">{{ '%.4f'|format((price_by_symbol.get(balance.token.symbol) if price_by_symbol else None) or (balance.token.price or 0)) }}</span></div>
-            <div>24h: <span class="pf-green">{{ '%.2f'|format(balance.token.change_24h or 0) }}%</span></div>
-          </div>
-          <div class="pf-spark" data-symbol="{{ balance.token.symbol }}" data-price="{{ (price_by_symbol.get(balance.token.symbol) if price_by_symbol else None) or (balance.token.price or 0) }}"></div>
-          <div class="pf-card-actions">
-            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=balance.token.symbol) }}">Details</a>
-            <a class="retro-button" href="{{ url_for('web.pool', symbol=balance.token.symbol) }}">Trade</a>
-          </div>
-        </div>
-      {% else %}
-        <div>No balances found. Your wallet is empty.</div>
-      {% endfor %}
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>Recent Activity</h2>
-    <div class="pf-activity-list">
-      {% for activity in recent_activity %}
-        <div class="pf-activity-item">
-          <div class="pf-activity-time">{{ activity.time.strftime('%Y-%m-%d %H:%M') }}</div>
-          <div class="pf-activity-details">
-            <span class="badge">{{ activity.type }}</span>
-            <span>{{ activity.description }}</span>
-          </div>
-          <div class="pf-activity-amount">
-            {% if activity.amount %}
-              <span class="pf-green">{{ '%.4f'|format(activity.amount) }}</span> {{ activity.symbol }}
+  <!-- Detailed Lightning History Section -->
+  {% if lightning_invoices or lightning_withdrawals %}
+  <section class="mb-8">
+    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal flex items-center gap-2">
+      <span class="text-yellow-500">📋</span> Transaction History
+      <span class="badge badge-outline border-terminal-green text-terminal-green">{{ lightning_invoices|length + lightning_withdrawals|length }}</span>
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {% for invoice in lightning_invoices %}
+        <div class="card bg-base-100 border border-terminal-green shadow-lg hover:shadow-xl transition-shadow">
+          <div class="card-body">
+            <div class="flex items-center justify-between mb-4">
+              <div class="badge badge-outline border-terminal-green text-terminal-green">{{ invoice.status }}</div>
+              <div class="text-terminal-green font-bold text-lg">+{{ invoice.amount_sats }} sats</div>
+            </div>
+            <div class="space-y-2 mb-4">
+              <div class="flex justify-between">
+                <span class="text-terminal-dim-green">Type:</span>
+                <span class="text-terminal-green font-bold">Invoice</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-terminal-dim-green">Hash:</span>
+                <span class="text-terminal-green font-mono text-xs">{{ invoice.payment_hash[:16] }}...</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-terminal-dim-green">Date:</span>
+                <span class="text-terminal-green">{{ invoice.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+              </div>
+            </div>
+            {% if invoice.memo %}
+              <div class="mb-4">
+                <div class="text-terminal-dim-green text-sm mb-1">Memo:</div>
+                <div class="text-terminal-green">{{ invoice.memo }}</div>
+              </div>
             {% endif %}
+            <div class="card-actions justify-center gap-2">
+              {% if invoice.status == 'pending' %}
+                <button class="terminal-button btn btn-outline btn-xs" onclick="copyInvoice('{{ invoice.payment_request }}')">Copy</button>
+                <button class="terminal-button btn btn-outline btn-xs" onclick="showQR('{{ invoice.payment_request }}')">QR</button>
+              {% endif %}
+              <button class="terminal-button btn btn-outline btn-xs" onclick="copyPaymentHash('{{ invoice.payment_hash }}')">Hash</button>
+            </div>
           </div>
         </div>
-      {% else %}
-        <div>No recent activity.</div>
+      {% endfor %}
+
+      {% for withdrawal in lightning_withdrawals %}
+        <div class="card bg-base-100 border border-terminal-green shadow-lg hover:shadow-xl transition-shadow">
+          <div class="card-body">
+            <div class="flex items-center justify-between mb-4">
+              <div class="badge badge-outline border-terminal-green text-terminal-green">{{ withdrawal.status }}</div>
+              <div class="text-terminal-red font-bold text-lg">-{{ withdrawal.amount_sats }} sats</div>
+            </div>
+            <div class="space-y-2 mb-4">
+              <div class="flex justify-between">
+                <span class="text-terminal-dim-green">Type:</span>
+                <span class="text-terminal-green font-bold">Withdrawal</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-terminal-dim-green">Hash:</span>
+                <span class="text-terminal-green font-mono text-xs">{{ withdrawal.payment_hash[:16] }}...</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-terminal-dim-green">Date:</span>
+                <span class="text-terminal-green">{{ withdrawal.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+              </div>
+            </div>
+            {% if withdrawal.fee_sats %}
+              <div class="mb-4">
+                <div class="text-terminal-dim-green text-sm mb-1">Fee:</div>
+                <div class="text-terminal-red">{{ withdrawal.fee_sats }} sats</div>
+              </div>
+            {% endif %}
+            <div class="card-actions justify-center gap-2">
+              <button class="terminal-button btn btn-outline btn-xs" onclick="copyPaymentHash('{{ withdrawal.payment_hash }}')">Hash</button>
+              {% if withdrawal.status == 'pending' %}
+                <button class="terminal-button btn btn-outline btn-xs text-red-500" onclick="cancelWithdrawal('{{ withdrawal.id }}')">Cancel</button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
       {% endfor %}
     </div>
   </section>
+  {% endif %}
+
+
+  <!-- Receive Lightning Modal -->
+  <dialog id="receiveModal" class="modal">
+    <div class="modal-box bg-terminal-black border-2 border-terminal-green">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-terminal-green font-bold text-lg">⚡ Receive Lightning</h3>
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black">✕</button>
+        </form>
+      </div>
+      <form id="receiveForm" onsubmit="createInvoice(event)">
+        <div class="form-control mb-4">
+          <label class="label">
+            <span class="label-text text-terminal-green">Amount (sats):</span>
+          </label>
+          <input type="number" id="receiveAmount" name="amount" min="100" required
+                 class="terminal-input input-bordered w-full" />
+        </div>
+        <div class="form-control mb-6">
+          <label class="label">
+            <span class="label-text text-terminal-green">Memo (optional):</span>
+          </label>
+          <input type="text" id="receiveMemo" name="memo" maxlength="255"
+                 class="terminal-input input-bordered w-full" />
+        </div>
+        <div class="modal-action">
+          <button type="submit" class="terminal-button">Create Invoice</button>
+          <form method="dialog">
+            <button class="terminal-button">Cancel</button>
+          </form>
+        </div>
+      </form>
+      <div id="invoiceResult" class="hidden">
+        <div class="form-control mb-4">
+          <label class="label">
+            <span class="label-text text-terminal-green">Invoice:</span>
+          </label>
+          <textarea id="invoiceText" readonly rows="3"
+                    class="terminal-input input-bordered w-full font-terminal"></textarea>
+        </div>
+        <div class="form-control mb-6">
+          <label class="label">
+            <span class="label-text text-terminal-green">QR Code:</span>
+          </label>
+          <div id="invoiceQR" class="terminal-card border-2 border-terminal-green p-4 text-center"></div>
+        </div>
+        <div class="modal-action">
+          <button class="terminal-button" onclick="copyInvoice(document.getElementById('invoiceText').value)">Copy</button>
+          <form method="dialog">
+            <button class="terminal-button">Close</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Send Lightning Modal -->
+  <dialog id="sendModal" class="modal">
+    <div class="modal-box bg-terminal-black border-2 border-terminal-green">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-terminal-green font-bold text-lg">📤 Send Lightning</h3>
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black">✕</button>
+        </form>
+      </div>
+      <form id="sendForm" onsubmit="sendPayment(event)">
+        <div class="form-control mb-4">
+          <label class="label">
+            <span class="label-text text-terminal-green">Lightning Invoice:</span>
+          </label>
+          <textarea id="sendInvoice" name="invoice" rows="3" required
+                    placeholder="lnbc..."
+                    class="terminal-input input-bordered w-full font-terminal"></textarea>
+        </div>
+        <div class="form-control mb-6">
+          <label class="label">
+            <span class="label-text text-terminal-green">Amount (sats):</span>
+          </label>
+          <input type="number" id="sendAmount" name="amount" readonly
+                 class="terminal-input input-bordered w-full" />
+        </div>
+        <div class="modal-action">
+          <button type="submit" class="terminal-button">Send Payment</button>
+          <form method="dialog">
+            <button class="terminal-button">Cancel</button>
+          </form>
+        </div>
+      </form>
+      <div id="sendResult" class="hidden terminal-card border-terminal-green p-4 mt-4 text-center">
+        <!-- Send result will be displayed here -->
+      </div>
+    </div>
+  </dialog>
+
+  <!-- QR Code Modal -->
+  <dialog id="qrModal" class="modal">
+    <div class="modal-box bg-terminal-black border-2 border-terminal-green">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-terminal-green font-bold text-lg">📱 QR Code</h3>
+        <form method="dialog">
+          <button class="btn btn-sm btn-circle border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black">✕</button>
+        </form>
+      </div>
+      <div id="qrCode" class="terminal-card border-2 border-terminal-green p-4 text-center mb-6"></div>
+      <div class="modal-action">
+        <form method="dialog">
+          <button class="terminal-button">Close</button>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <style>
+    /* Terminal-style wallet using existing design system */
+
+    /* Larger modal styling */
+    .modal-box {
+      max-width: 600px !important;
+      width: 90vw !important;
+      padding: 2rem !important;
+    }
+
+    /* Make modal content areas more spacious */
+    .modal-box .form-control {
+      margin-bottom: 1.5rem !important;
+    }
+
+    /* Larger text areas for better readability */
+    .modal-box textarea {
+      min-height: 120px !important;
+      font-size: 14px !important;
+    }
+
+    /* Bigger modal action buttons */
+    .modal-action {
+      gap: 1rem !important;
+    }
+
+    .modal-action .terminal-button {
+      min-width: 120px !important;
+      padding: 0.75rem 1.5rem !important;
+      font-size: 16px !important;
+    }
+    .pf-wallet-header {
+      @apply terminal-card mb-6 flex justify-between items-center;
+    }
+
+    .pf-wallet-title h1 {
+      @apply text-terminal-green text-3xl font-normal mb-2;
+    }
+
+    .pf-wallet-subtitle {
+      @apply text-terminal-gray;
+    }
+
+    .pf-wallet-balance-card {
+      @apply text-center min-w-[200px];
+    }
+
+    .pf-balance-label {
+      @apply text-terminal-gray text-xs uppercase tracking-widest mb-2;
+    }
+
+    .pf-balance-amount {
+      @apply text-terminal-green text-2xl font-normal mb-1;
+    }
+
+    .pf-bance-details {
+      @apply text-terminal-gray text-sm;
+    }
+
+    .pf-quick-actions {
+      @apply flex gap-4 mb-6 justify-center;
+    }
+
+    .pf-action-btn {
+      @apply terminal-card flex flex-col items-center gap-2 min-w-[100px] p-3 cursor-pointer transition-all;
+    }
+
+    .pf-action-btn:hover {
+      @apply bg-[#001a00];
+    }
+
+    .pf-btn-icon {
+      @apply text-xl;
+    }
+
+    .pf-btn-text {
+      @apply text-terminal-green font-normal;
+    }
+
+    .pf-section {
+      @apply terminal-card mb-6;
+    }
+
+    .pf-section-header {
+      @apply flex justify-between items-center mb-4 pb-2 border-b border-terminal-green;
+    }
+
+    .pf-section-header h2 {
+      @apply text-terminal-yellow text-xl font-normal m-0;
+    }
+
+    .pf-section-badge {
+      @apply terminal-badge;
+    }
+
+    .pf-activity-list {
+      @apply flex flex-col gap-3;
+    }
+
+    .pf-activity-item {
+      @apply terminal-card flex items-start gap-3 p-3 transition-all;
+    }
+
+    .pf-activity-item:hover {
+      @apply border-terminal-gray;
+    }
+
+    .pf-incoming {
+      @apply border-l-4 border-l-terminal-green;
+    }
+
+    .pf-outgoing {
+      @apply border-l-4 border-l-terminal-red;
+    }
+
+    .pf-activity-icon {
+      @apply text-lg mt-1;
+    }
+
+    .pf-activity-content {
+      @apply flex-1;
+    }
+
+    .pf-activity-header {
+      @apply flex justify-between items-center mb-1;
+    }
+
+    .pf-activity-type {
+      @apply font-normal text-terminal-green;
+    }
+
+    .pf-activity-amount {
+      @apply font-normal;
+    }
+
+    .pf-incoming .pf-activity-amount {
+      @apply text-terminal-green;
+    }
+
+    .pf-outgoing .pf-activity-amount {
+      @apply text-terminal-red;
+    }
+
+    .pf-activity-details {
+      @apply flex items-center gap-2 text-sm;
+    }
+
+    .pf-activity-time {
+      @apply text-terminal-gray;
+    }
+
+    .pf-activity-fee {
+      @apply text-terminal-gray text-sm mt-1;
+    }
+
+    .pf-activity-actions {
+      @apply flex gap-2 mt-2;
+    }
+
+    .pf-tiny-btn {
+      @apply terminal-button text-xs py-1 px-2;
+    }
+
+    .pf-transaction-grid {
+      @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4;
+    }
+
+    .pf-transaction-card {
+      @apply terminal-card overflow-hidden;
+    }
+
+    .pf-transaction-header {
+      @apply terminal-card flex justify-between items-center p-3 border-b border-terminal-green;
+    }
+
+    .pf-tx-type {
+      @apply flex items-center gap-2 font-normal;
+    }
+
+    .pf-tx-invoice {
+      @apply text-terminal-green;
+    }
+
+    .pf-tx-withdrawal {
+      @apply text-terminal-red;
+    }
+
+    .pf-tx-amount {
+      @apply font-normal text-lg;
+    }
+
+    .pf-invoice-card .pf-tx-amount {
+      @apply text-terminal-green;
+    }
+
+    .pf-withdrawal-card .pf-tx-amount {
+      @apply text-terminal-red;
+    }
+
+    .pf-transaction-body {
+      @apply p-4;
+    }
+
+    .pf-tx-hash, .pf-tx-memo, .pf-tx-fee {
+      @apply flex justify-between items-center mb-2 text-sm;
+    }
+
+    .pf-tx-label {
+      @apply text-terminal-gray;
+    }
+
+    .pf-tx-value {
+      @apply text-terminal-green;
+    }
+
+    .pf-tx-meta {
+      @apply flex justify-between items-center mt-3 pt-2 border-t border-terminal-green;
+    }
+
+    .pf-tx-date {
+      @apply text-terminal-gray text-xs;
+    }
+
+    .pf-transaction-actions {
+      @apply flex gap-2 mt-3;
+    }
+
+    .pf-action-button {
+      @apply terminal-button text-sm;
+    }
+
+    .pf-empty-state {
+      @apply text-center p-10 text-terminal-gray;
+    }
+
+    .pf-empty-icon {
+      @apply text-4xl mb-4 opacity-50;
+    }
+
+    .pf-empty-text {
+      @apply mb-4 text-lg;
+    }
+
+    .pf-empty-action {
+      @apply terminal-button;
+    }
+
+    .badge {
+      @apply terminal-badge text-xs;
+    }
+
+    .badge-pending {
+      @apply border-terminal-yellow text-terminal-yellow;
+    }
+
+    .badge-paid {
+      @apply border-terminal-green text-terminal-green;
+    }
+
+    .badge-expired {
+      @apply border-terminal-gray text-terminal-gray;
+    }
+
+    .badge-cancelled {
+      @apply border-terminal-red text-terminal-red;
+    }
+
+    .badge-confirmed {
+      @apply border-terminal-green text-terminal-green;
+    }
+
+    .badge-failed {
+      @apply border-terminal-red text-terminal-red;
+    }
+
+    .pf-monospace {
+      @apply font-terminal text-terminal-green bg-transparent px-1 py-0.5 border border-terminal-green rounded text-sm;
+    }
+
+    /* Modal styles using terminal classes */
+    .pf-modal {
+      @apply fixed inset-0 bg-terminal-black bg-opacity-95 flex items-center justify-center z-50;
+    }
+
+    .pf-modal-content {
+      @apply terminal-card w-full max-w-md max-h-[90vh] overflow-y-auto;
+    }
+
+    .pf-modal-header {
+      @apply terminal-card flex justify-between items-center p-4 border-b border-terminal-green mb-0;
+    }
+
+    .pf-modal-header h3 {
+      @apply text-terminal-yellow text-xl font-normal m-0;
+    }
+
+    .pf-modal-body {
+      @apply p-6 text-terminal-green;
+    }
+
+    .pf-modal-close {
+      @apply text-terminal-gray text-2xl cursor-pointer transition-all hover:text-terminal-red;
+    }
+
+    .pf-form-group {
+      @apply mb-4;
+    }
+
+    .pf-form-group label {
+      @apply block mb-2 font-normal text-terminal-green;
+    }
+
+    .pf-form-actions {
+      @apply flex gap-3 justify-end mt-6;
+    }
+
+    #invoiceText {
+      @apply terminal-input font-terminal text-terminal-green min-h-[80px] resize-y;
+    }
+
+    #invoiceQR,
+    #qrCode {
+      @apply terminal-card p-4 text-center my-4;
+    }
+
+    #sendResult {
+      @apply terminal-card border-terminal-green p-4 mt-4 text-center;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .pf-wallet-header {
+        @apply flex-col gap-4 text-center;
+      }
+
+      .pf-quick-actions {
+        @apply flex-col items-center;
+      }
+
+      .pf-transaction-grid {
+        @apply grid-cols-1;
+      }
+    }
+  </style>
+
+  <script>
+    function openReceiveModal() {
+      document.getElementById('receiveModal').showModal();
+    }
+
+    function closeReceiveModal() {
+      document.getElementById('receiveModal').close();
+      document.getElementById('receiveForm').reset();
+      document.getElementById('invoiceResult').classList.add('hidden');
+    }
+
+    function openSendModal() {
+      document.getElementById('sendModal').showModal();
+    }
+
+    function closeSendModal() {
+      document.getElementById('sendModal').close();
+      document.getElementById('sendForm').reset();
+      document.getElementById('sendResult').classList.add('hidden');
+    }
+
+    function closeQRModal() {
+      document.getElementById('qrModal').close();
+      document.getElementById('qrCode').innerHTML = '';
+    }
+
+    function copyInvoice(invoice) {
+      navigator.clipboard.writeText(invoice).then(() => {
+        alert('Invoice copied to clipboard!');
+      });
+    }
+
+    function showQR(invoice) {
+      // Simple QR code display (you can use a proper QR library)
+      document.getElementById('qrCode').innerHTML =
+        `<div class="text-center p-4">
+          <div class="font-terminal text-xs break-all p-2 border border-terminal-green bg-terminal-black">${invoice}</div>
+          <p class="text-terminal-dim-green mt-2 text-sm">Invoice text (scan with a QR code reader)</p>
+        </div>`;
+      document.getElementById('qrModal').showModal();
+    }
+
+    async function createInvoice(event) {
+      event.preventDefault();
+      const formData = new FormData(event.target);
+
+      try {
+        const response = await fetch('/api/lightning/invoice', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: parseInt(formData.get('amount')),
+            memo: formData.get('memo') || ''
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          document.getElementById('invoiceText').value = result.payment_request;
+          document.getElementById('invoiceResult').classList.remove('hidden');
+
+          // Show QR code
+          document.getElementById('invoiceQR').innerHTML =
+            `<div class="text-center p-4">
+              <div class="font-terminal text-xs break-all p-2 border border-terminal-green bg-terminal-black">${result.payment_request}</div>
+              <p class="text-terminal-dim-green mt-2 text-sm">Invoice text (scan with a QR code reader)</p>
+            </div>`;
+        } else {
+          alert('Error creating invoice: ' + result.error);
+        }
+      } catch (error) {
+        alert('Error creating invoice: ' + error.message);
+      }
+    }
+
+    async function sendPayment(event) {
+      event.preventDefault();
+      const formData = new FormData(event.target);
+
+      try {
+        const response = await fetch('/api/lightning/pay', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            invoice: formData.get('invoice')
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          document.getElementById('sendResult').innerHTML =
+            `<div class="text-terminal-green p-4 border border-terminal-green rounded">
+              Payment sent successfully!<br>
+              Amount: ${result.amount_sats} sats<br>
+              Fee: ${result.fee_sats || 0} sats
+            </div>`;
+          document.getElementById('sendResult').classList.remove('hidden');
+
+          // Refresh page after a delay
+          setTimeout(() => {
+            location.reload();
+          }, 3000);
+        } else {
+          alert('Error sending payment: ' + result.error);
+        }
+      } catch (error) {
+        alert('Error sending payment: ' + error.message);
+      }
+    }
+
+    function copyPaymentHash(hash) {
+      navigator.clipboard.writeText(hash).then(() => {
+        alert('Payment hash copied to clipboard!');
+      });
+    }
+
+    async function cancelWithdrawal(withdrawalId) {
+      if (!confirm('Are you sure you want to cancel this withdrawal?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/lightning/withdrawal/${withdrawalId}/cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          alert('Withdrawal cancelled successfully!');
+          location.reload();
+        } else {
+          alert('Error cancelling withdrawal: ' + result.error);
+        }
+      } catch (error) {
+        alert('Error cancelling withdrawal: ' + error.message);
+      }
+    }
+  </script>
 {% endblock %}

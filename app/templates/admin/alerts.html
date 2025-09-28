@@ -1,5 +1,9 @@
-{% extends 'base.html' %}
+{% extends 'admin/base.html' %}
 {% block title %}Admin · Alerts | Postfun{% endblock %}
+{% block breadcrumb %}
+  <span class="text-admin-cyan">/</span>
+  <a href="{{ url_for('admin.alerts_admin') }}" class="text-admin-blue hover:text-admin-cyan">Alerts</a>
+{% endblock %}
 {% block content %}
   <section class="card">
     <h1>Alert Rules</h1>
@@ -19,10 +23,13 @@
       </div>
     </form>
     {% if not rules_p.items %}
-      <div>No rules.</div>
+      <div class="admin-empty-state">
+        <div class="admin-empty-icon">🚨</div>
+        <div class="admin-empty-text">No alert rules found.</div>
+      </div>
     {% else %}
       <form method="POST" action="{{ url_for('admin.alerts_bulk') }}">
-        <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center;">
+        <div style="margin-bottom:12px; display:flex; gap:8px; align-items:center;">
           <select class="retro-input" name="op" required>
             <option value="" disabled selected>Bulk action…</option>
             <option value="enable">Enable</option>
@@ -32,50 +39,123 @@
           <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
           <button class="retro-button" type="submit">Apply</button>
         </div>
-        <div class="pf-table-wrap">
-          <table class="pf-table">
-          <thead>
-            <tr>
-              <th style="width:28px;">Sel</th>
-              <th>ID</th>
-              <th>User</th>
-              <th>Token</th>
-              <th>Condition</th>
-              <th>Threshold</th>
-              <th>Active</th>
-              <th>Last Triggered</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for r in rules_p.items %}
-              <tr>
-                <td><input type="checkbox" name="rule_ids" value="{{ r.id }}" /></td>
-                <td>{{ r.id }}</td>
-                <td>{{ r.user_id }}</td>
-                <td>{{ r.token.symbol }}</td>
-                <td>{{ r.condition }}</td>
-                <td>{{ '%.6f'|format(r.threshold or 0) }}</td>
-                <td>{{ 'Yes' if r.active else 'No' }}</td>
-                <td>{{ r.last_triggered_at or '—' }}</td>
-                <td>
-                  <button class="retro-button" type="submit" formmethod="POST" formaction="{{ url_for('admin.alerts_toggle', rule_id=r.id) }}">{{ 'Disable' if r.active else 'Enable' }}</button>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-          </table>
+
+        <div class="admin-table-container">
+          <div class="admin-table-header">
+            <div class="admin-table-title">Alert Rules Management</div>
+            <div class="admin-table-stats">
+              <span class="admin-stat-badge">{{ rules_p.total }} Total Rules</span>
+              <span class="admin-stat-badge">{{ rules_p.page }} / {{ rules_p.pages or 1 }} Pages</span>
+            </div>
+          </div>
+
+          <div class="admin-table-wrapper">
+            <table class="admin-data-table" id="rulesTable">
+              <thead>
+                <tr>
+                  <th style="width:28px;">Sel</th>
+                  <th class="sortable" data-column="id">ID <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="user">User <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="token">Token <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="condition">Condition <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="threshold">Threshold <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="active">Active <span class="sort-arrow">↕</span></th>
+                  <th class="sortable" data-column="triggered">Last Triggered <span class="sort-arrow">↕</span></th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in rules_p.items %}
+                  <tr data-rule-id="{{ r.id }}" {% if not r.active %}class="inactive-rule-row"{% endif %}>
+                    <td><input type="checkbox" name="rule_ids" value="{{ r.id }}" /></td>
+                    <td><span class="admin-badge id-badge">{{ r.id }}</span></td>
+                    <td>
+                      <div class="admin-user-id">{{ r.user_id }}</div>
+                    </td>
+                    <td>
+                      <div class="admin-token-symbol">{{ r.token.symbol }}</div>
+                    </td>
+                    <td>
+                      <div class="admin-condition">{{ r.condition }}</div>
+                    </td>
+                    <td>
+                      <div class="admin-threshold">{{ '%.6f'|format(r.threshold or 0) }}</div>
+                    </td>
+                    <td>
+                      <span class="admin-status-badge {% if r.active %}admin-badge-success{% else %}admin-badge-inactive{% endif %}">
+                        {{ 'Yes' if r.active else 'No' }}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="admin-date">{{ r.last_triggered_at.strftime('%Y-%m-%d %H:%M') if r.last_triggered_at else '—' }}</div>
+                    </td>
+                    <td>
+                      <div class="admin-actions">
+                        <button class="admin-btn {% if r.active %}admin-btn-warning{% else %}admin-btn-success{% endif %}" type="submit" formmethod="POST" formaction="{{ url_for('admin.alerts_toggle', rule_id=r.id) }}" title="{{ 'Disable' if r.active else 'Enable' }}">
+                          {{ '⏸️' if r.active else '▶️' }}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="admin-pagination">
+          {% set prev_url = url_for('admin.alerts_admin', page=rules_p.prev_num, per=request.args.get('per'), e_page=request.args.get('e_page'), e_per=request.args.get('e_per')) if rules_p.has_prev else None %}
+          {% set next_url = url_for('admin.alerts_admin', page=rules_p.next_num, per=request.args.get('per'), e_page=request.args.get('e_page'), e_per=request.args.get('e_per')) if rules_p.has_next else None %}
+
+          <div class="admin-pagination-info">
+            <span class="admin-pagination-text">Page {{ rules_p.page }} of {{ rules_p.pages or 1 }}</span>
+            <span class="admin-pagination-total">({{ rules_p.total }} total rules)</span>
+          </div>
+
+          <div class="admin-pagination-controls">
+            {% if prev_url %}
+              <a href="{{ prev_url }}" class="admin-pagination-btn admin-pagination-prev">
+                ← Previous
+              </a>
+            {% else %}
+              <span class="admin-pagination-btn admin-pagination-prev admin-pagination-disabled">
+                ← Previous
+              </span>
+            {% endif %}
+
+            <div class="admin-pagination-pages">
+              {% set start_page = rules_p.page - 2 %}
+              {% set end_page = rules_p.page + 2 %}
+
+              {% if start_page < 1 %}
+                {% set start_page = 1 %}
+              {% endif %}
+
+              {% if end_page > rules_p.pages %}
+                {% set end_page = rules_p.pages %}
+              {% endif %}
+
+              {% for p in range(start_page, end_page + 1) %}
+                {% if p == rules_p.page %}
+                  <span class="admin-pagination-number admin-pagination-current">{{ p }}</span>
+                {% else %}
+                  <a href="{{ url_for('admin.alerts_admin', page=p, per=request.args.get('per'), e_page=request.args.get('e_page'), e_per=request.args.get('e_per')) }}" class="admin-pagination-number">{{ p }}</a>
+                {% endif %}
+              {% endfor %}
+            </div>
+
+            {% if next_url %}
+              <a href="{{ next_url }}" class="admin-pagination-btn admin-pagination-next">
+                Next →
+              </a>
+            {% else %}
+              <span class="admin-pagination-btn admin-pagination-next admin-pagination-disabled">
+                Next →
+              </span>
+            {% endif %}
+          </div>
         </div>
       </form>
-      <div class="pf-pagination">
-        {% set prev_url = url_for('admin.alerts_admin', page=rules_p.prev_num, per=request.args.get('per'), e_page=request.args.get('e_page'), e_per=request.args.get('e_per')) if rules_p.has_prev else None %}
-        {% set next_url = url_for('admin.alerts_admin', page=rules_p.next_num, per=request.args.get('per'), e_page=request.args.get('e_page'), e_per=request.args.get('e_per')) if rules_p.has_next else None %}
-        <div>Rules Page {{ rules_p.page }} / {{ rules_p.pages or 1 }}</div>
-        <div style="display:flex; gap:8px;">
-          <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
-          <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
-        </div>
-      </div>
     {% endif %}
   </section>
 
@@ -97,43 +177,303 @@
       </div>
     </form>
     {% if not events_p.items %}
-      <div>No events.</div>
-    {% else %}
-      <div class="pf-table-wrap">
-        <table class="pf-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Rule</th>
-              <th>User</th>
-              <th>Token</th>
-              <th>Price</th>
-              <th>Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for e in events_p.items %}
-              <tr>
-                <td>{{ e.id }}</td>
-                <td>{{ e.rule_id }}</td>
-                <td>{{ e.rule.user_id }}</td>
-                <td>{{ e.rule.token.symbol }}</td>
-                <td>{{ '%.6f'|format(e.price or 0) }}</td>
-                <td>{{ e.triggered_at }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="admin-empty-state">
+        <div class="admin-empty-icon">⚡</div>
+        <div class="admin-empty-text">No recent events found.</div>
       </div>
-      <div class="pf-pagination">
+    {% else %}
+      <div class="admin-table-container">
+        <div class="admin-table-header">
+          <div class="admin-table-title">Recent Alert Events</div>
+          <div class="admin-table-stats">
+            <span class="admin-stat-badge">{{ events_p.total }} Total Events</span>
+            <span class="admin-stat-badge">{{ events_p.page }} / {{ events_p.pages or 1 }} Pages</span>
+          </div>
+        </div>
+
+        <div class="admin-table-wrapper">
+          <table class="admin-data-table" id="eventsTable">
+            <thead>
+              <tr>
+                <th class="sortable" data-column="id">ID <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="rule">Rule <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="user">User <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="token">Token <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="price">Price <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="time">Time <span class="sort-arrow">↕</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in events_p.items %}
+                <tr data-event-id="{{ e.id }}">
+                  <td><span class="admin-badge id-badge">{{ e.id }}</span></td>
+                  <td>
+                    <div class="admin-rule-id">{{ e.rule_id }}</div>
+                  </td>
+                  <td>
+                    <div class="admin-user-id">{{ e.rule.user_id }}</div>
+                  </td>
+                  <td>
+                    <div class="admin-token-symbol">{{ e.rule.token.symbol }}</div>
+                  </td>
+                  <td>
+                    <div class="admin-price">{{ '%.6f'|format(e.price or 0) }}</div>
+                  </td>
+                  <td>
+                    <div class="admin-date">{{ e.triggered_at.strftime('%Y-%m-%d %H:%M:%S') if e.triggered_at else '—' }}</div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-pagination">
         {% set prev_url = url_for('admin.alerts_admin', e_page=events_p.prev_num, e_per=request.args.get('e_per'), page=request.args.get('page'), per=request.args.get('per')) if events_p.has_prev else None %}
         {% set next_url = url_for('admin.alerts_admin', e_page=events_p.next_num, e_per=request.args.get('e_per'), page=request.args.get('page'), per=request.args.get('per')) if events_p.has_next else None %}
-        <div>Events Page {{ events_p.page }} / {{ events_p.pages or 1 }}</div>
-        <div style="display:flex; gap:8px;">
-          <a class="retro-button {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
-          <a class="retro-button {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+
+        <div class="admin-pagination-info">
+          <span class="admin-pagination-text">Page {{ events_p.page }} of {{ events_p.pages or 1 }}</span>
+          <span class="admin-pagination-total">({{ events_p.total }} total events)</span>
+        </div>
+
+        <div class="admin-pagination-controls">
+          {% if prev_url %}
+            <a href="{{ prev_url }}" class="admin-pagination-btn admin-pagination-prev">
+              ← Previous
+            </a>
+          {% else %}
+            <span class="admin-pagination-btn admin-pagination-prev admin-pagination-disabled">
+              ← Previous
+            </span>
+          {% endif %}
+
+          <div class="admin-pagination-pages">
+            {% set start_page = events_p.page - 2 %}
+            {% set end_page = events_p.page + 2 %}
+
+            {% if start_page < 1 %}
+              {% set start_page = 1 %}
+            {% endif %}
+
+            {% if end_page > events_p.pages %}
+              {% set end_page = events_p.pages %}
+            {% endif %}
+
+            {% for p in range(start_page, end_page + 1) %}
+              {% if p == events_p.page %}
+                <span class="admin-pagination-number admin-pagination-current">{{ p }}</span>
+              {% else %}
+                <a href="{{ url_for('admin.alerts_admin', e_page=p, e_per=request.args.get('e_per'), page=request.args.get('page'), per=request.args.get('per')) }}" class="admin-pagination-number">{{ p }}</a>
+              {% endif %}
+            {% endfor %}
+          </div>
+
+          {% if next_url %}
+            <a href="{{ next_url }}" class="admin-pagination-btn admin-pagination-next">
+              Next →
+            </a>
+          {% else %}
+            <span class="admin-pagination-btn admin-pagination-next admin-pagination-disabled">
+              Next →
+            </span>
+          {% endif %}
         </div>
       </div>
     {% endif %}
   </section>
+
+  <style>
+    /* Alerts-specific styles */
+    .admin-condition {
+      font-family: monospace;
+      color: var(--admin-cyan);
+      font-weight: bold;
+    }
+
+    .admin-threshold {
+      font-family: monospace;
+      color: var(--admin-green);
+      font-weight: bold;
+    }
+
+    .admin-price {
+      font-family: monospace;
+      color: var(--admin-green);
+      font-weight: bold;
+    }
+
+    .admin-rule-id {
+      font-family: monospace;
+      color: var(--admin-blue);
+    }
+
+    .admin-data-table tr.inactive-rule-row {
+      background: rgba(255, 0, 0, 0.1);
+    }
+
+    .admin-data-table tr.inactive-rule-row:hover {
+      background: rgba(255, 0, 0, 0.2);
+    }
+
+    /* Mobile responsiveness for alerts-specific elements */
+    @media (max-width: 768px) {
+      .admin-condition,
+      .admin-threshold,
+      .admin-price,
+      .admin-rule-id {
+        font-size: 0.875rem;
+      }
+
+      .admin-actions {
+        flex-direction: column;
+      }
+
+      .admin-btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .admin-condition,
+      .admin-threshold,
+      .admin-price,
+      .admin-rule-id {
+        font-size: 0.75rem;
+      }
+    }
+  </style>
+
+  <script>
+    // Sorting functionality for rules table
+    document.addEventListener('DOMContentLoaded', function() {
+      const rulesTable = document.getElementById('rulesTable');
+      const eventsTable = document.getElementById('eventsTable');
+
+      if (rulesTable) {
+        setupSorting(rulesTable, 'rules');
+      }
+
+      if (eventsTable) {
+        setupSorting(eventsTable, 'events');
+      }
+
+      function setupSorting(table, type) {
+        const headers = table.querySelectorAll('th.sortable');
+        let sortColumn = null;
+        let sortDirection = 'asc';
+
+        // Initialize table data
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        const tableData = rows.map(row => {
+          const data = {
+            element: row,
+            id: parseInt(row.querySelector('td:first-child .admin-badge')?.textContent.trim() || row.querySelector('td:first-child')?.textContent.trim())
+          };
+
+          if (type === 'rules') {
+            Object.assign(data, {
+              user: row.querySelector('td:nth-child(3)').textContent.trim(),
+              token: row.querySelector('td:nth-child(4) .admin-token-symbol').textContent.trim(),
+              condition: row.querySelector('td:nth-child(5) .admin-condition').textContent.trim(),
+              threshold: parseFloat(row.querySelector('td:nth-child(6) .admin-threshold').textContent.trim()),
+              active: row.querySelector('td:nth-child(7) .admin-status-badge').textContent.trim(),
+              triggered: row.querySelector('td:nth-child(8) .admin-date').textContent.trim()
+            });
+          } else if (type === 'events') {
+            Object.assign(data, {
+              rule: row.querySelector('td:nth-child(2) .admin-rule-id').textContent.trim(),
+              user: row.querySelector('td:nth-child(3) .admin-user-id').textContent.trim(),
+              token: row.querySelector('td:nth-child(4) .admin-token-symbol').textContent.trim(),
+              price: parseFloat(row.querySelector('td:nth-child(5) .admin-price').textContent.trim()),
+              time: row.querySelector('td:nth-child(6) .admin-date').textContent.trim()
+            });
+          }
+
+          return data;
+        });
+
+        headers.forEach(header => {
+          header.addEventListener('click', () => {
+            const column = header.dataset.column;
+
+            // Update sort direction
+            if (sortColumn === column) {
+              sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+              sortColumn = column;
+              sortDirection = 'asc';
+            }
+
+            // Update header styles
+            headers.forEach(h => {
+              h.classList.remove('sort-asc', 'sort-desc');
+            });
+            header.classList.add(sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+
+            // Sort the data
+            sortTable(column, sortDirection, type);
+          });
+        });
+
+        function sortTable(column, direction, type) {
+          const sortedData = [...tableData].sort((a, b) => {
+            let aVal, bVal;
+
+            switch (column) {
+              case 'id':
+                aVal = a.id;
+                bVal = b.id;
+                break;
+              case 'user':
+                aVal = a.user || '';
+                bVal = b.user || '';
+                break;
+              case 'token':
+                aVal = a.token || '';
+                bVal = b.token || '';
+                break;
+              case 'condition':
+                aVal = a.condition || '';
+                bVal = b.condition || '';
+                break;
+              case 'threshold':
+              case 'price':
+                aVal = a[column] || 0;
+                bVal = b[column] || 0;
+                break;
+              case 'active':
+                aVal = a.active;
+                bVal = b.active;
+                break;
+              case 'triggered':
+              case 'time':
+                aVal = new Date(a[column]);
+                bVal = new Date(b[column]);
+                break;
+              case 'rule':
+                aVal = a.rule || '';
+                bVal = b.rule || '';
+                break;
+              default:
+                return 0;
+            }
+
+            // Compare values
+            if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+            return 0;
+          });
+
+          // Reorder table rows
+          const tbody = table.querySelector('tbody');
+          sortedData.forEach(item => {
+            tbody.appendChild(item.element);
+          });
+        }
+      }
+    });
+  </script>
 {% endblock %}

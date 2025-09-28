@@ -1,34 +1,194 @@
-{% extends 'base.html' %}
+{% extends 'admin/base.html' %}
 {% block title %}Admin · Fees | Postfun{% endblock %}
+{% block breadcrumb %}
+  <span class="text-admin-cyan">/</span>
+  <a href="{{ url_for('admin.fees') }}" class="text-admin-blue hover:text-admin-cyan">Fees</a>
+{% endblock %}
 {% block content %}
   <section class="card">
     <h1>Protocol Fees</h1>
     <p>Manage fee distribution rules and payouts per pool.</p>
     {% if not pools %}
-      <div>No pools found.</div>
+      <div class="admin-empty-state">
+        <div class="admin-empty-icon">💰</div>
+        <div class="admin-empty-text">No pools found.</div>
+      </div>
     {% else %}
-      <div class="pf-table-wrap">
-        <table class="pf-table">
-          <thead>
-            <tr>
-              <th>Pool ID</th>
-              <th>Pair</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for p in pools %}
+      <div class="admin-table-container">
+        <div class="admin-table-header">
+          <div class="admin-table-title">Fee Pools Management</div>
+          <div class="admin-table-stats">
+            <span class="admin-stat-badge">{{ pools | length }} Total Pools</span>
+          </div>
+        </div>
+
+        <div class="admin-table-wrapper">
+          <table class="admin-data-table" id="feesTable">
+            <thead>
               <tr>
-                <td><code>{{ p.id }}</code></td>
-                <td><strong>{{ p.token_a }}</strong> / <strong>{{ p.token_b }}</strong></td>
-                <td>
-                  <a class="retro-button" href="{{ url_for('admin.fees_detail', pool_id=p.id) }}">View</a>
-                </td>
+                <th class="sortable" data-column="id">Pool ID <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="pair">Trading Pair <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="token_a">Token A <span class="sort-arrow">↕</span></th>
+                <th class="sortable" data-column="token_b">Token B <span class="sort-arrow">↕</span></th>
+                <th>Actions</th>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {% for p in pools %}
+                <tr data-pool-id="{{ p.id }}">
+                  <td><span class="admin-badge id-badge">{{ p.id }}</span></td>
+                  <td>
+                    <div class="admin-pool-pair">
+                      <span class="admin-pair-text">{{ p.token_a }} / {{ p.token_b }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="admin-token-info">
+                      <span class="admin-token-symbol">{{ p.token_a }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="admin-token-info">
+                      <span class="admin-token-symbol">{{ p.token_b }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="admin-actions">
+                      <a href="{{ url_for('admin.fees_detail', pool_id=p.id) }}" class="admin-btn admin-btn-primary" title="View fee details">
+                        👁️
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     {% endif %}
   </section>
+
+  <style>
+    /* Fees-specific styles */
+    .admin-pool-pair {
+      font-weight: bold;
+    }
+
+    .admin-pair-text {
+      color: var(--admin-cyan);
+      font-family: 'VT323', monospace;
+      font-size: 1.1rem;
+    }
+
+    .admin-token-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .admin-token-symbol {
+      color: var(--admin-blue);
+      font-weight: bold;
+      font-family: 'VT323', monospace;
+    }
+
+    /* Mobile responsiveness for fees-specific elements */
+    @media (max-width: 768px) {
+      .admin-pair-text {
+        font-size: 1rem;
+      }
+
+      .admin-actions {
+        flex-direction: column;
+      }
+
+      .admin-btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+
+  <script>
+    // Sorting functionality for fees data table
+    document.addEventListener('DOMContentLoaded', function() {
+      const table = document.getElementById('feesTable');
+      if (!table) return;
+
+      const headers = table.querySelectorAll('th.sortable');
+      let sortColumn = null;
+      let sortDirection = 'asc';
+
+      // Initialize table data
+      const rows = Array.from(table.querySelectorAll('tbody tr'));
+      const tableData = rows.map(row => ({
+        element: row,
+        id: row.querySelector('td:first-child .admin-badge').textContent.trim(),
+        pair: row.querySelector('.admin-pair-text').textContent.trim(),
+        token_a: row.querySelector('td:nth-child(3) .admin-token-symbol').textContent.trim(),
+        token_b: row.querySelector('td:nth-child(4) .admin-token-symbol').textContent.trim()
+      }));
+
+      headers.forEach(header => {
+        header.addEventListener('click', () => {
+          const column = header.dataset.column;
+
+          // Update sort direction
+          if (sortColumn === column) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+            sortColumn = column;
+            sortDirection = 'asc';
+          }
+
+          // Update header styles
+          headers.forEach(h => {
+            h.classList.remove('sort-asc', 'sort-desc');
+          });
+          header.classList.add(sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+
+          // Sort the data
+          sortTable(column, sortDirection);
+        });
+      });
+
+      function sortTable(column, direction) {
+        const sortedData = [...tableData].sort((a, b) => {
+          let aVal, bVal;
+
+          switch (column) {
+            case 'id':
+              aVal = a.id;
+              bVal = b.id;
+              break;
+            case 'pair':
+              aVal = a.pair || '';
+              bVal = b.pair || '';
+              break;
+            case 'token_a':
+              aVal = a.token_a || '';
+              bVal = b.token_a || '';
+              break;
+            case 'token_b':
+              aVal = a.token_b || '';
+              bVal = b.token_b || '';
+              break;
+            default:
+              return 0;
+          }
+
+          // Compare values
+          if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+          if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+
+        // Reorder table rows
+        const tbody = table.querySelector('tbody');
+        sortedData.forEach(item => {
+          tbody.appendChild(item.element);
+        });
+      }
+    });
+  </script>
 {% endblock %}

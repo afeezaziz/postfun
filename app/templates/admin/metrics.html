@@ -1,43 +1,254 @@
-{% extends 'base.html' %}
+{% extends 'admin/base.html' %}
 {% block title %}Admin · Metrics | Postfun{% endblock %}
+{% block breadcrumb %}
+  <span class="text-admin-cyan">/</span>
+  <a href="{{ url_for('admin.metrics_view') }}" class="text-admin-blue hover:text-admin-cyan">Metrics</a>
+{% endblock %}
 {% block content %}
   <section class="card">
-    <a class="retro-button" href="{{ url_for('admin.dashboard') }}" style="float:right;">← Dashboard</a>
-    <h1>System Metrics</h1>
-    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-      <div class="card">
-        <div>Requests (5m)</div>
-        <div class="pf-green" style="font-size: 22px;">{{ '%.0f'|format(req_5m.requests or 0) }} req</div>
-        <div>Error rate: {{ '%.2f'|format((req_5m.error_rate or 0) * 100) }}%</div>
-        <div>RPM: {{ '%.2f'|format(req_5m.rpm or 0) }}</div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h1>System Metrics</h1>
+      <a class="retro-button" href="{{ url_for('admin.dashboard') }}">← Dashboard</a>
+    </div>
+
+    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+      <div class="admin-metric-card">
+        <div class="admin-metric-header">
+          <div class="admin-metric-title">Requests (5m)</div>
+          <div class="admin-metric-icon">📊</div>
+        </div>
+        <div class="admin-metric-value admin-metric-primary">{{ '%.0f'|format(req_5m.requests or 0) }} req</div>
+        <div class="admin-metric-details">
+          <div class="admin-metric-item">
+            <span class="admin-metric-label">Error rate:</span>
+            <span class="admin-metric-stat {% if (req_5m.error_rate or 0) > 0.05 %}admin-metric-error{% else %}admin-metric-success{% endif %}">
+              {{ '%.2f'|format((req_5m.error_rate or 0) * 100) }}%
+            </span>
+          </div>
+          <div class="admin-metric-item">
+            <span class="admin-metric-label">RPM:</span>
+            <span class="admin-metric-stat">{{ '%.2f'|format(req_5m.rpm or 0) }}</span>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <div>Requests (15m)</div>
-        <div class="pf-green" style="font-size: 22px;">{{ '%.0f'|format(req_15m.requests or 0) }} req</div>
-        <div>Error rate: {{ '%.2f'|format((req_15m.error_rate or 0) * 100) }}%</div>
-        <div>RPM: {{ '%.2f'|format(req_15m.rpm or 0) }}</div>
+
+      <div class="admin-metric-card">
+        <div class="admin-metric-header">
+          <div class="admin-metric-title">Requests (15m)</div>
+          <div class="admin-metric-icon">📈</div>
+        </div>
+        <div class="admin-metric-value admin-metric-primary">{{ '%.0f'|format(req_15m.requests or 0) }} req</div>
+        <div class="admin-metric-details">
+          <div class="admin-metric-item">
+            <span class="admin-metric-label">Error rate:</span>
+            <span class="admin-metric-stat {% if (req_15m.error_rate or 0) > 0.05 %}admin-metric-error{% else %}admin-metric-success{% endif %}">
+              {{ '%.2f'|format((req_15m.error_rate or 0) * 100) }}%
+            </span>
+          </div>
+          <div class="admin-metric-item">
+            <span class="admin-metric-label">RPM:</span>
+            <span class="admin-metric-stat">{{ '%.2f'|format(req_15m.rpm or 0) }}</span>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <div>DB Health</div>
-        <div>Status: <strong class="{{ 'pf-green' if dbh.ok else 'pf-red' }}">{{ 'OK' if dbh.ok else 'DOWN' }}</strong></div>
-        <div>Latency: {{ '%.2f'|format(dbh.latency_ms or 0) }} ms</div>
-        {% if dbh.error %}<div>Error: <code>{{ dbh.error }}</code></div>{% endif %}
+
+      <div class="admin-metric-card">
+        <div class="admin-metric-header">
+          <div class="admin-metric-title">Database Health</div>
+          <div class="admin-metric-icon">{{ '🟢' if dbh.ok else '🔴' }}</div>
+        </div>
+        <div class="admin-metric-value {% if dbh.ok %}admin-metric-success{% else %}admin-metric-error{% endif %}">
+          {{ 'OK' if dbh.ok else 'DOWN' }}
+        </div>
+        <div class="admin-metric-details">
+          <div class="admin-metric-item">
+            <span class="admin-metric-label">Latency:</span>
+            <span class="admin-metric-stat">{{ '%.2f'|format(dbh.latency_ms or 0) }} ms</span>
+          </div>
+          {% if dbh.error %}
+            <div class="admin-metric-item">
+              <span class="admin-metric-label">Error:</span>
+              <code class="admin-error-code">{{ dbh.error }}</code>
+            </div>
+          {% endif %}
+        </div>
       </div>
-      <div class="card">
-        <div>Provider Logs (1h)</div>
-        <div>Total: {{ log_total }}</div>
-        <div>Success rate: {{ '%.2f'|format((provider_success or 0) * 100) }}%</div>
+
+      <div class="admin-metric-card">
+        <div class="admin-metric-header">
+          <div class="admin-metric-title">Provider Logs (1h)</div>
+          <div class="admin-metric-icon">📝</div>
+        </div>
+        <div class="admin-metric-value admin-metric-primary">{{ log_total or 0 }}</div>
+        <div class="admin-metric-details">
+          <div class="admin-metric-item">
+            <span class="admin-metric-label">Success rate:</span>
+            <span class="admin-metric-stat {% if (provider_success or 0) > 0.95 %}admin-metric-success{% else %}admin-metric-warning{% endif %}">
+              {{ '%.2f'|format((provider_success or 0) * 100) }}%
+            </span>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <div>SSE Clients</div>
+
+      <div class="admin-metric-card">
+        <div class="admin-metric-header">
+          <div class="admin-metric-title">SSE Clients</div>
+          <div class="admin-metric-icon">🚀</div>
+        </div>
         {% if not sse %}
-          <div>None</div>
+          <div class="admin-metric-value admin-metric-empty">None</div>
         {% else %}
-          {% for k,v in sse.items() %}
-            <div>{{ k }}: <strong>{{ v }}</strong></div>
-          {% endfor %}
+          <div class="admin-metric-value admin-metric-primary">{{ sse | length }} active</div>
+          <div class="admin-metric-details">
+            {% for k,v in sse.items() %}
+              <div class="admin-metric-item">
+                <span class="admin-metric-label">{{ k }}:</span>
+                <span class="admin-metric-stat admin-metric-success">{{ v }}</span>
+              </div>
+            {% endfor %}
+          </div>
         {% endif %}
       </div>
     </div>
   </section>
+
+  <style>
+    /* Admin Metrics Styles */
+    .admin-metric-card {
+      background: var(--admin-black);
+      border: 2px solid var(--admin-blue);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      box-shadow: 0 4px 6px rgba(0, 128, 255, 0.3);
+      transition: all 0.2s ease;
+    }
+
+    .admin-metric-card:hover {
+      border-color: var(--admin-cyan);
+      box-shadow: 0 6px 12px rgba(0, 255, 255, 0.2);
+    }
+
+    .admin-metric-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .admin-metric-title {
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: var(--admin-cyan);
+    }
+
+    .admin-metric-icon {
+      font-size: 1.5rem;
+    }
+
+    .admin-metric-value {
+      font-size: 1.8rem;
+      font-weight: bold;
+      margin-bottom: 1rem;
+      font-family: 'VT323', monospace;
+    }
+
+    .admin-metric-primary {
+      color: var(--admin-cyan);
+    }
+
+    .admin-metric-success {
+      color: var(--admin-green);
+    }
+
+    .admin-metric-error {
+      color: var(--admin-red);
+    }
+
+    .admin-metric-warning {
+      color: #ffa500;
+    }
+
+    .admin-metric-empty {
+      color: var(--admin-dim-blue);
+      font-style: italic;
+    }
+
+    .admin-metric-details {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .admin-metric-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+
+    .admin-metric-label {
+      color: var(--admin-dim-blue);
+    }
+
+    .admin-metric-stat {
+      font-weight: bold;
+      font-family: 'VT323', monospace;
+    }
+
+    .admin-error-code {
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: var(--admin-red);
+      background: rgba(255, 0, 64, 0.1);
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      border: 1px solid var(--admin-red);
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .admin-metric-card {
+        padding: 1rem;
+      }
+
+      .admin-metric-value {
+        font-size: 1.5rem;
+      }
+
+      .admin-metric-title {
+        font-size: 1rem;
+      }
+
+      .admin-metric-icon {
+        font-size: 1.2rem;
+      }
+
+      .admin-metric-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .pf-grid {
+        grid-template-columns: 1fr !important;
+      }
+
+      .admin-metric-value {
+        font-size: 1.3rem;
+      }
+    }
+  </style>
+
+  <script>
+    // Auto-refresh metrics every 30 seconds
+    document.addEventListener('DOMContentLoaded', function() {
+      setInterval(() => {
+        if (document.hasFocus()) {
+          location.reload();
+        }
+      }, 30000);
+    });
+  </script>
 {% endblock %}
