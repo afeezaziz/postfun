@@ -22,13 +22,9 @@ COPY pyproject.toml requirements.txt ./
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code including static files
 COPY app/ ./app/
 COPY wsgi.py ./
-
-# Create minimal static directory with basic CSS if needed
-RUN mkdir -p app/static/css && \
-    echo '/* Basic terminal styles */' > app/static/css/output.css
 
 # Environment defaults
 ENV PORT=8000 \
