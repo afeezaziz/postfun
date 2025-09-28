@@ -37,3 +37,5 @@ build/
 *.log
 *.DS_Store
 *.sqlite3 # If using SQLite for development
+
+frontend/node_modules
