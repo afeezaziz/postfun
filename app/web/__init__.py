@@ -26,9 +26,10 @@ from ..models import (
     FeeDistributionRule,
     FeePayout,
     BurnEvent,
+    OHLCCandle,
 )
 from ..services.amm import execute_swap, quote_swap
-from sqlalchemy import case
+from sqlalchemy import case, exists, or_, func
 from ..services.metrics import inc_sse, dec_sse
 
 
@@ -569,11 +570,23 @@ def tokens_list():
         qry = qry.outerjoin(TokenInfo, TokenInfo.token_id == Token.id)
         qry = qry.filter((Token.hidden == False))  # noqa: E712
         qry = qry.filter((TokenInfo.moderation_status == None) | (TokenInfo.moderation_status != 'hidden'))  # noqa: E711
+        # Category filter
+        if category:
+            like_cat = f"%{category.strip()}%"
+            qry = qry.filter(TokenInfo.categories.ilike(like_cat))
     except Exception:
         qry = qry.filter((Token.hidden == False))  # noqa: E712
     if q:
         like = f"%{q}%"
         qry = qry.filter((Token.symbol.ilike(like)) | (Token.name.ilike(like)))
+    # Stage filter
+    if stage in {"1", "2", "3", "4"}:
+        s_val = int(stage)
+        qry = qry.filter(
+            exists().where(
+                or_(SwapPool.token_a_id == Token.id, SwapPool.token_b_id == Token.id)
+            ).where(SwapPool.stage == s_val)
+        )
 
     sort_col = {
         "market_cap": Token.market_cap,
@@ -632,6 +645,8 @@ def explore():
     order = request.args.get("order", default="desc", type=str)
     page = request.args.get("page", default=1, type=int)
     per = request.args.get("per", default=12, type=int)
+    stage = request.args.get("stage", default="all", type=str)
+    category = request.args.get("category", type=str)
     price_min_s = request.args.get("price_min", default=None, type=str)
     price_max_s = request.args.get("price_max", default=None, type=str)
     change_min_s = request.args.get("change_min", default=None, type=str)
@@ -656,6 +671,10 @@ def explore():
         qry = qry.outerjoin(TokenInfo, TokenInfo.token_id == Token.id)
         qry = qry.filter((Token.hidden == False))  # noqa: E712
         qry = qry.filter((TokenInfo.moderation_status == None) | (TokenInfo.moderation_status != 'hidden'))  # noqa: E711
+        # Category filter (comma-separated contains match)
+        if category:
+            like_cat = f"%{category.strip()}%"
+            qry = qry.filter(TokenInfo.categories.ilike(like_cat))
     except Exception:
         qry = qry.filter((Token.hidden == False))  # noqa: E712
     if q:
@@ -674,22 +693,43 @@ def explore():
     if change_max is not None:
         qry = qry.filter(Token.change_24h != None, Token.change_24h <= change_max)  # noqa: E711
 
-    sort_col = {
-        "market_cap": Token.market_cap,
-        "price": Token.price,
-        "change_24h": Token.change_24h,
-    }.get(sort, Token.market_cap)
+    # Stage filter (1..4)
+    if stage in {"1", "2", "3", "4"}:
+        s_val = int(stage)
+        qry = qry.filter(
+            exists().where(
+                or_(SwapPool.token_a_id == Token.id, SwapPool.token_b_id == Token.id)
+            ).where(SwapPool.stage == s_val)
+        )
 
-    if order == "asc":
-        qry = qry.order_by(
-            case((sort_col == None, 1), else_=0),  # noqa: E711
-            sort_col.asc(),
+    if sort == "stage":
+        stage_max = (
+            db.session.query(func.coalesce(func.max(SwapPool.stage), 0))
+            .filter(or_(SwapPool.token_a_id == Token.id, SwapPool.token_b_id == Token.id))
+            .correlate(Token)
+            .scalar_subquery()
         )
+        if order == "asc":
+            qry = qry.order_by(stage_max.asc())
+        else:
+            qry = qry.order_by(stage_max.desc())
     else:
-        qry = qry.order_by(
-            case((sort_col == None, 1), else_=0),  # noqa: E711
-            sort_col.desc(),
-        )
+        sort_col = {
+            "market_cap": Token.market_cap,
+            "price": Token.price,
+            "change_24h": Token.change_24h,
+        }.get(sort, Token.market_cap)
+
+        if order == "asc":
+            qry = qry.order_by(
+                case((sort_col == None, 1), else_=0),  # noqa: E711
+                sort_col.asc(),
+            )
+        else:
+            qry = qry.order_by(
+                case((sort_col == None, 1), else_=0),  # noqa: E711
+                sort_col.desc(),
+            )
 
     total = qry.count()
     if page < 1:
@@ -699,6 +739,59 @@ def explore():
     tokens = qry.limit(per).offset((page - 1) * per).all()
     pages = (total + per - 1) // per if per else 1
 
+    # AMM prices for tokens on this page
+    price_by_symbol = {t.symbol: (_amm_price_for_token(t) or float(t.price or 0)) for t in tokens if t and t.symbol}
+
+    # Quick category chips (top 12 by frequency across all TokenInfo)
+    top_categories: list[str] = []
+    try:
+        cats = []
+        for row in TokenInfo.query.with_entities(TokenInfo.categories).all():
+            s = row[0]
+            if not s:
+                continue
+            for c in s.split(','):
+                c = c.strip()
+                if c:
+                    cats.append(c)
+        from collections import Counter
+        cnt = Counter([c.lower() for c in cats])
+        # preserve original casing for popular tags if present in cats
+        # Build map of lower->first seen original
+        first_case = {}
+        for c in cats:
+            lc = c.lower()
+            if lc not in first_case:
+                first_case[lc] = c
+        top_categories = [first_case[k] for k, _ in cnt.most_common(12)]
+    except Exception:
+        top_categories = []
+
+    # Most Active 24h (by candle volume)
+    most_active_24h = []
+    try:
+        since_24h = datetime.utcnow() - timedelta(days=1)
+        rows = (
+            db.session.query(OHLCCandle.token_id, func.coalesce(func.sum(OHLCCandle.v), 0).label("vol"))
+            .filter(OHLCCandle.interval == "1m", OHLCCandle.ts >= since_24h)
+            .group_by(OHLCCandle.token_id)
+            .order_by(func.coalesce(func.sum(OHLCCandle.v), 0).desc())
+            .limit(6)
+            .all()
+        )
+        for tid, vol in rows:
+            t = db.session.get(Token, tid)
+            if t:
+                most_active_24h.append({"token": t, "vol_24h": float(vol or 0)})
+    except Exception:
+        most_active_24h = []
+
+    # Trending items (reuse cached builder from home)
+    try:
+        trending_items = _cached_trending_items()[:6]
+    except Exception:
+        trending_items = []
+
     return render_template(
         "explore.html",
         tokens=tokens,
@@ -706,6 +799,8 @@ def explore():
         filt=filt,
         sort=sort,
         order=order,
+        stage=stage,
+        category=category or "",
         page=page,
         per=per,
         total=total,
@@ -718,6 +813,9 @@ def explore():
         meta_title="Explore — Postfun",
         meta_description="Explore the Postfun market: filter by gainers, losers, price and more.",
         meta_url=url_for("web.explore", _external=True),
+        top_categories=top_categories,
+        most_active_24h=most_active_24h,
+        trending_items=trending_items,
     )
 
 
@@ -2132,6 +2230,40 @@ def stats():
     gainers = sorted(tokens, key=lambda t: float(t.change_24h or 0.0), reverse=True)[:5]
     losers = sorted(tokens, key=lambda t: float(t.change_24h or 0.0))[:5]
 
+    # Volume leaders (24h): prefer OHLCCandle sums if present, fallback to metrics
+    from datetime import timedelta as _td
+    since = datetime.utcnow() - _td(days=1)
+    vol_rows = (
+        db.session.query(OHLCCandle.token_id, func.coalesce(func.sum(OHLCCandle.v), 0).label("vol"))
+        .filter(OHLCCandle.interval == "1m", OHLCCandle.ts >= since)
+        .group_by(OHLCCandle.token_id)
+        .order_by(func.coalesce(func.sum(OHLCCandle.v), 0).desc())
+        .limit(5)
+        .all()
+    )
+    token_by_id = {t.id: t for t in tokens}
+    volume_leaders = []
+    for tid, v in vol_rows:
+        t = token_by_id.get(tid)
+        if t:
+            volume_leaders.append({"token": t, "vol_24h": float(v or 0)})
+    if not volume_leaders:
+        # fallback using mock metrics
+        items = [_compute_token_metrics(t) for t in tokens]
+        items.sort(key=lambda it: it["vol_24h"], reverse=True)
+        for it in items[:5]:
+            volume_leaders.append({"token": it["token"], "vol_24h": it["vol_24h"]})
+
+    # Stage leaders: highest current stage across pools
+    pools = SwapPool.query.all()
+    max_stage: dict[int, int] = {}
+    for p in pools:
+        max_stage[p.token_a_id] = max(int(p.stage or 1), max_stage.get(p.token_a_id, 1))
+        max_stage[p.token_b_id] = max(int(p.stage or 1), max_stage.get(p.token_b_id, 1))
+    stage_pairs = [(token_by_id.get(tid), stg) for tid, stg in max_stage.items() if token_by_id.get(tid)]
+    stage_pairs.sort(key=lambda pair: pair[1], reverse=True)
+    stage_leaders = [{"token": t, "stage": stg} for t, stg in stage_pairs[:5]]
+
     return render_template(
         "stats.html",
         num_tokens=num_tokens,
@@ -2140,6 +2272,8 @@ def stats():
         top_by_mcap=top_by_mcap,
         gainers=gainers,
         losers=losers,
+        volume_leaders=volume_leaders,
+        stage_leaders=stage_leaders,
         meta_title="Stats — Postfun",
         meta_description="Market stats across Postfun.",
         meta_url=url_for("web.stats", _external=True),

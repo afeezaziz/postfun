@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="terminal">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -18,46 +18,50 @@
   <meta name="twitter:description" content="{{ meta_description or 'From posts to markets. Turn vibes into value on Postfun.' }}" />
   <link rel="canonical" href="{{ meta_url or request.url }}" />
   {% endblock %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}" />
   <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
 </head>
 <body>
-  <header class="pf-header">
-    <div class="pf-container pf-header-inner">
-      <a href="{{ url_for('web.home') }}" class="pf-brand">Postfun</a>
-      <nav class="pf-nav">
-        <a href="{{ url_for('web.home') }}" class="{% if request.endpoint == 'web.home' %}active{% endif %}" {% if request.endpoint == 'web.home' %}aria-current="page"{% endif %}>Home</a>
-        <a href="{{ url_for('web.tokens_list') }}" class="{% if request.endpoint == 'web.tokens_list' %}active{% endif %}" {% if request.endpoint == 'web.tokens_list' %}aria-current="page"{% endif %}>Tokens</a>
-        <a href="{{ url_for('web.explore') }}" class="{% if request.endpoint == 'web.explore' %}active{% endif %}" {% if request.endpoint == 'web.explore' %}aria-current="page"{% endif %}>Explore</a>
-        <a href="{{ url_for('web.pro') }}" class="{% if request.endpoint == 'web.pro' %}active{% endif %}" {% if request.endpoint == 'web.pro' %}aria-current="page"{% endif %}>Pro</a>
-        <a href="{{ url_for('web.portfolio') }}" class="{% if request.endpoint == 'web.portfolio' %}active{% endif %}" {% if request.endpoint == 'web.portfolio' %}aria-current="page"{% endif %}>Portfolio</a>
-        {% if current_user %}
-          <a href="{{ url_for('web.watchlist') }}" class="{% if request.endpoint == 'web.watchlist' %}active{% endif %}" {% if request.endpoint == 'web.watchlist' %}aria-current="page"{% endif %}>Watchlist</a>
-          <a href="{{ url_for('web.alerts') }}" class="{% if request.endpoint == 'web.alerts' %}active{% endif %}" {% if request.endpoint == 'web.alerts' %}aria-current="page"{% endif %}>Alerts</a>
-          {% if current_user.is_admin %}
-            <a href="{{ url_for('admin.dashboard') }}" class="{% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}" {% if request.endpoint and request.endpoint.startswith('admin.') %}aria-current="page"{% endif %}>Admin</a>
+  <div class="navbar bg-terminal-black border-b border-terminal-green">
+    <div class="navbar-start">
+      <a class="btn btn-ghost text-xl text-terminal-green font-terminal">Postfun</a>
+      <div class="hidden md:flex">
+        <ul class="menu menu-horizontal px-1">
+          <li><a href="{{ url_for('web.home') }}" class="terminal-nav-link {% if request.endpoint == 'web.home' %}underline{% endif %}">Home</a></li>
+          <li><a href="{{ url_for('web.tokens_list') }}" class="terminal-nav-link {% if request.endpoint == 'web.tokens_list' %}underline{% endif %}">Tokens</a></li>
+          <li><a href="{{ url_for('web.explore') }}" class="terminal-nav-link {% if request.endpoint == 'web.explore' %}underline{% endif %}">Explore</a></li>
+          <li><a href="{{ url_for('web.pro') }}" class="terminal-nav-link {% if request.endpoint == 'web.pro' %}underline{% endif %}">Pro</a></li>
+          <li><a href="{{ url_for('web.portfolio') }}" class="terminal-nav-link {% if request.endpoint == 'web.portfolio' %}underline{% endif %}">Portfolio</a></li>
+          {% if current_user %}
+            <li><a href="{{ url_for('web.watchlist') }}" class="terminal-nav-link {% if request.endpoint == 'web.watchlist' %}underline{% endif %}">Watchlist</a></li>
+            <li><a href="{{ url_for('web.alerts') }}" class="terminal-nav-link {% if request.endpoint == 'web.alerts' %}underline{% endif %}">Alerts</a></li>
+            {% if current_user.is_admin %}
+              <li><a href="{{ url_for('admin.dashboard') }}" class="terminal-nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}underline{% endif %}">Admin</a></li>
+            {% endif %}
           {% endif %}
-        {% endif %}
-        <a href="{{ url_for('web.launchpad') }}" class="{% if request.endpoint == 'web.launchpad' %}active{% endif %}" {% if request.endpoint == 'web.launchpad' %}aria-current="page"{% endif %}>Launchpad</a>
-        <a href="{{ url_for('web.dashboard') }}" class="{% if request.endpoint == 'web.dashboard' %}active{% endif %}" {% if request.endpoint == 'web.dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
-      </nav>
-      <div class="pf-auth">
-        {% if current_user %}
-          <span class="pf-npub">{{ current_user.npub or current_user.pubkey_hex }}</span>
-          <button class="retro-button" onclick="pfLogout()">Logout</button>
-        {% else %}
-          <button class="retro-button" onclick="pfNostrLogin()">Login with Nostr</button>
-        {% endif %}
+          <li><a href="{{ url_for('web.launchpad') }}" class="terminal-nav-link {% if request.endpoint == 'web.launchpad' %}underline{% endif %}">Launchpad</a></li>
+          <li><a href="{{ url_for('web.dashboard') }}" class="terminal-nav-link {% if request.endpoint == 'web.dashboard' %}underline{% endif %}">Dashboard</a></li>
+        </ul>
       </div>
     </div>
-  </header>
+    <div class="navbar-end">
+      {% if current_user %}
+        <span class="text-terminal-dim-green mr-2 font-terminal">{{ current_user.npub or current_user.pubkey_hex }}</span>
+        <button class="terminal-button" onclick="pfLogout()">Logout</button>
+      {% else %}
+        <button class="terminal-button" onclick="pfNostrLogin()">Login with Nostr</button>
+      {% endif %}
+    </div>
+  </div>
 
-  <main class="pf-container pf-main">
+  <main class="container mx-auto px-4 py-8 max-w-6xl">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="pf-flashes">
+        <div class="mb-4 space-y-2">
           {% for category, message in messages %}
-            <div class="pf-flash pf-flash-{{ category }}">{{ message }}</div>
+            <div class="alert {% if category == 'success' %}bg-terminal-base-200 border-terminal-green text-terminal-green{% elif category == 'error' %}bg-terminal-base-200 border-terminal-red text-terminal-red{% else %}bg-terminal-base-200 border-terminal-green text-terminal-green{% endif %}">
+              {{ message }}
+            </div>
           {% endfor %}
         </div>
       {% endif %}
@@ -65,15 +69,15 @@
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="pf-footer">
-    <div class="pf-container">
-      <span>© {{ 2025 }} Postfun</span>
-      <span style="margin-left: 12px;">
-        <a href="{{ url_for('web.about') }}">About</a> ·
-        <a href="{{ url_for('web.stats') }}">Stats</a> ·
-        <a href="{{ url_for('web.faq') }}">FAQ</a> ·
-        <a href="{{ url_for('web.download') }}">Download</a>
-      </span>
+  <footer class="footer bg-terminal-black border-t border-terminal-green p-4">
+    <div class="container mx-auto max-w-6xl flex justify-between items-center">
+      <span class="text-terminal-green">© 2025 Postfun</span>
+      <div class="flex space-x-4">
+        <a href="{{ url_for('web.about') }}" class="text-terminal-green hover:underline">About</a>
+        <a href="{{ url_for('web.stats') }}" class="text-terminal-green hover:underline">Stats</a>
+        <a href="{{ url_for('web.faq') }}" class="text-terminal-green hover:underline">FAQ</a>
+        <a href="{{ url_for('web.download') }}" class="text-terminal-green hover:underline">Download</a>
+      </div>
     </div>
   </footer>
 </body>

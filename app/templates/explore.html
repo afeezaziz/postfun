@@ -22,6 +22,7 @@
           <option value="market_cap" {% if sort == 'market_cap' %}selected{% endif %}>Market Cap</option>
           <option value="price" {% if sort == 'price' %}selected{% endif %}>Price</option>
           <option value="change_24h" {% if sort == 'change_24h' %}selected{% endif %}>24h Change</option>
+          <option value="stage" {% if sort == 'stage' %}selected{% endif %}>Stage</option>
         </select>
       </div>
       <div>
@@ -56,9 +57,87 @@
         </select>
       </div>
       <div>
+        <label>Stage</label>
+        <select class="retro-input" name="stage">
+          <option value="all" {% if stage == 'all' %}selected{% endif %}>All</option>
+          <option value="1" {% if stage == '1' %}selected{% endif %}>1</option>
+          <option value="2" {% if stage == '2' %}selected{% endif %}>2</option>
+          <option value="3" {% if stage == '3' %}selected{% endif %}>3</option>
+          <option value="4" {% if stage == '4' %}selected{% endif %}>4</option>
+        </select>
+      </div>
+      <div>
+        <label>Category</label>
+        <input class="retro-input" type="text" name="category" value="{{ category }}" placeholder="e.g. meme, ai" />
+      </div>
+      <div>
         <button class="retro-button" type="submit">Apply</button>
       </div>
     </form>
+  </section>
+
+  {% if top_categories %}
+  <section class="card">
+    <h2>Top Categories</h2>
+    <div style="display:flex; flex-wrap: wrap; gap: 8px;">
+      {% for cat in top_categories %}
+        <a class="retro-button" href="{{ url_for('web.explore', category=cat) }}">#{{ cat }}</a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <h2>Highlights</h2>
+    <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));">
+      <div class="card">
+        <h3>Most Active (24h)</h3>
+        <div class="pf-grid">
+          {% for row in most_active_24h %}
+            <div class="card pf-token-card">
+              <div class="pf-token-header">
+                <span class="badge">{{ row.token.symbol }}</span>
+                <span>{{ row.token.name }}</span>
+              </div>
+              <div class="pf-token-body">
+                <div>Volume 24h: <span class="pf-green">{{ '%.2f'|format(row.vol_24h or 0) }}</span></div>
+              </div>
+              <div class="pf-card-actions">
+                <a class="retro-button" href="{{ url_for('web.token_detail', symbol=row.token.symbol) }}">Details</a>
+                <a class="retro-button" href="{{ url_for('web.pool', symbol=row.token.symbol) }}">Pool</a>
+              </div>
+            </div>
+          {% else %}
+            <div>No data.</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Trending</h3>
+        <div class="pf-grid">
+          {% for it in trending_items %}
+            <div class="card pf-token-card">
+              <div class="pf-token-header">
+                <span class="badge">{{ it.symbol }}</span>
+                <span>{{ it.name }}</span>
+              </div>
+              <div class="pf-token-body">
+                <div>Price: <span class="pf-green">{{ '%.4f'|format(it.price or 0) }}</span></div>
+                <div>Volume 24h: <span class="pf-green">{{ '%.2f'|format(it.volume_24h or 0) }}</span></div>
+                <div>Stage: <span class="pf-green">{{ it.stage }}</span></div>
+              </div>
+              <div class="pf-card-actions">
+                <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
+                <a class="retro-button" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+              </div>
+            </div>
+          {% else %}
+            <div>No data.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
   </section>
 
   <section class="card">

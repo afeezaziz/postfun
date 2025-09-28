@@ -163,6 +163,8 @@ class TokenInfo(db.Model):
     launch_at = db.Column(db.DateTime, nullable=True)
     moderation_status = db.Column(db.String(16), nullable=False, default="visible")  # visible|hidden|flagged
     moderation_notes = db.Column(db.Text, nullable=True)
+    # Comma-separated categories/tags, e.g. "meme,ai,gaming"
+    categories = db.Column(db.String(255), nullable=True)
 
     token = db.relationship("Token")
     launcher = db.relationship("User")
@@ -185,6 +187,7 @@ class TokenInfo(db.Model):
             "launch_user_id": self.launch_user_id,
             "launch_at": self.launch_at.isoformat() + "Z" if self.launch_at else None,
             "moderation_status": self.moderation_status,
+            "categories": self.categories,
         }
 
 
@@ -410,6 +413,29 @@ class SwapTrade(db.Model):
             "burn_amount": float(self.burn_amount) if self.burn_amount is not None else None,
             "created_at": self.created_at.isoformat() + "Z",
         }
+
+
+class OHLCCandle(db.Model):
+    __tablename__ = "ohlc_candles"
+
+    id = db.Column(db.Integer, primary_key=True)
+    token_id = db.Column(db.Integer, db.ForeignKey("tokens.id"), nullable=False, index=True)
+    interval = db.Column(db.String(8), nullable=False)  # '1m' | '5m' | '1h'
+    ts = db.Column(db.DateTime, nullable=False)  # start of bucket in UTC
+    o = db.Column(db.Numeric(20, 8), nullable=False)
+    h = db.Column(db.Numeric(20, 8), nullable=False)
+    l = db.Column(db.Numeric(20, 8), nullable=False)
+    c = db.Column(db.Numeric(20, 8), nullable=False)
+    v = db.Column(db.Numeric(30, 18), nullable=True)  # optional gUSD volume for bucket
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    token = db.relationship("Token")
+
+    __table_args__ = (
+        db.UniqueConstraint("token_id", "interval", "ts", name="uq_ohlc_token_interval_ts"),
+        db.Index('ix_ohlc_token_interval_ts', 'token_id', 'interval', 'ts'),
+    )
 
 
 class BurnEvent(db.Model):

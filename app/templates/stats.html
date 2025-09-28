@@ -76,4 +76,50 @@
       </div>
     </div>
   </section>
+
+  <section class="card">
+    <h2>Volume Leaders (24h)</h2>
+    <div class="pf-grid">
+      {% for row in volume_leaders %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ row.token.symbol }}</span>
+            <span>{{ row.token.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Volume 24h: <span class="pf-green">{{ '%.2f'|format(row.vol_24h or 0) }}</span></div>
+          </div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=row.token.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=row.token.symbol) }}">Pool</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No data.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Stage Leaders</h2>
+    <div class="pf-grid">
+      {% for row in stage_leaders %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ row.token.symbol }}</span>
+            <span>{{ row.token.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Stage: <span class="pf-green">{{ row.stage }}</span></div>
+          </div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=row.token.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=row.token.symbol) }}">Pool</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No data.</div>
+      {% endfor %}
+    </div>
+  </section>
 {% endblock %}

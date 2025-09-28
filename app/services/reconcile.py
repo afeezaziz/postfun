@@ -263,5 +263,26 @@ def start_scheduler(app) -> Optional[BackgroundScheduler]:
     except Exception:
         pass
 
+    # Optional: OHLC aggregation job
+    try:
+        ohlc_enabled = str(app.config.get("OHLC_AGGREGATION_ENABLED", "1")).lower() in ("1", "true", "yes")
+        if ohlc_enabled:
+            every = int(app.config.get("OHLC_AGGREGATE_EVERY_SECONDS", 60))
+            intervals_csv = app.config.get("OHLC_INTERVALS", "1m,5m,1h")
+            default_window = app.config.get("OHLC_WINDOW_DEFAULT", "24h")
+
+            def _job_ohlc():
+                from .market_data import persist_candles_all_tokens
+                with app.app_context():
+                    try:
+                        intervals = [s.strip() for s in str(intervals_csv).split(',') if s.strip()]
+                        persist_candles_all_tokens(intervals=intervals, window=default_window)
+                    except Exception:
+                        pass
+
+            scheduler.add_job(_job_ohlc, "interval", seconds=max(30, every), id="ohlc_aggregate")
+    except Exception:
+        pass
+
     scheduler.start()
     return scheduler

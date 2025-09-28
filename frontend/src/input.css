@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+/* Custom terminal styles */
+@layer base {
+  html {
+    font-family: 'VT323', monospace;
+  }
+
+  body {
+    @apply bg-terminal-black text-terminal-green;
+  }
+}
+
+@layer components {
+  .terminal-button {
+    @apply bg-terminal-black border-2 border-terminal-green text-terminal-green font-terminal px-2 py-1 shadow-retro cursor-pointer;
+  }
+
+  .terminal-button:hover {
+    @apply bg-[#001a00];
+  }
+
+  .terminal-button:active {
+    @apply shadow-retro-inverted bg-[#003300];
+  }
+
+  .terminal-input {
+    @apply bg-terminal-black border border-terminal-green text-terminal-green font-terminal px-2 py-1 shadow-[inset_2px_2px_0_0_#000000,_inset_-2px_-2px_0_0_#006600];
+  }
+
+  .terminal-input:focus {
+    @apply outline-none bg-[#001a00];
+  }
+
+  .terminal-card {
+    @apply bg-terminal-black border border-terminal-green p-3 shadow-[inset_2px_2px_0_0_#000000,_inset_-2px_-2px_0_0_#006600];
+  }
+
+  .terminal-nav-link {
+    @apply text-terminal-green no-underline mx-2;
+  }
+
+  .terminal-nav-link:hover {
+    @apply underline;
+  }
+
+  .terminal-badge {
+    @apply inline-flex items-center px-1 py-0.5 text-xs border border-terminal-green text-terminal-green bg-terminal-black;
+  }
+}

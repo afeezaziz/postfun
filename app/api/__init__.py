@@ -19,6 +19,7 @@ from ..models import (
     FeeDistributionRule,
     FeePayout,
     IdempotencyKey,
+    OHLCCandle,
 )
 from ..extensions import cache, db, limiter, csrf
 from ..utils.jwt_utils import require_auth
@@ -278,9 +279,76 @@ def tokens_trending():
 
 
 @api_bp.get("/ohlc")
-@cache.cached(timeout=5, query_string=True)
+@cache.cached(timeout=30, query_string=True)
 def ohlc():
-    """Aggregate OHLC candles from trades for a token's preferred pool.
+    """Return OHLC candles for a token.
+
+    Query params:
+      - symbol: token symbol (required)
+      - interval: one of '1m','5m','1h' (default '1m')
+      - window: one of '1h','6h','24h','7d','30d' (default '24h')
+      - limit: max candles to return (default 300, max 1000)
+    """
+    symbol = (request.args.get("symbol") or "").strip().upper()
+    if not symbol:
+        return jsonify({"error": "symbol_required"}), 400
+    interval = (request.args.get("interval") or "1m").lower()
+    if interval not in {"1m", "5m", "1h"}:
+        return jsonify({"error": "invalid_interval"}), 400
+    window = (request.args.get("window") or "24h").lower()
+    now = datetime.utcnow()
+    since = None
+    if window in {"1h", "1hour"}:
+        since = now - timedelta(hours=1)
+    elif window in {"6h"}:
+        since = now - timedelta(hours=6)
+    elif window in {"24h", "1d"}:
+        since = now - timedelta(days=1)
+    elif window in {"7d", "1w"}:
+        since = now - timedelta(days=7)
+    elif window in {"30d", "1m"}:
+        since = now - timedelta(days=30)
+
+    limit = max(1, min(1000, int(request.args.get("limit", 300))))
+
+    tok = Token.query.filter_by(symbol=symbol).first()
+    if not tok:
+        return jsonify({"items": []})
+
+    # Prefer DB candles
+    q = OHLCCandle.query.filter_by(token_id=tok.id, interval=interval)
+    if since is not None:
+        q = q.filter(OHLCCandle.ts >= since)
+    rows = q.order_by(OHLCCandle.ts.desc()).limit(limit).all()
+    rows = list(reversed(rows))
+    if rows:
+        items = [
+            {
+                "t": c.ts.isoformat() + "Z",
+                "o": float(c.o),
+                "h": float(c.h),
+                "l": float(c.l),
+                "c": float(c.c),
+                "v": float(c.v) if c.v is not None else None,
+            }
+            for c in rows
+        ]
+        return jsonify({"items": items})
+
+    # Fallback: aggregate ad-hoc from recent trades if no candles yet
+    try:
+        from ..services.market_data import aggregate_candles_from_trades
+        items = aggregate_candles_from_trades(tok.id, interval, since)
+        # Do not persist here; scheduler will persist
+        return jsonify({"items": items[:limit]})
+    except Exception:
+        return jsonify({"items": []})
+
+
+@api_bp.get("/ohlc_fallback")
+@cache.cached(timeout=5, query_string=True)
+def ohlc_fallback():
+    """Deprecated duplicate; aggregate OHLC candles from trades for a token's preferred pool.
 
     Query params:
       - symbol (required)

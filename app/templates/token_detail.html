@@ -11,6 +11,33 @@
     <h1>Token: <span class="badge">{{ token.symbol }}</span></h1>
     <div class="pf-grid pf-token-detail">
       <div class="card pf-token-panel">
+        <h2>Chart</h2>
+        <div class="pf-chart" id="pf-chart" data-series='[]'>
+          <div class="pf-chart-toolbar" style="display:flex; align-items:center; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
+            <div class="pf-chart-modes" style="display:flex; gap:8px;">
+              <button class="retro-button pf-active" data-chart-mode="line">Line</button>
+              <button class="retro-button" data-chart-mode="candle">Candles</button>
+            </div>
+            <div class="pf-chart-controls" style="display:flex; align-items:center; gap:8px;">
+              <label for="pf-interval" style="font-size: 12px; color: var(--dim-green);">Interval</label>
+              <select id="pf-interval" class="retro-input" data-chart-interval>
+                <option value="1m" selected>1m</option>
+                <option value="5m">5m</option>
+                <option value="1h">1h</option>
+              </select>
+              <button class="retro-button" data-chart-refresh>Refresh</button>
+            </div>
+          </div>
+          <svg class="pf-chart-svg" width="100%" height="160" preserveAspectRatio="none">
+            <path class="pf-chart-path" d="" fill="none" stroke="currentColor" stroke-width="2" />
+          </svg>
+        </div>
+        <div style="display:flex; justify-content: space-between; font-size: 14px; color: var(--dim-green);">
+          <span>Min: <span id="pf-chart-min">—</span></span>
+          <span>Max: <span id="pf-chart-max">—</span></span>
+        </div>
+      </div>
+      <div class="card pf-token-panel">
         <h2>Overview</h2>
         <div>Symbol: <strong>{{ token.symbol }}</strong></div>
         <div>Name: <span class="pf-green">{{ token.name }}</span></div>

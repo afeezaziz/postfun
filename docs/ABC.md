@@ -15,16 +15,6 @@ Security hardening
 
 
 
-Market data and charts
-
-* Create ohlc_candles table and background aggregator in app/services/market_data.py (APScheduler).
-* New endpoint /api/ohlc?symbol=...&interval=1m|5m|1h and basic chart UI for token_detail.html and pool.html .
-* Analytics signals: top gainers/losers, volume leaders, stage progression leaders for explore.html and /stats.
-
-Search and discovery
-* Server-side search with robust filtering/sorting (price, mcap, % change, stage).
-* Add tags/categories on TokenInfo and make an Explore page sectioned by category or momentum.
-
 SEO and metadata
 * Canonical URLs and OpenGraph/Twitter cards (extend what’s in token_detail.html to pool.html, creator.html).
 * sitemap.xml, robots.txt, and broaden JSON-LD coverage beyond token detail.
@@ -58,3 +48,13 @@ Data correctness and migrations
 * Admin actions in app/admin/init.py: freeze/hide tokens, moderate content, force-fee payouts, feature flags (simple DB-backed).
 * Metrics/ops: a small “metrics” view (Prometheus or internal) for request rate, error rate, SSE clients, and DB health.
 * Expand audit coverage in services/audit.py for sensitive actions.
+
+Market data and charts
+
+* Create ohlc_candles table and background aggregator in app/services/market_data.py (APScheduler).
+* New endpoint /api/ohlc?symbol=...&interval=1m|5m|1h and basic chart UI for token_detail.html and pool.html .
+* Analytics signals: top gainers/losers, volume leaders, stage progression leaders for explore.html and /stats.
+
+Search and discovery
+* Server-side search with robust filtering/sorting (price, mcap, % change, stage).
+* Add tags/categories on TokenInfo and make an Explore page sectioned by category or momentum.

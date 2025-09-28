@@ -107,6 +107,7 @@
                   <th>Price</th>
                   <th>Market Cap</th>
                   <th>24h</th>
+                  <th>Categories</th>
                   <th>Hidden</th>
                   <th>Frozen</th>
                   <th>Actions</th>
@@ -121,6 +122,18 @@
                     <td>{{ '%.8f'|format(t.price or 0) }}</td>
                     <td>{{ '%.2f'|format(t.market_cap or 0) }}</td>
                     <td>{{ '%.4f'|format(t.change_24h or 0) }}%</td>
+                    <td>
+                      <div style="display:flex; flex-direction:column; gap:6px;">
+                        <div style="font-size:12px; color: var(--dim-green);">
+                          {{ (infos_by_token_id.get(t.id).categories if infos_by_token_id and infos_by_token_id.get(t.id) else '') or '—' }}
+                        </div>
+                        <form method="POST" action="{{ url_for('admin.tokens_set_categories', token_id=t.id) }}" style="display:flex; gap:6px; align-items:end;">
+                          <input class="retro-input" type="text" name="categories" placeholder="comma,separated,tags" value="{{ (infos_by_token_id.get(t.id).categories if infos_by_token_id and infos_by_token_id.get(t.id) else '') }}" />
+                          <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                          <button class="retro-button" type="submit">Save</button>
+                        </form>
+                      </div>
+                    </td>
                     <td>{{ 'Yes' if getattr(t, 'hidden', False) else 'No' }}</td>
                     <td>{{ 'Yes' if getattr(t, 'frozen', False) else 'No' }}</td>
                     <td>

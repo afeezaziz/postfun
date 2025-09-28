@@ -778,7 +778,14 @@ def tokens():
         Token.market_cap.desc(),
     )
     tokens_p = db.paginate(stmt, page=page, per_page=per)
-    return render_template("admin/tokens.html", tokens_p=tokens_p, q=q or "")
+    # Prefetch TokenInfo for visible page to show categories inline
+    try:
+        ids = [t.id for t in tokens_p.items]
+        infos = TokenInfo.query.filter(TokenInfo.token_id.in_(ids)).all() if ids else []
+        infos_by_token_id = {inf.token_id: inf for inf in infos}
+    except Exception:
+        infos_by_token_id = {}
+    return render_template("admin/tokens.html", tokens_p=tokens_p, q=q or "", infos_by_token_id=infos_by_token_id)
 
 
 @admin_bp.route("/tokens/save", methods=["POST"])
@@ -792,16 +799,19 @@ def tokens_save():
     if not symbol or not name:
         flash("Symbol and name are required", "error")
         return redirect(url_for("admin.tokens"))
+
     tok = Token.query.filter_by(symbol=symbol).first()
     if tok is None:
         tok = Token(symbol=symbol, name=name)
         db.session.add(tok)
     tok.name = name
+
     def parse_dec(s: str, default: Optional[Decimal] = None) -> Optional[Decimal]:
         try:
             return Decimal(s) if s != "" else default
         except (InvalidOperation, ValueError):
             return default
+
     p = parse_dec(price_s)
     mc = parse_dec(mcap_s)
     ch = parse_dec(change_s)
@@ -818,6 +828,42 @@ def tokens_save():
     except Exception:
         db.session.rollback()
         flash("Failed to save token", "error")
+    return redirect(url_for("admin.tokens"))
+
+
+@admin_bp.route("/tokens/<int:token_id>/categories", methods=["POST"])
+@require_admin
+def tokens_set_categories(token_id: int):
+    tok = db.session.get(Token, token_id)
+    if not tok:
+        flash("Token not found", "error")
+        return redirect(url_for("admin.tokens"))
+    raw = (request.form.get("categories") or "").strip()
+    # Normalize: split by comma, trim, dedupe, lower-case for storage consistency
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    # keep original case for display but collapse duplicates case-insensitively
+    seen = set()
+    norm = []
+    for p in parts:
+        key = p.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        norm.append(p)
+    cats = ",".join(norm)[:255] if norm else None
+    try:
+        info = TokenInfo.query.filter_by(token_id=token_id).first()
+        if not info:
+            info = TokenInfo(token_id=token_id)
+            db.session.add(info)
+        info.categories = cats
+        db.session.add(info)
+        db.session.commit()
+        log_action(g.admin_user.id, "token_set_categories", meta=f"token_id={token_id} categories={cats}")
+        flash("Categories updated", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Failed to update categories: {e}", "error")
     return redirect(url_for("admin.tokens"))
 
 
