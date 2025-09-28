@@ -1,22 +1,11 @@
 # syntax=docker/dockerfile:1
-FROM node:20-slim AS frontend-build
-
-# Install frontend dependencies
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm install
-
-# Copy frontend source and build CSS
-COPY frontend/ ./
-RUN npm run build
-
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# System deps (build-essential for any wheel compilation fallback)
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
@@ -24,18 +13,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy built CSS from frontend stage
-COPY --from=frontend-build /app/frontend/../app/static/css/output.css ./app/static/css/output.css
-
-# Copy project files
-COPY pyproject.toml README.md /app/
-COPY requirements.txt /app/
-COPY app /app/app
-COPY wsgi.py /app/
+# Copy dependency files first for better layer caching
+COPY pyproject.toml requirements.txt ./
 
 # Install Python dependencies
-RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY app/ ./app/
+COPY wsgi.py ./
+
+# Create minimal static directory with basic CSS if needed
+RUN mkdir -p app/static/css && \
+    echo '/* Basic terminal styles */' > app/static/css/output.css
 
 # Environment defaults
 ENV PORT=8000 \

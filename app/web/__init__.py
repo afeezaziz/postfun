@@ -563,6 +563,7 @@ def tokens_list():
     order = request.args.get("order", default="desc", type=str)
     page = request.args.get("page", default=1, type=int)
     per = request.args.get("per", default=12, type=int)
+    stage = request.args.get("stage", type=str)
 
     qry = Token.query
     # Exclude hidden tokens and those moderated as hidden

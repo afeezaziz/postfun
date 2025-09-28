@@ -22,37 +22,75 @@
   <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
 </head>
 <body>
-  <div class="navbar bg-terminal-black border-b border-terminal-green">
+  <nav class="navbar bg-base-100 border-b border-terminal-green shadow-lg">
     <div class="navbar-start">
-      <a class="btn btn-ghost text-xl text-terminal-green font-terminal">Postfun</a>
-      <div class="hidden md:flex">
-        <ul class="menu menu-horizontal px-1">
-          <li><a href="{{ url_for('web.home') }}" class="terminal-nav-link {% if request.endpoint == 'web.home' %}underline{% endif %}">Home</a></li>
-          <li><a href="{{ url_for('web.tokens_list') }}" class="terminal-nav-link {% if request.endpoint == 'web.tokens_list' %}underline{% endif %}">Tokens</a></li>
-          <li><a href="{{ url_for('web.explore') }}" class="terminal-nav-link {% if request.endpoint == 'web.explore' %}underline{% endif %}">Explore</a></li>
-          <li><a href="{{ url_for('web.pro') }}" class="terminal-nav-link {% if request.endpoint == 'web.pro' %}underline{% endif %}">Pro</a></li>
-          <li><a href="{{ url_for('web.portfolio') }}" class="terminal-nav-link {% if request.endpoint == 'web.portfolio' %}underline{% endif %}">Portfolio</a></li>
+      <div class="dropdown">
+        <div tabindex="0" role="button" class="btn btn-ghost lg:hidden">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" /></svg>
+        </div>
+        <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52 border border-terminal-green">
+          <li><a href="{{ url_for('web.home') }}" class="{% if request.endpoint == 'web.home' %}text-accent font-bold{% endif %}">Home</a></li>
+          <li><a href="{{ url_for('web.tokens_list') }}" class="{% if request.endpoint == 'web.tokens_list' %}text-accent font-bold{% endif %}">Tokens</a></li>
+          <li><a href="{{ url_for('web.explore') }}" class="{% if request.endpoint == 'web.explore' %}text-accent font-bold{% endif %}">Explore</a></li>
+          <li><a href="{{ url_for('web.pro') }}" class="{% if request.endpoint == 'web.pro' %}text-accent font-bold{% endif %}">Pro</a></li>
+          <li><a href="{{ url_for('web.portfolio') }}" class="{% if request.endpoint == 'web.portfolio' %}text-accent font-bold{% endif %}">Portfolio</a></li>
           {% if current_user %}
-            <li><a href="{{ url_for('web.watchlist') }}" class="terminal-nav-link {% if request.endpoint == 'web.watchlist' %}underline{% endif %}">Watchlist</a></li>
-            <li><a href="{{ url_for('web.alerts') }}" class="terminal-nav-link {% if request.endpoint == 'web.alerts' %}underline{% endif %}">Alerts</a></li>
+            <li><a href="{{ url_for('web.watchlist') }}" class="{% if request.endpoint == 'web.watchlist' %}text-accent font-bold{% endif %}">Watchlist</a></li>
+            <li><a href="{{ url_for('web.alerts') }}" class="{% if request.endpoint == 'web.alerts' %}text-accent font-bold{% endif %}">Alerts</a></li>
             {% if current_user.is_admin %}
-              <li><a href="{{ url_for('admin.dashboard') }}" class="terminal-nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}underline{% endif %}">Admin</a></li>
+              <li><a href="{{ url_for('admin.dashboard') }}" class="{% if request.endpoint and request.endpoint.startswith('admin.') %}text-accent font-bold{% endif %}">Admin</a></li>
             {% endif %}
           {% endif %}
-          <li><a href="{{ url_for('web.launchpad') }}" class="terminal-nav-link {% if request.endpoint == 'web.launchpad' %}underline{% endif %}">Launchpad</a></li>
-          <li><a href="{{ url_for('web.dashboard') }}" class="terminal-nav-link {% if request.endpoint == 'web.dashboard' %}underline{% endif %}">Dashboard</a></li>
+          <li><a href="{{ url_for('web.launchpad') }}" class="{% if request.endpoint == 'web.launchpad' %}text-accent font-bold{% endif %}">Launchpad</a></li>
+          <li><a href="{{ url_for('web.dashboard') }}" class="{% if request.endpoint == 'web.dashboard' %}text-accent font-bold{% endif %}">Dashboard</a></li>
         </ul>
       </div>
+      <a class="btn btn-ghost text-xl font-bold text-terminal-green hover:text-accent transition-colors">Postfun</a>
+    </div>
+    <div class="navbar-center hidden lg:flex">
+      <ul class="menu menu-horizontal px-1">
+        <li><a href="{{ url_for('web.home') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.home' %}text-accent font-bold underline{% endif %}">Home</a></li>
+        <li><a href="{{ url_for('web.tokens_list') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tokens_list' %}text-accent font-bold underline{% endif %}">Tokens</a></li>
+        <li><a href="{{ url_for('web.explore') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.explore' %}text-accent font-bold underline{% endif %}">Explore</a></li>
+        <li><a href="{{ url_for('web.pro') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.pro' %}text-accent font-bold underline{% endif %}">Pro</a></li>
+        <li><a href="{{ url_for('web.portfolio') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.portfolio' %}text-accent font-bold underline{% endif %}">Portfolio</a></li>
+        {% if current_user %}
+          <li><a href="{{ url_for('web.watchlist') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.watchlist' %}text-accent font-bold underline{% endif %}">Watchlist</a></li>
+          <li><a href="{{ url_for('web.alerts') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.alerts' %}text-accent font-bold underline{% endif %}">Alerts</a></li>
+          {% if current_user.is_admin %}
+            <li><a href="{{ url_for('admin.dashboard') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint and request.endpoint.startswith('admin.') %}text-accent font-bold underline{% endif %}">Admin</a></li>
+          {% endif %}
+        {% endif %}
+        <li><a href="{{ url_for('web.launchpad') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.launchpad' %}text-accent font-bold underline{% endif %}">Launchpad</a></li>
+        <li><a href="{{ url_for('web.dashboard') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.dashboard' %}text-accent font-bold underline{% endif %}">Dashboard</a></li>
+      </ul>
     </div>
     <div class="navbar-end">
       {% if current_user %}
-        <span class="text-terminal-dim-green mr-2 font-terminal">{{ current_user.npub or current_user.pubkey_hex }}</span>
-        <button class="terminal-button" onclick="pfLogout()">Logout</button>
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
+            <div class="w-8 rounded-full bg-terminal-green">
+              <span class="text-terminal-black font-bold text-xs">{{ (current_user.npub or current_user.pubkey_hex)[:2].upper() }}</span>
+            </div>
+          </div>
+          <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-64 border border-terminal-green">
+            <li class="menu-title text-terminal-green font-bold">{{ current_user.npub or current_user.pubkey_hex }}</li>
+            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.profile') }}">Profile</a></li>
+            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.settings') }}">Settings</a></li>
+            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.portfolio') }}">Portfolio</a></li>
+            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.watchlist') }}">Watchlist</a></li>
+            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.alerts') }}">Alerts</a></li>
+            <div class="divider border-terminal-green"></div>
+            <li><button onclick="pfLogout()" class="text-terminal-red hover:text-red-600 font-bold">Logout</button></li>
+          </ul>
+        </div>
       {% else %}
-        <button class="terminal-button" onclick="pfNostrLogin()">Login with Nostr</button>
+        <button class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black" onclick="pfNostrLogin()">
+          Login with Nostr
+        </button>
       {% endif %}
     </div>
-  </div>
+  </nav>
 
   <main class="container mx-auto px-4 py-8 max-w-6xl">
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -69,14 +107,43 @@
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="footer bg-terminal-black border-t border-terminal-green p-4">
-    <div class="container mx-auto max-w-6xl flex justify-between items-center">
-      <span class="text-terminal-green">© 2025 Postfun</span>
-      <div class="flex space-x-4">
-        <a href="{{ url_for('web.about') }}" class="text-terminal-green hover:underline">About</a>
-        <a href="{{ url_for('web.stats') }}" class="text-terminal-green hover:underline">Stats</a>
-        <a href="{{ url_for('web.faq') }}" class="text-terminal-green hover:underline">FAQ</a>
-        <a href="{{ url_for('web.download') }}" class="text-terminal-green hover:underline">Download</a>
+  <footer class="footer bg-base-100 border-t border-terminal-green p-6 md:p-8">
+    <div class="container mx-auto max-w-6xl">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div class="col-span-1 md:col-span-2">
+          <h3 class="text-lg font-bold text-terminal-green mb-4">Postfun</h3>
+          <p class="text-terminal-green mb-4">From posts to markets. Turn vibes into value on Postfun.</p>
+          <p class="text-terminal-dim-green text-sm">© 2025 Postfun. All rights reserved.</p>
+        </div>
+        <div>
+          <h4 class="font-semibold text-terminal-green mb-4">Platform</h4>
+          <ul class="space-y-2">
+            <li><a href="{{ url_for('web.about') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors">About</a></li>
+            <li><a href="{{ url_for('web.stats') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors">Stats</a></li>
+            <li><a href="{{ url_for('web.faq') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors">FAQ</a></li>
+            <li><a href="{{ url_for('web.download') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors">Download</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold text-terminal-green mb-4">Connect</h4>
+          <div class="flex space-x-4">
+            <a href="#" class="text-terminal-green hover:text-accent transition-colors" aria-label="Twitter">
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.84"></path>
+              </svg>
+            </a>
+            <a href="#" class="text-terminal-green hover:text-accent transition-colors" aria-label="GitHub">
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path>
+              </svg>
+            </a>
+            <a href="#" class="text-terminal-green hover:text-accent transition-colors" aria-label="Discord">
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.844-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.507 4.0413 2.4228 5.9929 3.0294a.0776.0776 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0411-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5224 6.0023-3.0294a.077.077 0 00.0313-.0559c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1828 0-2.1569-1.0857-2.1569-2.419 0-1.3332.955-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.955 2.4189-2.1569 2.4189zm7.9748 0c-1.1828 0-2.1569-1.0857-2.1569-2.419 0-1.3332.955-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"></path>
+              </svg>
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   </footer>

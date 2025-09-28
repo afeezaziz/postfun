@@ -1,0 +1,27 @@
+# .dockerignore file to optimize build context
+.git
+.gitignore
+README.md
+Dockerfile*
+docker-compose*
+*.log
+*.pyc
+__pycache__/
+.pytest_cache/
+.coverage
+.tox/
+.env
+.env.local
+.env.*.local
+.vscode/
+.idea/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/out/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
