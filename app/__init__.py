@@ -69,6 +69,10 @@ def create_app(config_class: type = Config) -> Flask:
     def health():
         return jsonify({"status": "ok"})
 
+    @app.route("/favicon.ico")  # handle favicon requests
+    def favicon():
+        return "", 204
+
     # Ensure a JS-readable CSRF cookie is present for client-side requests
     # This emulates Flask-SeaSurf's behavior so existing frontend code continues to work.
     @app.after_request

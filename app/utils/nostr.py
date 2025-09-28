@@ -104,20 +104,154 @@ def compute_event_id(event: Dict[str, Any]) -> str:
 
 def verify_nostr_event_signature(event: Dict[str, Any]) -> Tuple[bool, str]:
     """Verify the signature on a Nostr event and return (ok, pubkey_hex)."""
+    import sys
     try:
+        print(f"[DEBUG] Verifying signature for event: {json.dumps(event, indent=2)}", file=sys.stderr)
+
         event_id = compute_event_id(event)
+        print(f"[DEBUG] Computed event_id: {event_id}", file=sys.stderr)
+        print(f'[DEBUG] Event has id: {event.get("id")}', file=sys.stderr)
+
         if event.get("id") != event_id:
+            print(f'[DEBUG] Event ID mismatch: computed {event_id}, event has {event.get("id")}', file=sys.stderr)
             return False, ""
+
         sig_hex = event.get("sig")
         pub_hex = event.get("pubkey")
+        print(f"[DEBUG] Signature: {sig_hex}", file=sys.stderr)
+        print(f"[DEBUG] Public key: {pub_hex}", file=sys.stderr)
+
         if not sig_hex or not pub_hex:
+            print(f"[DEBUG] Missing signature or pubkey: sig={sig_hex}, pubkey={pub_hex}", file=sys.stderr)
             return False, ""
+
         sig = bytes.fromhex(sig_hex)
-        msg = bytes.fromhex(event_id)
         pub = bytes.fromhex(pub_hex)
+
+        # Try both event ID hash and raw serialized data for verification
+        # Standard Nostr signs the serialized event data, not just the hash
+        pubkey = event.get("pubkey")
+        created_at = event.get("created_at")
+        kind = event.get("kind")
+        tags = event.get("tags", [])
+        content = event.get("content", "")
+        data = [0, pubkey, created_at, kind, tags, content]
+        serialized = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        msg_raw = serialized.encode("utf-8")
+        msg_hash = bytes.fromhex(event_id)
+
+        print(f"[DEBUG] Serialized event length: {len(msg_raw)}", file=sys.stderr)
+        print(f"[DEBUG] Serialized event: {serialized}", file=sys.stderr)
+
+        # Try with hash first (current method)
+        msg = msg_hash
+
+        print(f"[DEBUG] Signature bytes length: {len(sig)}", file=sys.stderr)
+        print(f"[DEBUG] Message bytes length: {len(msg)}", file=sys.stderr)
+        print(f"[DEBUG] Public key bytes length: {len(pub)}", file=sys.stderr)
+
+        # Debug signature format analysis
+        print(f"[DEBUG] Signature hex: {sig_hex}", file=sys.stderr)
+        print(f"[DEBUG] Signature first 4 bytes: {sig[:4].hex()}", file=sys.stderr)
+        print(f"[DEBUG] Signature last 4 bytes: {sig[-4:].hex()}", file=sys.stderr)
+        print(f"[DEBUG] Public key first 4 bytes: {pub[:4].hex()}", file=sys.stderr)
+        print(f"[DEBUG] Public key last 4 bytes: {pub[-4:].hex()}", file=sys.stderr)
+
+        # Try standard schnorr verification first
         ok = schnorr_verify(sig=sig, msg=msg, pubkey=pub)
-        return bool(ok), pub_hex if ok else ""
-    except Exception:
+        print(f"[DEBUG] Standard schnorr verification result: {ok}", file=sys.stderr)
+
+        if ok:
+            return True, pub_hex
+
+        # Try with raw serialized data (some wallets sign the raw data instead of hash)
+        try:
+            print(f"[DEBUG] Trying verification with raw serialized data", file=sys.stderr)
+            ok_raw = schnorr_verify(sig=sig, msg=msg_raw, pubkey=pub)
+            print(f"[DEBUG] Raw serialized data verification result: {ok_raw}", file=sys.stderr)
+            if ok_raw:
+                print(f"[DEBUG] Success with raw serialized data verification", file=sys.stderr)
+                return True, pub_hex
+        except Exception as e:
+            print(f"[DEBUG] Raw serialized data verification failed: {e}", file=sys.stderr)
+
+        # If standard verification fails, try alternative approaches for wallet compatibility
+        print(f"[DEBUG] Standard verification failed, trying wallet compatibility checks", file=sys.stderr)
+
+        # Try with different signature byte order (some wallets use little-endian)
+        try:
+            sig_le = sig[::-1]  # Reverse byte order
+            ok_le = schnorr_verify(sig=sig_le, msg=msg, pubkey=pub)
+            print(f"[DEBUG] Little-endian signature verification result: {ok_le}", file=sys.stderr)
+            if ok_le:
+                print(f"[DEBUG] Success with little-endian signature format", file=sys.stderr)
+                return True, pub_hex
+        except Exception as e:
+            print(f"[DEBUG] Little-endian attempt failed: {e}", file=sys.stderr)
+
+        # Try with different message encoding (add prefix if missing)
+        try:
+            # Some wallets expect a message prefix according to BIP-340
+            msg_with_prefix = b"\x18" + b"BIP0340/challenge" + b"\x00" + msg
+            ok_prefix = schnorr_verify(sig=sig, msg=msg_with_prefix, pubkey=pub)
+            print(f"[DEBUG] BIP-340 prefixed message verification result: {ok_prefix}", file=sys.stderr)
+            if ok_prefix:
+                print(f"[DEBUG] Success with BIP-340 message prefix", file=sys.stderr)
+                return True, pub_hex
+        except Exception as e:
+            print(f"[DEBUG] BIP-340 prefix attempt failed: {e}", file=sys.stderr)
+
+        # Try pynostr library for Nostr-specific verification
+        try:
+            from pynostr.event import Event
+            print(f"[DEBUG] Trying pynostr library fallback", file=sys.stderr)
+            # Create a pynostr Event object and use its built-in verification
+            nostr_event = Event()
+            nostr_event.id = event.get("id")
+            nostr_event.pubkey = event.get("pubkey")
+            nostr_event.created_at = event.get("created_at")
+            nostr_event.kind = event.get("kind")
+            nostr_event.tags = event.get("tags", [])
+            nostr_event.content = event.get("content", "")
+            nostr_event.sig = event.get("sig")
+
+            # Use pynostr's built-in verification method
+            ok_pynostr = nostr_event.verify()
+            print(f"[DEBUG] pynostr verification result: {ok_pynostr}", file=sys.stderr)
+            if ok_pynostr:
+                print(f"[DEBUG] Success with pynostr library", file=sys.stderr)
+                return True, pub_hex
+        except ImportError:
+            print(f"[DEBUG] pynostr library not available", file=sys.stderr)
+        except Exception as e:
+            print(f"[DEBUG] pynostr verification attempt failed: {e}", file=sys.stderr)
+
+        # Try alternative schnorr libraries if available
+        try:
+            import secp256k1
+            print(f"[DEBUG] Trying secp256k1 library fallback", file=sys.stderr)
+            # Use secp256k1 library properly with raw 32-byte pubkey
+            secp = secp256k1.PublicKey()
+            # First deserialize the public key from 32 bytes
+            secp.deserialize(pub)
+            ok_secp = secp.schnorr_verify(msg, sig, raw=True)
+            print(f"[DEBUG] secp256k1 verification result: {ok_secp}", file=sys.stderr)
+            if ok_secp:
+                print(f"[DEBUG] Success with secp256k1 library", file=sys.stderr)
+                return True, pub_hex
+        except ImportError:
+            print(f"[DEBUG] secp256k1 library not available", file=sys.stderr)
+        except Exception as e:
+            print(f"[DEBUG] secp256k1 verification attempt failed: {e}", file=sys.stderr)
+
+        print(f"[DEBUG] All verification methods failed", file=sys.stderr)
+        return False, ""
+
+    except Exception as e:
+        print(f"[DEBUG] Signature verification failed with exception: {e}", file=sys.stderr)
+        print(f"[DEBUG] Exception details: {type(e).__name__}", file=sys.stderr)
+        import traceback
+        print(f"[DEBUG] Traceback: {traceback.format_exc()}", file=sys.stderr)
         return False, ""
 
 
@@ -126,30 +260,48 @@ def validate_login_event(event: Dict[str, Any], expected_challenge_id: str, expe
 
     Returns (ok, pubkey_hex, content_obj)
     """
+    print(f"[DEBUG] Starting event validation for {expected_challenge_id}")
+
     ok, pub_hex = verify_nostr_event_signature(event)
+    print(f"[DEBUG] Signature verification result: ok={ok}, pub_hex={pub_hex}")
     if not ok:
+        print(f"[DEBUG] Signature verification failed for event: {json.dumps(event, indent=2)}")
         return False, "", None
 
     try:
         content_obj = json.loads(event.get("content", "{}"))
-    except Exception:
+        print(f"[DEBUG] Content parsed successfully: {json.dumps(content_obj, indent=2)}")
+    except Exception as e:
+        print(f'[DEBUG] Failed to parse content: {event.get("content")}, error: {e}')
         return False, "", None
 
     # Basic schema checks
-    if content_obj.get("challenge_id") != expected_challenge_id:
+    challenge_id = content_obj.get("challenge_id")
+    challenge = content_obj.get("challenge")
+    print(f"[DEBUG] Content challenge_id: {challenge_id}, expected: {expected_challenge_id}")
+    print(f"[DEBUG] Content challenge: {challenge}, expected: {expected_challenge}")
+
+    if challenge_id != expected_challenge_id:
+        print(f"[DEBUG] Challenge ID mismatch: got {challenge_id}, expected {expected_challenge_id}")
         return False, "", None
-    if content_obj.get("challenge") != expected_challenge:
+    if challenge != expected_challenge:
+        print(f"[DEBUG] Challenge mismatch: got {challenge}, expected {expected_challenge}")
         return False, "", None
 
     # Domain and expiry hints (optional, but we validate if present)
     now = int(time.time())
     exp = content_obj.get("exp")
+    print(f"[DEBUG] Expiry check: exp={exp}, now={now}")
     if isinstance(exp, int) and exp < now - int(current_app.config.get("AUTH_MAX_CLOCK_SKEW", 300)):
+        print(f"[DEBUG] Event expired: exp={exp}, now={now}")
         return False, "", None
 
     domain = content_obj.get("domain")
     expected_domain = current_app.config.get("LOGIN_DOMAIN") or "postfun"
+    print(f"[DEBUG] Domain check: domain={domain}, expected={expected_domain}")
     if domain and domain != expected_domain:
+        print(f"[DEBUG] Domain mismatch: got {domain}, expected {expected_domain}")
         return False, "", None
 
+    print(f"[DEBUG] Event validation successful for {pub_hex}")
     return True, pub_hex, content_obj

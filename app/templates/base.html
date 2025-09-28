@@ -19,7 +19,7 @@
   <link rel="canonical" href="{{ meta_url or request.url }}" />
   {% endblock %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}" />
-  <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/app.js') }}?v=20250928-2"></script>
 </head>
 <body>
   <nav class="navbar bg-base-100 border-b border-terminal-green shadow-lg">
@@ -29,70 +29,44 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" /></svg>
         </div>
         <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52 border border-terminal-green">
-          <li><a href="{{ url_for('web.home') }}" class="{% if request.endpoint == 'web.home' %}text-accent font-bold{% endif %}">Home</a></li>
-          <li><a href="{{ url_for('web.tokens_list') }}" class="{% if request.endpoint == 'web.tokens_list' %}text-accent font-bold{% endif %}">Tokens</a></li>
+          <li><a href="{{ url_for('web.tokens_list') }}" class="{% if request.endpoint == 'web.tokens_list' %}text-accent font-bold{% endif %}">Token</a></li>
           <li><a href="{{ url_for('web.explore') }}" class="{% if request.endpoint == 'web.explore' %}text-accent font-bold{% endif %}">Explore</a></li>
-          <li><a href="{{ url_for('web.pro') }}" class="{% if request.endpoint == 'web.pro' %}text-accent font-bold{% endif %}">Pro</a></li>
-          <li><a href="{{ url_for('web.portfolio') }}" class="{% if request.endpoint == 'web.portfolio' %}text-accent font-bold{% endif %}">Portfolio</a></li>
-          {% if current_user %}
-            <li><a href="{{ url_for('web.watchlist') }}" class="{% if request.endpoint == 'web.watchlist' %}text-accent font-bold{% endif %}">Watchlist</a></li>
-            <li><a href="{{ url_for('web.alerts') }}" class="{% if request.endpoint == 'web.alerts' %}text-accent font-bold{% endif %}">Alerts</a></li>
-            {% if current_user.is_admin %}
-              <li><a href="{{ url_for('admin.dashboard') }}" class="{% if request.endpoint and request.endpoint.startswith('admin.') %}text-accent font-bold{% endif %}">Admin</a></li>
-            {% endif %}
-          {% endif %}
           <li><a href="{{ url_for('web.launchpad') }}" class="{% if request.endpoint == 'web.launchpad' %}text-accent font-bold{% endif %}">Launchpad</a></li>
-          <li><a href="{{ url_for('web.dashboard') }}" class="{% if request.endpoint == 'web.dashboard' %}text-accent font-bold{% endif %}">Dashboard</a></li>
         </ul>
       </div>
-      <a class="btn btn-ghost text-xl font-bold text-terminal-green hover:text-accent transition-colors">Postfun</a>
+      <a href="{{ url_for('web.home') }}" class="btn btn-ghost text-xl font-bold text-terminal-green hover:text-accent transition-colors">Postfun</a>
     </div>
     <div class="navbar-center hidden lg:flex">
       <ul class="menu menu-horizontal px-1">
-        <li><a href="{{ url_for('web.home') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.home' %}text-accent font-bold underline{% endif %}">Home</a></li>
-        <li><a href="{{ url_for('web.tokens_list') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tokens_list' %}text-accent font-bold underline{% endif %}">Tokens</a></li>
+        <li><a href="{{ url_for('web.tokens_list') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tokens_list' %}text-accent font-bold underline{% endif %}">Token</a></li>
         <li><a href="{{ url_for('web.explore') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.explore' %}text-accent font-bold underline{% endif %}">Explore</a></li>
-        <li><a href="{{ url_for('web.pro') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.pro' %}text-accent font-bold underline{% endif %}">Pro</a></li>
-        <li><a href="{{ url_for('web.portfolio') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.portfolio' %}text-accent font-bold underline{% endif %}">Portfolio</a></li>
-        {% if current_user %}
-          <li><a href="{{ url_for('web.watchlist') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.watchlist' %}text-accent font-bold underline{% endif %}">Watchlist</a></li>
-          <li><a href="{{ url_for('web.alerts') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.alerts' %}text-accent font-bold underline{% endif %}">Alerts</a></li>
-          {% if current_user.is_admin %}
-            <li><a href="{{ url_for('admin.dashboard') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint and request.endpoint.startswith('admin.') %}text-accent font-bold underline{% endif %}">Admin</a></li>
-          {% endif %}
-        {% endif %}
         <li><a href="{{ url_for('web.launchpad') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.launchpad' %}text-accent font-bold underline{% endif %}">Launchpad</a></li>
-        <li><a href="{{ url_for('web.dashboard') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.dashboard' %}text-accent font-bold underline{% endif %}">Dashboard</a></li>
       </ul>
     </div>
     <div class="navbar-end">
       {% if current_user %}
         <div class="dropdown dropdown-end">
-          <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
-            <div class="w-8 rounded-full bg-terminal-green">
-              <span class="text-terminal-black font-bold text-xs">{{ (current_user.npub or current_user.pubkey_hex)[:2].upper() }}</span>
-            </div>
+          <div tabindex="0" role="button" class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black">
+            Dashboard
           </div>
           <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-64 border border-terminal-green">
-            <li class="menu-title text-terminal-green font-bold">{{ current_user.npub or current_user.pubkey_hex }}</li>
-            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.profile') }}">Profile</a></li>
-            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.settings') }}">Settings</a></li>
+            <li class="menu-title text-terminal-green font-bold">{{ (current_user.npub or current_user.pubkey_hex)[:10] }}...{{ (current_user.npub or current_user.pubkey_hex)[-4:] }}</li>
+            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.user_profile', user_id=current_user.id) }}">Profile</a></li>
             <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.portfolio') }}">Portfolio</a></li>
-            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.watchlist') }}">Watchlist</a></li>
-            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.alerts') }}">Alerts</a></li>
+            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.wallet') }}">Wallet</a></li>
             <div class="divider border-terminal-green"></div>
             <li><button onclick="pfLogout()" class="text-terminal-red hover:text-red-600 font-bold">Logout</button></li>
           </ul>
         </div>
       {% else %}
-        <button class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black" onclick="pfNostrLogin()">
-          Login with Nostr
+        <button class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black" onclick="pfDashboardLogin()">
+          Dashboard
         </button>
       {% endif %}
     </div>
   </nav>
 
-  <main class="container mx-auto px-4 py-8 max-w-6xl">
+  <main class="container mx-auto px-4 py-8 max-w-6xl pt-24 pb-64">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <div class="mb-4 space-y-2">
@@ -107,45 +81,186 @@
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="footer bg-base-100 border-t border-terminal-green p-6 md:p-8">
-    <div class="container mx-auto max-w-6xl">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
-        <div class="col-span-1 md:col-span-2">
-          <h3 class="text-lg font-bold text-terminal-green mb-4">Postfun</h3>
-          <p class="text-terminal-green mb-4">From posts to markets. Turn vibes into value on Postfun.</p>
-          <p class="text-terminal-dim-green text-sm">© 2025 Postfun. All rights reserved.</p>
+  <footer class="bg-base-100 border-t border-terminal-green/20 w-full" style="background-color: rgba(0, 0, 0, 0.95); backdrop-filter: blur(10px);">
+    <!-- Ticker Prices Bar -->
+    <div class="bg-terminal-black border-b border-terminal-green/10 overflow-hidden">
+      <div class="ticker-tape" id="ticker-tape">
+        <div class="ticker-content">
+          <!-- Ticker items will be populated by JavaScript -->
         </div>
-        <div>
-          <h4 class="font-semibold text-terminal-green mb-4">Platform</h4>
-          <ul class="space-y-2">
-            <li><a href="{{ url_for('web.about') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors">About</a></li>
-            <li><a href="{{ url_for('web.stats') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors">Stats</a></li>
-            <li><a href="{{ url_for('web.faq') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors">FAQ</a></li>
-            <li><a href="{{ url_for('web.download') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors">Download</a></li>
-          </ul>
-        </div>
-        <div>
-          <h4 class="font-semibold text-terminal-green mb-4">Connect</h4>
-          <div class="flex space-x-4">
-            <a href="#" class="text-terminal-green hover:text-accent transition-colors" aria-label="Twitter">
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8.29 20.251c7.547 0 11.675-6.253 11.675-11.675 0-.178 0-.355-.012-.53A8.348 8.348 0 0022 5.92a8.19 8.19 0 01-2.357.646 4.118 4.118 0 001.804-2.27 8.224 8.224 0 01-2.605.996 4.107 4.107 0 00-6.993 3.743 11.65 11.65 0 01-8.457-4.287 4.106 4.106 0 001.27 5.477A4.072 4.072 0 012.8 9.713v.052a4.105 4.105 0 003.292 4.022 4.095 4.095 0 01-1.853.07 4.108 4.108 0 003.834 2.85A8.233 8.233 0 012 18.407a11.616 11.616 0 006.29 1.84"></path>
-              </svg>
-            </a>
-            <a href="#" class="text-terminal-green hover:text-accent transition-colors" aria-label="GitHub">
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path>
-              </svg>
-            </a>
-            <a href="#" class="text-terminal-green hover:text-accent transition-colors" aria-label="Discord">
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.844-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.507 4.0413 2.4228 5.9929 3.0294a.0776.0776 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0411-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5224 6.0023-3.0294a.077.077 0 00.0313-.0559c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1828 0-2.1569-1.0857-2.1569-2.419 0-1.3332.955-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.955 2.4189-2.1569 2.4189zm7.9748 0c-1.1828 0-2.1569-1.0857-2.1569-2.419 0-1.3332.955-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z"></path>
-              </svg>
-            </a>
+      </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+
+      <!-- Bottom bar -->
+      <div class="border-t border-terminal-green/10 py-4">
+        <div class="flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
+          <p class="text-terminal-dim-green text-xs">
+            © 2025 Postfun. All rights reserved.
+          </p>
+          <div class="flex items-center space-x-4 text-xs text-terminal-dim-green">
+            <span>Built with ❤️ for the community</span>
+            <span class="hidden sm:inline">•</span>
+            <span class="text-terminal-green">Decentralized • Open Source</span>
           </div>
         </div>
       </div>
     </div>
   </footer>
+
+  <style>
+    /* Global layout fixes */
+    html {
+      height: 100%;
+    }
+
+    body {
+      min-height: 100vh;
+    }
+
+    /* Ticker styles */
+    .ticker-tape {
+      position: relative;
+      height: 40px;
+      overflow: hidden;
+      background: linear-gradient(90deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.7) 50%, rgba(0,0,0,0.9) 100%);
+    }
+
+    .ticker-content {
+      display: flex;
+      position: absolute;
+      animation: scroll-left 30s linear infinite;
+      white-space: nowrap;
+      will-change: transform;
+    }
+
+    .ticker-item {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 2rem;
+      color: #0f0;
+      font-family: 'VT323', monospace;
+      font-size: 18px;
+      border-right: 1px solid rgba(0, 255, 0, 0.2);
+      min-width: fit-content;
+    }
+
+    .ticker-symbol {
+      font-weight: bold;
+      margin-right: 0.5rem;
+      color: #0f0;
+    }
+
+    .ticker-price {
+      color: #0f0;
+      margin-right: 0.5rem;
+    }
+
+    .ticker-change {
+      margin-left: 0.5rem;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .ticker-change.positive {
+      color: #00ff00;
+      text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+    }
+
+    .ticker-change.negative {
+      color: #ff0000;
+      text-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+    }
+
+    @keyframes scroll-left {
+      0% {
+        transform: translateX(0);
+      }
+      100% {
+        transform: translateX(-50%);
+      }
+    }
+
+    .ticker-tape:hover .ticker-content {
+      animation-play-state: paused;
+    }
+
+    /* Smooth scrolling for main content */
+    main {
+      scroll-behavior: smooth;
+    }
+  </style>
+
+  <script>
+    // Mock ticker data - in real implementation, this would come from an API
+    const tickerData = [
+      { symbol: 'BTC', price: 43520.50, change: 2.45 },
+      { symbol: 'ETH', price: 2280.30, change: -1.23 },
+      { symbol: 'SOL', price: 98.45, change: 5.67 },
+      { symbol: 'AVAX', price: 36.78, change: 3.21 },
+      { symbol: 'MATIC', price: 0.89, change: -0.45 },
+      { symbol: 'LINK', price: 14.56, change: 1.89 },
+      { symbol: 'UNI', price: 6.78, change: 4.12 },
+      { symbol: 'AAVE', price: 92.34, change: -2.34 },
+      { symbol: 'DOT', price: 7.45, change: 0.89 },
+      { symbol: 'ATOM', price: 10.23, change: 2.67 },
+      { symbol: 'FTM', price: 0.45, change: -1.78 },
+      { symbol: 'SAND', price: 0.56, change: 3.45 }
+    ];
+
+    function createTickerItem(data) {
+      const changeClass = data.change >= 0 ? 'positive' : 'negative';
+      const changeSymbol = data.change >= 0 ? '↑' : '↓';
+
+      return `
+        <div class="ticker-item">
+          <span class="ticker-symbol">${data.symbol}</span>
+          <span class="ticker-price">$${data.price.toLocaleString()}</span>
+          <span class="ticker-change ${changeClass}">${changeSymbol} ${Math.abs(data.change)}%</span>
+        </div>
+      `;
+    }
+
+    function initializeTicker() {
+      const tickerContent = document.querySelector('.ticker-content');
+
+      // Create ticker items (duplicate for seamless looping)
+      const tickerItems = tickerData.map(createTickerItem).join('');
+      tickerContent.innerHTML = tickerItems + tickerItems; // Duplicate for seamless loop
+    }
+
+    // Initialize ticker when DOM is loaded and also check periodically
+    function initTickerWhenReady() {
+      if (document.querySelector('.ticker-content')) {
+        initializeTicker();
+      } else {
+        setTimeout(initTickerWhenReady, 100);
+      }
+    }
+
+    // Start initialization
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initTickerWhenReady);
+    } else {
+      initTickerWhenReady();
+    }
+
+    // Update prices every 5 seconds (mock implementation)
+    setInterval(() => {
+      // In real implementation, fetch new prices from API
+      tickerData.forEach(item => {
+        // Simulate price changes
+        const changePercent = (Math.random() - 0.5) * 2; // -1% to +1%
+        item.price = item.price * (1 + changePercent / 100);
+        item.change = item.change + (Math.random() - 0.5) * 0.5;
+      });
+
+      // Reinitialize ticker with new data
+      if (document.querySelector('.ticker-content')) {
+        initializeTicker();
+      }
+    }, 5000);
+  </script>
 </body>
 </html>

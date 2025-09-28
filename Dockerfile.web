@@ -9,6 +9,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
+    pkg-config \
+    libssl-dev \
+    libgmp-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -29,10 +32,11 @@ RUN mkdir -p app/static/css && \
 
 # Environment defaults
 ENV PORT=8000 \
-    FLASK_ENV=production \
-    PYTHONPATH=/app
+    FLASK_ENV=development \
+    PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-# Run with gunicorn
-CMD ["gunicorn", "-w", "2", "-k", "gthread", "-b", "0.0.0.0:8000", "wsgi:app"]
+# Run with gunicorn with logging
+CMD ["gunicorn", "--log-level", "debug", "--access-logfile", "-", "--error-logfile", "-", "-w", "2", "-k", "gthread", "-b", "0.0.0.0:8000", "wsgi:app"]

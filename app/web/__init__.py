@@ -2287,3 +2287,61 @@ def user_profile(user_id: int):
     if not user:
         abort(404)
     return render_template("user.html", user=user)
+
+
+@web_bp.route("/wallet")
+@require_auth_web
+def wallet():
+    payload = g.jwt_payload
+    uid = payload.get("uid")
+    user = db.session.get(User, uid) if isinstance(uid, int) else None
+    if not user:
+        return redirect(url_for("web.home"))
+
+    # Get user's token balances
+    balances = (
+        TokenBalance.query
+        .join(Token, TokenBalance.token_id == Token.id)
+        .filter(TokenBalance.user_id == user.id, TokenBalance.amount > 0)
+        .order_by(TokenBalance.amount.desc())
+        .all()
+    )
+
+    # Calculate total balance and individual values
+    total_balance = 0.0
+    for balance in balances:
+        price = _amm_price_for_token(balance.token) or float(balance.token.price or 0)
+        value = float(balance.amount or 0) * price
+        balance.value = value
+        total_balance += value
+
+    # Get price map for tokens
+    price_by_symbol = {balance.token.symbol: (_amm_price_for_token(balance.token) or float(balance.token.price or 0)) for balance in balances}
+
+    # Get recent activity (mock data for now)
+    recent_activity = []
+
+    return render_template(
+        "wallet.html",
+        user=user,
+        balances=balances,
+        total_balance=total_balance,
+        price_by_symbol=price_by_symbol,
+        recent_activity=recent_activity,
+        meta_title="Wallet — Postfun",
+        meta_description="Your wallet balances and activity on Postfun.",
+        meta_url=url_for("web.wallet", _external=True),
+    )
+
+
+@web_bp.route("/api/auth/check")
+def api_auth_check():
+    import sys
+    print("[DEBUG] Auth check endpoint called", file=sys.stderr)
+    payload = get_jwt_from_cookie()
+    print(f"[DEBUG] JWT payload: {payload}", file=sys.stderr)
+    if payload:
+        print(f"[DEBUG] User authenticated: {payload.get('uid')}", file=sys.stderr)
+        return {"authenticated": True, "user_id": payload.get("uid")}
+    print("[DEBUG] User not authenticated", file=sys.stderr)
+    return {"authenticated": False}

@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}Wallet | Postfun{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>Your Wallet</h1>
+    {% if user %}
+      <div class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+        <div class="card">
+          <h3>Account</h3>
+          <div>npub: <span class="pf-green">{{ user.npub or '—' }}</span></div>
+          <div>pubkey: <span class="pf-green">{{ user.pubkey_hex }}</span></div>
+          <div>display: <span class="pf-green">{{ user.display_name or '—' }}</span></div>
+        </div>
+        <div class="card">
+          <h3>Balance Summary</h3>
+          <div>Total Balance: <span class="pf-green">{{ '%.4f'|format(total_balance or 0) }}</span></div>
+          <div>Assets: <span class="pf-green">{{ balances|length }}</span></div>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Your Balances</h2>
+    <div class="pf-grid">
+      {% for balance in balances %}
+        <div class="card pf-token-card">
+          <div class="pf-token-header">
+            <span class="badge">{{ balance.token.symbol }}</span>
+            <span>{{ balance.token.name }}</span>
+          </div>
+          <div class="pf-token-body">
+            <div>Amount: <span class="pf-green">{{ '%.4f'|format(balance.amount or 0) }}</span></div>
+            <div>Value: <span class="pf-green">{{ '%.2f'|format(balance.value or 0) }}</span></div>
+            <div>Price: <span class="pf-green">{{ '%.4f'|format((price_by_symbol.get(balance.token.symbol) if price_by_symbol else None) or (balance.token.price or 0)) }}</span></div>
+            <div>24h: <span class="pf-green">{{ '%.2f'|format(balance.token.change_24h or 0) }}%</span></div>
+          </div>
+          <div class="pf-spark" data-symbol="{{ balance.token.symbol }}" data-price="{{ (price_by_symbol.get(balance.token.symbol) if price_by_symbol else None) or (balance.token.price or 0) }}"></div>
+          <div class="pf-card-actions">
+            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=balance.token.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.pool', symbol=balance.token.symbol) }}">Trade</a>
+          </div>
+        </div>
+      {% else %}
+        <div>No balances found. Your wallet is empty.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Recent Activity</h2>
+    <div class="pf-activity-list">
+      {% for activity in recent_activity %}
+        <div class="pf-activity-item">
+          <div class="pf-activity-time">{{ activity.time.strftime('%Y-%m-%d %H:%M') }}</div>
+          <div class="pf-activity-details">
+            <span class="badge">{{ activity.type }}</span>
+            <span>{{ activity.description }}</span>
+          </div>
+          <div class="pf-activity-amount">
+            {% if activity.amount %}
+              <span class="pf-green">{{ '%.4f'|format(activity.amount) }}</span> {{ activity.symbol }}
+            {% endif %}
+          </div>
+        </div>
+      {% else %}
+        <div>No recent activity.</div>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

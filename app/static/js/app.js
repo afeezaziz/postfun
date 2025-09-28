@@ -15,31 +15,158 @@ function pfInitProgressBars() {
     });
 }
 
-// Generic SSE with exponential backoff + jitter
+// Global SSE cleanup manager
+window.pfSSEConnections = new Map();
+
+// Cleanup all SSE connections
+function pfCleanupAllSSE() {
+  window.pfSSEConnections.forEach((conn, label) => {
+    try {
+      if (conn && typeof conn.close === 'function') {
+        conn.close();
+      }
+    } catch (e) {
+      console.warn(`Error closing SSE connection ${label}:`, e);
+    }
+  });
+  window.pfSSEConnections.clear();
+}
+
+// Cleanup SSE connections on page unload
+window.addEventListener('beforeunload', pfCleanupAllSSE);
+
+// Intercept navigation to clean up SSE connections
+(function() {
+  const originalPushState = window.history.pushState;
+  const originalReplaceState = window.history.replaceState;
+
+  window.history.pushState = function() {
+    pfCleanupAllSSE();
+    return originalPushState.apply(this, arguments);
+  };
+
+  window.history.replaceState = function() {
+    pfCleanupAllSSE();
+    return originalReplaceState.apply(this, arguments);
+  };
+
+  // Handle back/forward navigation
+  window.addEventListener('popstate', pfCleanupAllSSE);
+
+  // Intercept link clicks for internal navigation
+  document.addEventListener('click', function(e) {
+    const link = e.target.closest('a');
+    if (link && link.href && link.href.startsWith(window.location.origin)) {
+      pfCleanupAllSSE();
+    }
+  });
+})();
+
+// Generic SSE with exponential backoff + jitter and timeout
 function pfSSEWithBackoff(url, onMessage, label = 'sse') {
   if (typeof EventSource === 'undefined') return { close: () => {} };
+
+  // Close existing connection with same label
+  if (window.pfSSEConnections.has(label)) {
+    const existingConn = window.pfSSEConnections.get(label);
+    if (existingConn && typeof existingConn.close === 'function') {
+      existingConn.close();
+    }
+    window.pfSSEConnections.delete(label);
+  }
+
   let attempt = 0;
   let es = null;
   let closed = false;
+  let timeoutId = null;
+
+  function cleanup() {
+    closed = true;
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    if (es) {
+      try {
+        es.close();
+      } catch (e) {
+        console.warn(`Error closing EventSource for ${label}:`, e);
+      }
+      es = null;
+    }
+  }
+
   function open() {
     if (closed) return;
-    es = new EventSource(url);
-    es.onmessage = (ev) => {
-      attempt = 0; // reset on success
-      try { onMessage(ev); } catch (e) {}
-    };
-    es.onerror = () => {
-      try { es && es.close(); } catch {}
-      if (closed) return;
-      attempt += 1;
-      const base = Math.min(30000, 1000 * Math.pow(2, Math.min(6, attempt - 1)));
-      const jitter = Math.floor(Math.random() * 400);
-      const delay = base + jitter;
-      setTimeout(open, delay);
-    };
+
+    // Set connection timeout
+    timeoutId = setTimeout(() => {
+      console.warn(`SSE connection timeout for ${label}:`, url);
+      cleanup();
+      // Don't retry if we hit timeout - might be server issue
+      return;
+    }, 15000); // 15 second timeout
+
+    try {
+      es = new EventSource(url);
+
+      es.onopen = () => {
+        // Connection successful, clear timeout
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        attempt = 0;
+      };
+
+      es.onmessage = (ev) => {
+        attempt = 0; // reset on success
+        try { onMessage(ev); } catch (e) {
+          console.warn(`Error in SSE message handler for ${label}:`, e);
+        }
+      };
+
+      es.onerror = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+
+        try { es && es.close(); } catch {}
+        es = null;
+
+        if (closed) return;
+
+        attempt += 1;
+        // Stop retrying after too many attempts
+        if (attempt > 5) {
+          console.warn(`SSE connection failed after ${attempt} attempts for ${label}:`, url);
+          return;
+        }
+
+        const base = Math.min(30000, 1000 * Math.pow(2, Math.min(6, attempt - 1)));
+        const jitter = Math.floor(Math.random() * 400);
+        const delay = base + jitter;
+
+        console.log(`Retrying SSE connection for ${label} in ${delay}ms (attempt ${attempt})`);
+        setTimeout(open, delay);
+      };
+    } catch (e) {
+      console.error(`Failed to create EventSource for ${label}:`, e);
+      cleanup();
+    }
   }
+
   open();
-  return { close: () => { closed = true; try { es && es.close(); } catch {} } };
+
+  const conn = {
+    close: cleanup,
+    url: url,
+    label: label
+  };
+
+  window.pfSSEConnections.set(label, conn);
+  return conn;
 }
 
 // Home: SSE for live trades into ticker
@@ -59,9 +186,13 @@ function pfInitTradesSSE() {
         track.appendChild(span);
         const clone = document.getElementById('pf-ticker-track-clone');
         if (clone) clone.appendChild(span.cloneNode(true));
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Error parsing trade data:', e);
+      }
     }, 'trades');
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Error initializing trades SSE:', e);
+  }
 }
 
 // Watchlist AJAX (uses /api/watchlist)
@@ -261,6 +392,8 @@ function pfInitLaunchConfetti() {
 // SSE: in-app toasts for user alert events
 function pfInitAlertsSSE() {
   if (typeof EventSource === 'undefined') return;
+  // Only initialize for logged-in users
+  if (!document.querySelector('.pf-npub')) return;
   try {
     pfSSEWithBackoff('/sse/alerts', (ev) => {
       try {
@@ -269,11 +402,11 @@ function pfInitAlertsSSE() {
         const msg = `${symbol} ${String(condition || '').replaceAll('_',' ')}: price ${Number(price||0).toFixed(6)} threshold ${Number(threshold||0).toFixed(6)}`;
         pfToast(msg, 'info', 5000);
       } catch (e) {
-        // ignore parse errors
+        console.warn('Error parsing alert data:', e);
       }
     }, 'alerts');
   } catch (e) {
-    // ignore
+    console.warn('Error initializing alerts SSE:', e);
   }
 }
 
@@ -297,22 +430,218 @@ function pfInitFollowSSE() {
           pfToast(`${sym} progressed to stage ${st}`, 'info', 5000);
         }
       } catch (e) {
-        // ignore parse errors
+        console.warn('Error parsing follow data:', e);
       }
     }, 'follow');
   } catch (e) {
-    // ignore
+    console.warn('Error initializing follow SSE:', e);
   }
 }
 
-async function pfNostrLogin() {
+// Dashboard login with wallet selection
+async function pfDashboardLogin() {
+  console.log('pfDashboardLogin called');
+  try {
+    const res = await fetch('/api/auth/check', { credentials: 'same-origin' });
+    console.log('Auth check response:', res.status);
+    if (res.ok) {
+      const data = await res.json();
+      console.log('Auth check data:', data);
+      if (data.authenticated) {
+        console.log('User authenticated, redirecting to dashboard');
+        window.location.href = '/dashboard';
+        return;
+      }
+    }
+    console.log('User not authenticated, showing wallet selection');
+    showWalletSelectionModal();
+  } catch (e) {
+    console.log('Auth check error:', e);
+    showWalletSelectionModal();
+  }
+}
+
+// Show wallet selection modal
+function showWalletSelectionModal() {
+  console.log('showWalletSelectionModal called');
+
+  // Remove existing modal if any
+  const existingModal = document.getElementById('pf-wallet-modal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // Create modal
+  const modal = document.createElement('div');
+  modal.id = 'pf-wallet-modal';
+  modal.className = 'pf-modal-overlay';
+  modal.innerHTML = `
+    <div class="pf-modal">
+      <div class="pf-modal-header">
+        <h3>Select Wallet</h3>
+        <button class="pf-modal-close" onclick="closeWalletModal()">&times;</button>
+      </div>
+      <div class="pf-modal-body">
+        <div class="pf-wallet-options">
+          <button class="pf-wallet-btn" onclick="pfConnectNostrWallet()">
+            <div class="pf-wallet-icon">🔑</div>
+            <div class="pf-wallet-info">
+              <div class="pf-wallet-name">Nostr Wallet</div>
+              <div class="pf-wallet-desc">Connect using NIP-07 extension</div>
+            </div>
+          </button>
+          <button class="pf-wallet-btn" onclick="pfConnectOKXWallet()">
+            <div class="pf-wallet-icon">🦊</div>
+            <div class="pf-wallet-info">
+              <div class="pf-wallet-name">OKX Wallet</div>
+              <div class="pf-wallet-desc">Connect using OKX browser extension</div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Add modal styles if not already present
+  if (!document.getElementById('pf-wallet-modal-styles')) {
+    const styles = document.createElement('style');
+    styles.id = 'pf-wallet-modal-styles';
+    styles.textContent = `
+      .pf-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+      .pf-modal {
+        background: #1a1a1a;
+        border: 2px solid #00ff00;
+        border-radius: 8px;
+        max-width: 400px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+      .pf-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px;
+        border-bottom: 1px solid #00ff00;
+      }
+      .pf-modal-header h3 {
+        color: #00ff00;
+        margin: 0;
+        font-size: 18px;
+      }
+      .pf-modal-close {
+        background: none;
+        border: none;
+        color: #00ff00;
+        font-size: 24px;
+        cursor: pointer;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pf-modal-close:hover {
+        color: #ff0000;
+      }
+      .pf-modal-body {
+        padding: 16px;
+      }
+      .pf-wallet-options {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .pf-wallet-btn {
+        background: #2a2a2a;
+        border: 1px solid #00ff00;
+        border-radius: 6px;
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+        width: 100%;
+        text-align: left;
+      }
+      .pf-wallet-btn:hover {
+        background: #333333;
+        border-color: #00cc00;
+      }
+      .pf-wallet-icon {
+        font-size: 24px;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #1a1a1a;
+        border-radius: 50%;
+      }
+      .pf-wallet-info {
+        flex: 1;
+      }
+      .pf-wallet-name {
+        color: #00ff00;
+        font-weight: bold;
+        font-size: 16px;
+        margin-bottom: 4px;
+      }
+      .pf-wallet-desc {
+        color: #888888;
+        font-size: 14px;
+      }
+    `;
+    document.head.appendChild(styles);
+  }
+
+  document.body.appendChild(modal);
+
+  // Close modal when clicking outside
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeWalletModal();
+    }
+  });
+}
+
+// Close wallet modal
+function closeWalletModal() {
+  const modal = document.getElementById('pf-wallet-modal');
+  if (modal) {
+    modal.remove();
+  }
+}
+
+// Connect with Nostr wallet
+async function pfConnectNostrWallet() {
+  console.log('pfConnectNostrWallet called');
+  closeWalletModal();
+
   try {
     if (!window.nostr || !window.nostr.getPublicKey || !window.nostr.signEvent) {
-      alert('NIP-07 provider not found. Install a Nostr extension.');
+      alert('NIP-07 provider not found. Please install a Nostr extension like nos2x or Alby.');
       return;
     }
+
     const csrf = pfGetCookie('csrf_token');
-    const chRes = await fetch('/auth/challenge', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf || '' } });
+    const chRes = await fetch('/auth/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf || '' }
+    });
     const ch = await chRes.json();
     const pubkey = await window.nostr.getPublicKey();
     const content = JSON.stringify({
@@ -323,17 +652,131 @@ async function pfNostrLogin() {
     });
     const evt = { kind: 1, content, tags: [], created_at: Math.floor(Date.now() / 1000), pubkey };
     const signed = await window.nostr.signEvent(evt);
-    const vRes = await fetch('/auth/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf || '' }, body: JSON.stringify({ event: signed }) });
+    const vRes = await fetch('/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf || '' },
+      body: JSON.stringify({ event: signed })
+    });
     const out = await vRes.json();
     if (out.token) {
-      // Reload to let server read the HttpOnly cookie and render user
       window.location.reload();
     } else {
       alert('Login failed: ' + JSON.stringify(out));
     }
   } catch (e) {
-    alert('Login error: ' + e);
+    alert('Nostr login error: ' + e);
   }
+}
+
+// Connect with OKX wallet
+async function pfConnectOKXWallet() {
+  console.log('pfConnectOKXWallet called');
+  closeWalletModal();
+
+  try {
+    // Check if OKX wallet is available
+    if (!window.okxwallet || !window.okxwallet.nostr) {
+      alert('OKX wallet not found. Please install OKX Wallet browser extension and enable Nostr support.');
+      return;
+    }
+
+    const okxNostr = window.okxwallet.nostr;
+    console.log('OKX - Available methods:', Object.getOwnPropertyNames(okxNostr));
+
+    // Test if the required methods are available
+    if (!okxNostr.getPublicKey || !okxNostr.signEvent) {
+      alert('OKX wallet Nostr interface not available. Please ensure Nostr is enabled in OKX wallet settings.');
+      return;
+    }
+
+    const csrf = pfGetCookie('csrf_token');
+    const chRes = await fetch('/auth/challenge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf || '' }
+    });
+    const ch = await chRes.json();
+    console.log('OKX - Challenge response:', ch);
+
+    const pubkey = await okxNostr.getPublicKey();
+    console.log('OKX - Public key:', pubkey);
+
+    const content = JSON.stringify({
+      challenge_id: ch.challenge_id,
+      challenge: ch.challenge,
+      domain: 'postfun',
+      exp: Math.floor(Date.now() / 1000) + 10 * 60
+    });
+
+    // Try multiple signing approaches
+    const signingAttempts = [
+      {
+        name: 'Standard NIP-01 event',
+        event: { kind: 1, content, tags: [], created_at: Math.floor(Date.now() / 1000), pubkey }
+      },
+      {
+        name: 'Event without explicit pubkey',
+        event: { kind: 1, content, tags: [], created_at: Math.floor(Date.now() / 1000) }
+      },
+      {
+        name: 'Minimal event',
+        event: { kind: 1, created_at: Math.floor(Date.now() / 1000), content, tags: [] }
+      }
+    ];
+
+    for (const attempt of signingAttempts) {
+      try {
+        console.log(`OKX - Attempting ${attempt.name}:`, attempt.event);
+        const signed = await okxNostr.signEvent(attempt.event);
+        console.log(`OKX - Signed event (${attempt.name}):`, signed);
+
+        // Validate the signed event structure
+        if (!signed || typeof signed !== 'object') {
+          console.error(`OKX - Invalid response for ${attempt.name}:`, signed);
+          continue;
+        }
+
+        if (!signed.id || !signed.sig || !signed.pubkey) {
+          console.error(`OKX - Missing required fields for ${attempt.name}:`, signed);
+          continue;
+        }
+
+        // Try to verify with the server
+        const vRes = await fetch('/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf || '' },
+          body: JSON.stringify({ event: signed })
+        });
+        const out = await vRes.json();
+        console.log(`OKX - Verify response (${attempt.name}):`, out);
+
+        if (out.token) {
+          console.log(`OKX - Success with ${attempt.name}!`);
+          window.location.reload();
+          return;
+        } else if (out.error !== 'invalid_signature_or_payload') {
+          // If it's a different error, no point in trying other approaches
+          alert(`OKX login failed: ${JSON.stringify(out)}`);
+          return;
+        }
+      } catch (attemptError) {
+        console.error(`OKX - Error with ${attempt.name}:`, attemptError);
+        // Continue to next attempt
+      }
+    }
+
+    // If all attempts failed, provide a helpful error message
+    alert('OKX wallet authentication failed. This might be due to compatibility issues with OKX wallet\'s Nostr implementation. Please try using a standard Nostr extension like Alby or nos2x instead.');
+
+  } catch (e) {
+    console.error('OKX wallet error:', e);
+    alert('OKX wallet error: ' + e);
+  }
+}
+
+// Legacy function for backward compatibility
+async function pfNostrLogin() {
+  console.log('pfNostrLogin called (legacy)');
+  await pfConnectNostrWallet();
 }
 
 async function pfLogout() {
@@ -766,22 +1209,41 @@ function pfInitTrade() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  // Initialize non-SSE components first
   pfInitFlashes();
   pfInitTabs();
   pfInitChart();
   pfInitTrade();
   pfInitSparklines();
   pfInitProgressBars();
-  pfInitPricesSSE();
-  pfInitAlertsSSE();
-  pfInitFollowSSE();
-  pfInitTicker();
-  pfInitTradesSSE();
   pfInitTokenize();
   pfInitOgPreview();
   pfInitLaunchConfetti();
   pfInitWatchlist();
   pfInitShareButtons();
+
+  // Initialize SSE components with a small delay to avoid overwhelming the server
+  setTimeout(() => {
+    try {
+      // Only initialize SSE components that are relevant to the current page
+      if (document.getElementById('pf-ticker-track')) {
+        pfInitTicker();
+        pfInitTradesSSE();
+      }
+
+      if (document.querySelector('[data-sse-symbol]')) {
+        pfInitPricesSSE();
+      }
+
+      // User-specific SSE (only for authenticated users)
+      if (document.querySelector('.pf-npub')) {
+        pfInitAlertsSSE();
+        pfInitFollowSSE();
+      }
+    } catch (e) {
+      console.warn('Error initializing SSE components:', e);
+    }
+  }, 500);
 });
 
 // Toasts
@@ -840,11 +1302,11 @@ function pfInitPricesSSE() {
           if (typeof window.pfChartRedraw === 'function') window.pfChartRedraw();
         }
       } catch (e) {
-        // ignore parse errors
+        console.warn('Error parsing price data:', e);
       }
     }, 'prices');
   } catch (e) {
-    // ignore
+    console.warn('Error initializing prices SSE:', e);
   }
 }
 

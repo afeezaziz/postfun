@@ -20,7 +20,10 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 @auth_bp.route("/challenge", methods=["POST"])
 @limiter.limit(lambda: current_app.config.get("RATE_LIMIT_AUTH", "10 per minute"))
 def create_challenge():
+    import sys
+    print("[DEBUG] Challenge endpoint called", file=sys.stderr)
     data: Dict[str, Any] = request.get_json(silent=True) or {}
+    print(f"[DEBUG] Challenge request data: {data}", file=sys.stderr)
     # Optional pre-bind to a pubkey
     user_pubkey_hex: str | None = None
     npub = data.get("npub")
@@ -32,6 +35,7 @@ def create_challenge():
     challenge_str = secrets.token_urlsafe(32)
     ttl = int(current_app.config.get("AUTH_CHALLENGE_TTL", 600))
     expires_at = datetime.utcnow() + timedelta(seconds=ttl)
+    print(f"[DEBUG] Created challenge: {challenge_str[:10]}...", file=sys.stderr)
 
     row = AuthChallenge(
         challenge=challenge_str,
@@ -57,29 +61,45 @@ def verify_login():
     body: Dict[str, Any] = request.get_json(force=True)
     event = body.get("event")
     if not isinstance(event, dict):
+        current_app.logger.warning(f"Invalid event format: {event}")
         return jsonify({"error": "invalid_event"}), 400
 
     # Extract challenge_id from event content first
     try:
         content_obj = json.loads(event.get("content", "{}"))
-    except Exception:
+    except Exception as e:
+        current_app.logger.warning(f"Invalid event content: {event.get('content')}, error: {e}")
         return jsonify({"error": "invalid_event_content"}), 400
 
     challenge_id = content_obj.get("challenge_id") or body.get("challenge_id")
     if not isinstance(challenge_id, str):
+        current_app.logger.warning(f"Missing challenge_id. Content: {content_obj}, Body: {body}")
         return jsonify({"error": "missing_challenge_id"}), 400
 
     row = db.session.get(AuthChallenge, challenge_id)
     if not row:
+        current_app.logger.warning(f"Challenge not found: {challenge_id}")
         return jsonify({"error": "challenge_not_found"}), 404
     if row.is_expired:
+        current_app.logger.warning(f"Challenge expired: {challenge_id}")
         return jsonify({"error": "challenge_expired"}), 400
     if row.is_consumed:
+        current_app.logger.warning(f"Challenge already used: {challenge_id}")
         return jsonify({"error": "challenge_already_used"}), 400
+
+    # Add detailed logging for debugging OKX wallet issues
+    import sys
+    print(f"[DEBUG] Verifying event for challenge {challenge_id}", file=sys.stderr)
+    print(f"[DEBUG] Event received: {json.dumps(event, indent=2)}", file=sys.stderr)
+    print(f"[DEBUG] Expected challenge: {row.challenge}", file=sys.stderr)
+    print(f"[DEBUG] Content parsed: {json.dumps(content_obj, indent=2)}", file=sys.stderr)
 
     ok, pub_hex, content = validate_login_event(event, expected_challenge_id=row.id, expected_challenge=row.challenge)
     if not ok or not pub_hex:
+        print(f"[DEBUG] Signature validation failed. ok={ok}, pub_hex={pub_hex}", file=sys.stderr)
         return jsonify({"error": "invalid_signature_or_payload"}), 400
+
+    print(f"[DEBUG] Authentication successful for {pub_hex}", file=sys.stderr)
 
     # Upsert user
     user = User.query.filter_by(pubkey_hex=pub_hex.lower()).first()
