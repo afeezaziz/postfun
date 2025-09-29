@@ -559,6 +559,133 @@ class ProviderLog(db.Model):
     )
 
 
+class TwitterUser(db.Model):
+    __tablename__ = "twitter_users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    twitter_user_id = db.Column(db.BigInteger, unique=True, nullable=False, index=True)
+    username = db.Column(db.String(64), nullable=False, index=True)
+    display_name = db.Column(db.String(128), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    profile_image_url = db.Column(db.String(512), nullable=True)
+    followers_count = db.Column(db.Integer, nullable=True)
+    following_count = db.Column(db.Integer, nullable=True)
+    tweet_count = db.Column(db.Integer, nullable=True)
+    verified = db.Column(db.Boolean, nullable=True, default=False)
+    location = db.Column(db.String(256), nullable=True)
+    website = db.Column(db.String(512), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    posts = db.relationship("TwitterPost", backref=db.backref("user", lazy=True), cascade="all, delete-orphan")
+
+    __table_args__ = (
+        db.Index('ix_twitter_users_verified', 'verified'),
+        db.Index('ix_twitter_users_followers', 'followers_count'),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "twitter_user_id": int(self.twitter_user_id),
+            "username": self.username,
+            "display_name": self.display_name,
+            "description": self.description,
+            "profile_image_url": self.profile_image_url,
+            "followers_count": self.followers_count,
+            "following_count": self.following_count,
+            "tweet_count": self.tweet_count,
+            "verified": self.verified,
+            "location": self.location,
+            "website": self.website,
+            "created_at": self.created_at.isoformat() + "Z",
+        }
+
+
+class TwitterPost(db.Model):
+    __tablename__ = "twitter_posts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    twitter_post_id = db.Column(db.BigInteger, unique=True, nullable=False, index=True)
+    twitter_user_id = db.Column(db.Integer, db.ForeignKey("twitter_users.id"), nullable=False, index=True)
+    content = db.Column(db.Text, nullable=False)
+    post_type = db.Column(db.String(32), nullable=False, default="tweet")  # tweet, retweet, reply
+    reply_to_post_id = db.Column(db.BigInteger, nullable=True)
+    retweet_of_post_id = db.Column(db.BigInteger, nullable=True)
+    media_urls = db.Column(db.Text, nullable=True)  # JSON array of media URLs
+    hashtags = db.Column(db.Text, nullable=True)  # JSON array of hashtags
+    mentions = db.Column(db.Text, nullable=True)  # JSON array of mentioned user IDs
+    like_count = db.Column(db.Integer, nullable=False, default=0)
+    retweet_count = db.Column(db.Integer, nullable=False, default=0)
+    reply_count = db.Column(db.Integer, nullable=False, default=0)
+    quote_count = db.Column(db.Integer, nullable=False, default=0)
+    view_count = db.Column(db.Integer, nullable=True)
+    language = db.Column(db.String(8), nullable=True)
+    posted_at = db.Column(db.DateTime, nullable=False)
+    collected_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.Index('ix_twitter_posts_posted_at', 'posted_at'),
+        db.Index('ix_twitter_posts_collected_at', 'collected_at'),
+        db.Index('ix_twitter_posts_post_type', 'post_type'),
+        db.Index('ix_twitter_posts_engagement', 'like_count', 'retweet_count'),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "twitter_post_id": int(self.twitter_post_id),
+            "twitter_user_id": self.twitter_user_id,
+            "content": self.content,
+            "post_type": self.post_type,
+            "reply_to_post_id": int(self.reply_to_post_id) if self.reply_to_post_id else None,
+            "retweet_of_post_id": int(self.retweet_of_post_id) if self.retweet_of_post_id else None,
+            "media_urls": self.media_urls,
+            "hashtags": self.hashtags,
+            "mentions": self.mentions,
+            "like_count": self.like_count,
+            "retweet_count": self.retweet_count,
+            "reply_count": self.reply_count,
+            "quote_count": self.quote_count,
+            "view_count": self.view_count,
+            "language": self.language,
+            "posted_at": self.posted_at.isoformat() + "Z",
+            "collected_at": self.collected_at.isoformat() + "Z",
+            "created_at": self.created_at.isoformat() + "Z",
+        }
+
+
+class UserTwitterConnection(db.Model):
+    __tablename__ = "user_twitter_connections"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    twitter_user_id = db.Column(db.Integer, db.ForeignKey("twitter_users.id"), nullable=False, unique=True, index=True)
+    connected_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    verified = db.Column(db.Boolean, nullable=False, default=False)
+    display_preference = db.Column(db.String(32), nullable=False, default="npub")  # 'npub' or 'twitter'
+
+    user = db.relationship("User", backref=db.backref("twitter_connection", uselist=False, cascade="all, delete-orphan"))
+    twitter_user = db.relationship("TwitterUser", backref=db.backref("user_connection", uselist=False, cascade="all, delete-orphan"))
+
+    __table_args__ = (
+        db.Index('ix_user_twitter_connections_user', 'user_id'),
+        db.Index('ix_user_twitter_connections_twitter_user', 'twitter_user_id'),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "twitter_user_id": self.twitter_user_id,
+            "connected_at": self.connected_at.isoformat() + "Z",
+            "verified": self.verified,
+            "display_preference": self.display_preference,
+        }
+
+
 class FeatureFlag(db.Model):
     __tablename__ = "feature_flags"
 
