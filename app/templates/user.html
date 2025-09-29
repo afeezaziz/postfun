@@ -12,12 +12,45 @@
 
         <!-- Profile Info -->
         <div class="text-center md:text-left flex-1">
-          <h1 class="text-3xl md:text-4xl font-bold text-terminal-green font-terminal mb-2">
-            {{ user.display_name or 'Nostr User' }}
-          </h1>
-          <p class="text-terminal-dim-green text-lg mb-4">
-            {{ user.npub[:16] }}...{{ user.npub[-4:] if user.npub else 'Unknown' }}
-          </p>
+          <!-- Display Name with Twitter Connection Indicator -->
+          <div class="flex items-center gap-3 mb-2">
+            <h1 class="text-3xl md:text-4xl font-bold text-terminal-green font-terminal">
+              {% if twitter_user and profile_type == 'twitter' %}
+                {{ twitter_user.display_name or twitter_user.username }}
+              {% else %}
+                {{ user.display_name or 'Nostr User' }}
+              {% endif %}
+            </h1>
+            {% if twitter_connection %}
+              <div class="terminal-badge border-2 border-blue-500 px-2 py-1">
+                <span class="text-blue-400">🐦</span>
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Profile Identifiers -->
+          <div class="space-y-2 mb-4">
+            {% if profile_type == 'twitter' and twitter_user %}
+              <p class="text-terminal-dim-green text-lg">
+                @{{ twitter_user.username }}
+                {% if twitter_user.verified %}
+                  <span class="text-blue-400 ml-2">✓</span>
+                {% endif %}
+              </p>
+              <p class="text-terminal-dim-green text-sm">
+                Connected Nostr: {{ user.npub[:16] }}...{{ user.npub[-4:] if user.npub else 'Unknown' }}
+              </p>
+            {% else %}
+              <p class="text-terminal-dim-green text-lg">
+                {{ user.npub[:16] }}...{{ user.npub[-4:] if user.npub else 'Unknown' }}
+              </p>
+              {% if twitter_connection %}
+                <p class="text-terminal-dim-green text-sm">
+                  Also on Twitter: @{{ twitter_user.username }}
+                </p>
+              {% endif %}
+            {% endif %}
+          </div>
 
           <!-- Quick Stats -->
           <div class="flex flex-wrap gap-3 justify-center md:justify-start">
@@ -27,6 +60,11 @@
             <div class="terminal-badge border-2 border-terminal-green px-3 py-1">
               <span class="text-terminal-green">🆔 ID: {{ user.id }}</span>
             </div>
+            {% if twitter_user and twitter_user.followers_count %}
+              <div class="terminal-badge border-2 border-terminal-green px-3 py-1">
+                <span class="text-terminal-green">👥 {{ twitter_user.followers_count | number_format }} followers</span>
+              </div>
+            {% endif %}
             {% if user.is_active %}
               <div class="terminal-badge border-2 border-terminal-green px-3 py-1">
                 <span class="text-terminal-green">✅ Active</span>
@@ -37,16 +75,119 @@
 
         <!-- Action Buttons -->
         <div class="flex flex-col gap-2">
-          <a href="{{ url_for('web.portfolio') }}" class="terminal-button">
+          <a href="{{ url_for('web.users.portfolio') }}" class="terminal-button">
             💼 Portfolio
           </a>
-          <a href="{{ url_for('web.wallet') }}" class="terminal-button">
+          <a href="{{ url_for('web.users.wallet') }}" class="terminal-button">
             ⚡ Wallet
           </a>
         </div>
       </div>
     </div>
   </section>
+
+  <!-- Twitter Information (if available) -->
+  {% if twitter_user %}
+  <section class="terminal-card bg-terminal-black border-2 border-blue-500 p-6 rounded-lg shadow-lg mb-8">
+    <h2 class="text-2xl font-bold text-blue-400 font-terminal mb-6 flex items-center">
+      <span class="mr-2">🐦</span> Twitter Profile
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Twitter Basic Info -->
+      <div class="terminal-card bg-terminal-black border border-blue-500 p-5 rounded-lg">
+        <h3 class="text-lg font-bold text-blue-400 mb-4 flex items-center">
+          <span class="mr-2">ℹ️</span> Profile Information
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Username</label>
+            <div class="text-blue-400 font-terminal">@{{ twitter_user.username }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Display Name</label>
+            <div class="text-terminal-green font-terminal">{{ twitter_user.display_name or 'Not set' }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Twitter ID</label>
+            <div class="text-terminal-green font-terminal">{{ twitter_user.twitter_user_id }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Verified</label>
+            <div class="text-terminal-green font-terminal">
+              {% if twitter_user.verified %}
+                <span class="text-blue-400">✓ Yes</span>
+              {% else %}
+                No
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Twitter Stats -->
+      <div class="terminal-card bg-terminal-black border border-blue-500 p-5 rounded-lg">
+        <h3 class="text-lg font-bold text-blue-400 mb-4 flex items-center">
+          <span class="mr-2">📊</span> Twitter Statistics
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Followers</label>
+            <div class="text-terminal-green font-terminal">{{ twitter_user.followers_count | number_format if twitter_user.followers_count else '0' }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Following</label>
+            <div class="text-terminal-green font-terminal">{{ twitter_user.following_count | number_format if twitter_user.following_count else '0' }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Tweets</label>
+            <div class="text-terminal-green font-terminal">{{ twitter_user.tweet_count | number_format if twitter_user.tweet_count else '0' }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Connected</label>
+            <div class="text-terminal-green font-terminal">{{ twitter_connection.connected_at.strftime('%b %d, %Y') }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if twitter_user.description %}
+    <div class="mt-6">
+      <h3 class="text-lg font-bold text-blue-400 mb-3 flex items-center">
+        <span class="mr-2">📝</span> Bio
+      </h3>
+      <div class="terminal-card bg-terminal-black border border-blue-500 p-4 rounded-lg">
+        <p class="text-terminal-dim-green">{{ twitter_user.description }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if twitter_user.location or twitter_user.website %}
+    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+      {% if twitter_user.location %}
+      <div>
+        <h3 class="text-lg font-bold text-blue-400 mb-3 flex items-center">
+          <span class="mr-2">📍</span> Location
+        </h3>
+        <div class="terminal-card bg-terminal-black border border-blue-500 p-4 rounded-lg">
+          <p class="text-terminal-dim-green">{{ twitter_user.location }}</p>
+        </div>
+      </div>
+      {% endif %}
+      {% if twitter_user.website %}
+      <div>
+        <h3 class="text-lg font-bold text-blue-400 mb-3 flex items-center">
+          <span class="mr-2">🌐</span> Website
+        </h3>
+        <div class="terminal-card bg-terminal-black border border-blue-500 p-4 rounded-lg">
+          <a href="{{ twitter_user.website }}" target="_blank" class="text-blue-400 hover:text-blue-300 break-all">{{ twitter_user.website }}</a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
 
   <!-- User Details Grid -->
   <section class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg mb-8">
@@ -193,10 +334,10 @@
         <div class="text-terminal-dim-green text-lg mb-4">No recent activity</div>
         <p class="text-terminal-dim-green mb-6">Start trading or creating tokens to see your activity here</p>
         <div class="flex gap-4 justify-center">
-          <a href="{{ url_for('web.tokens_list') }}" class="terminal-button">
+          <a href="{{ url_for('web.tokens.tokens_list') }}" class="terminal-button">
             Browse Tokens
           </a>
-          <a href="{{ url_for('web.launchpad') }}" class="terminal-button">
+          <a href="{{ url_for('web.tokens.launchpad') }}" class="terminal-button">
             Create Token
           </a>
         </div>

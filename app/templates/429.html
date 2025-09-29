@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}429 Too Many Requests | Postfun{% endblock %}
+{% block content %}
+  <div class="flex items-center justify-center min-h-[50vh]">
+    <div class="text-center">
+      <div class="text-9xl font-bold text-terminal-yellow mb-4 animate-pulse">429</div>
+      <h1 class="text-4xl font-bold text-terminal-yellow mb-4">Rate Limit Exceeded</h1>
+      <p class="text-terminal-dim-green mb-8 max-w-md mx-auto">
+        You've made too many requests. Please slow down and try again later.
+      </p>
+      <div class="space-y-4">
+        <button onclick="window.location.reload()" class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black">
+          Try Again
+        </button>
+        <a href="{{ url_for('web.home') }}" class="btn btn-ghost text-terminal-dim-green hover:text-terminal-green ml-4">
+          Return Home
+        </a>
+      </div>
+      <div class="mt-8 p-4 bg-base-200 border border-terminal-yellow rounded">
+        <p class="text-sm text-terminal-dim-green">
+          <strong>Rate limit reset:</strong> <span id="countdown" class="bg-base-300 px-2 py-1 rounded font-mono">--:--</span>
+        </p>
+        <p class="text-sm text-terminal-dim-green mt-2">
+          Please wait before making additional requests.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Simple countdown timer for rate limit reset
+    let secondsLeft = 60; // Default 60 seconds
+    const countdownElement = document.getElementById('countdown');
+
+    function updateCountdown() {
+      const minutes = Math.floor(secondsLeft / 60);
+      const seconds = secondsLeft % 60;
+      countdownElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+      if (secondsLeft > 0) {
+        secondsLeft--;
+        setTimeout(updateCountdown, 1000);
+      } else {
+        countdownElement.textContent = 'Ready';
+        countdownElement.classList.add('text-terminal-green');
+      }
+    }
+
+    updateCountdown();
+  </script>
+{% endblock %}

@@ -24,6 +24,7 @@ dependencies = [
   "Flask-Migrate>=4.0.5",
   "alembic>=1.13.1",
   "requests>=2.31.0",
+  "requests-oauthlib>=2.0.0",
 ]
 
 [build-system]

@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}403 Forbidden | Postfun{% endblock %}
+{% block content %}
+  <div class="flex items-center justify-center min-h-[50vh]">
+    <div class="text-center">
+      <div class="text-9xl font-bold text-terminal-red mb-4 animate-pulse">403</div>
+      <h1 class="text-4xl font-bold text-terminal-red mb-4">Access Denied</h1>
+      <p class="text-terminal-dim-green mb-8 max-w-md mx-auto">
+        You don't have permission to access this resource. This area is restricted.
+      </p>
+      <div class="space-y-4">
+        <a href="{{ url_for('web.home') }}" class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black">
+          Return to Home
+        </a>
+        <a href="{{ url_for('web.explore') }}" class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black ml-4">
+          Explore Public Content
+        </a>
+      </div>
+      <div class="mt-8 p-4 bg-base-200 border border-terminal-red rounded">
+        <p class="text-sm text-terminal-dim-green">
+          <strong>Access denied to:</strong> <code class="bg-base-300 px-2 py-1 rounded">{{ request.path }}</code>
+        </p>
+        <p class="text-sm text-terminal-dim-green mt-2">
+          If you believe this is an error, please contact support.
+        </p>
+      </div>
+    </div>
+  </div>
+{% endblock %}

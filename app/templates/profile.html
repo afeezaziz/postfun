@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% block title %}My Profile | Postfun{% endblock %}
+{% block content %}
+
+
+  
+
+
+  <!-- Profile Statistics -->
+  <section class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg mb-8">
+    <h2 class="text-2xl font-bold text-terminal-green font-terminal mb-6 flex items-center">
+      <span class="mr-2">📊</span> Profile Statistics
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <!-- Total Portfolio Value -->
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg text-center">
+        <div class="text-3xl mb-2">💰</div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Portfolio Value</h3>
+        <div class="text-2xl font-bold text-terminal-green">$0.00</div>
+        <div class="text-sm text-terminal-dim-green">USD</div>
+      </div>
+
+      <!-- Profile Views -->
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg text-center">
+        <div class="text-3xl mb-2">👁️</div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Profile Views</h3>
+        <div class="text-2xl font-bold text-terminal-green">0</div>
+        <div class="text-sm text-terminal-dim-green">Total views</div>
+      </div>
+
+      <!-- Watchlist Count -->
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg text-center">
+        <div class="text-3xl mb-2">⭐</div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Watchlist</h3>
+        <div class="text-2xl font-bold text-terminal-green">0</div>
+        <div class="text-sm text-terminal-dim-green">Items</div>
+      </div>
+
+      <!-- Member Since -->
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg text-center">
+        <div class="text-3xl mb-2">📅</div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Member Since</h3>
+        <div class="text-xl font-bold text-terminal-green">{{ user.created_at.strftime('%b %Y') }}</div>
+        <div class="text-sm text-terminal-dim-green">Since {{ user.created_at.strftime('%Y') if user.created_at else 'N/A' }}</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Account Settings -->
+  <section class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg">
+    <h2 class="text-2xl font-bold text-terminal-green font-terminal mb-6 flex items-center">
+      <span class="mr-2">⚙️</span> Account Information
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Identity Information -->
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg">
+        <h3 class="text-lg font-bold text-terminal-green mb-4 flex items-center">
+          <span class="mr-2">🔐</span> Identity
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Display Name</label>
+            <div class="text-terminal-green font-terminal">{{ user.display_name or 'Not set' }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Nostr Public Key (npub)</label>
+            <div class="text-terminal-green font-terminal text-sm break-all">{{ user.npub or 'Not available' }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Hex Public Key</label>
+            <div class="text-terminal-green font-terminal text-sm break-all">{{ user.pubkey_hex }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Twitter Connection -->
+      <div class="terminal-card bg-terminal-black border border-blue-500 p-5 rounded-lg">
+        <h3 class="text-lg font-bold text-blue-400 mb-4 flex items-center">
+          <span class="mr-2">🐦</span> Twitter Connection
+        </h3>
+        {% if user.twitter_connection %}
+          <div class="space-y-3">
+            <div>
+              <label class="block text-terminal-dim-green text-sm mb-1">Username</label>
+              <div class="text-blue-400 font-terminal">@{{ user.twitter_connection.twitter_user.username }}</div>
+            </div>
+            <div>
+              <label class="block text-terminal-dim-green text-sm mb-1">Display Name</label>
+              <div class="text-terminal-green font-terminal">{{ user.twitter_connection.twitter_user.display_name or 'Not set' }}</div>
+            </div>
+            <div>
+              <label class="block text-terminal-dim-green text-sm mb-1">Followers</label>
+              <div class="text-terminal-green font-terminal">{{ user.twitter_connection.twitter_user.followers_count | number_format if user.twitter_connection.twitter_user.followers_count else '0' }}</div>
+            </div>
+            <div class="flex items-center justify-between mt-4">
+              <div class="text-sm text-terminal-dim-green">
+                Connected {{ user.twitter_connection.connected_at.strftime('%b %d, %Y') }}
+              </div>
+              <button id="disconnect-twitter-btn" class="terminal-button bg-red-600 hover:bg-red-700 text-sm">
+                Disconnect
+              </button>
+            </div>
+          </div>
+        {% else %}
+          <div class="text-center py-4">
+            <div class="text-blue-400 text-3xl mb-3">🐦</div>
+            <h4 class="text-lg font-bold text-blue-400 mb-2">Connect Twitter</h4>
+            <p class="text-terminal-dim-green text-sm mb-4">Link your Twitter account for enhanced features</p>
+            <button id="connect-twitter-btn" class="terminal-button bg-blue-600 hover:bg-blue-700">
+              Connect with OAuth
+            </button>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Account Information -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-5 rounded-lg">
+        <h3 class="text-lg font-bold text-terminal-green mb-4 flex items-center">
+          <span class="mr-2">ℹ️</span> Account Details
+        </h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">User ID</label>
+            <div class="text-terminal-green font-terminal">{{ user.id }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Joined Date</label>
+            <div class="text-terminal-green font-terminal">{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+          </div>
+          <div>
+            <label class="block text-terminal-dim-green text-sm mb-1">Account Status</label>
+            <div class="text-terminal-green font-terminal">
+              {% if user.is_active %}Active{% else %}Inactive{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  
+  <script>
+    // Twitter connection functionality
+    const connectBtn = document.getElementById('connect-twitter-btn');
+    const disconnectBtn = document.getElementById('disconnect-twitter-btn');
+
+    // Handle OAuth connection
+    connectBtn?.addEventListener('click', () => {
+      // Redirect to Twitter OAuth endpoint
+      window.location.href = '/auth/twitter';
+    });
+
+    // Handle disconnection
+    disconnectBtn?.addEventListener('click', async () => {
+      if (confirm('Are you sure you want to disconnect your Twitter account?')) {
+        try {
+          const response = await fetch('/api/disconnect-twitter', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            alert('Twitter account disconnected successfully!');
+            location.reload();
+          } else {
+            alert('Failed to disconnect Twitter account: ' + (data.error || 'Unknown error'));
+          }
+        } catch (error) {
+          alert('Error disconnecting Twitter account: ' + error.message);
+        }
+      }
+    });
+  </script>
+{% endblock %}

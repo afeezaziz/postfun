@@ -1,9 +1,29 @@
 {% extends 'base.html' %}
 {% block title %}500 Server Error | Postfun{% endblock %}
 {% block content %}
-  <section class="card">
-    <h1>500 — Server error</h1>
-    <p>Oops, something went wrong. Please try again.</p>
-    <p><a class="retro-button" href="{{ url_for('web.home') }}">Go Home</a></p>
-  </section>
+  <div class="flex items-center justify-center min-h-[50vh]">
+    <div class="text-center">
+      <div class="text-9xl font-bold text-terminal-red mb-4 animate-pulse">500</div>
+      <h1 class="text-4xl font-bold text-terminal-red mb-4">Server Error</h1>
+      <p class="text-terminal-dim-green mb-8 max-w-md mx-auto">
+        Houston, we have a problem. Our servers experienced an unexpected error.
+      </p>
+      <div class="space-y-4">
+        <a href="{{ url_for('web.home') }}" class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black">
+          Return to Home
+        </a>
+        <button onclick="window.location.reload()" class="btn btn-outline border-terminal-yellow text-terminal-yellow hover:bg-terminal-yellow hover:text-terminal-black ml-4">
+          Try Again
+        </button>
+      </div>
+      <div class="mt-8 p-4 bg-base-200 border border-terminal-red rounded">
+        <p class="text-sm text-terminal-dim-green">
+          <strong>Error ID:</strong> <code class="bg-base-300 px-2 py-1 rounded">{{ request.id or 'unknown' }}</code>
+        </p>
+        <p class="text-sm text-terminal-dim-green mt-2">
+          Our team has been notified. Please try again in a few moments.
+        </p>
+      </div>
+    </div>
+  </div>
 {% endblock %}

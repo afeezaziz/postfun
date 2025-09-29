@@ -12,7 +12,8 @@
           <div>NPUB: <span class="pf-green">{{ u.npub or u.pubkey_hex }}</span></div>
           <div>Joined: {{ u.created_at }}</div>
           <div style="margin-top:8px;">
-            <a class="retro-button" href="{{ url_for('web.user_profile', user_id=u.id) }}">Profile</a>
+            <!-- <a class="retro-button" href="{{ url_for('web.user_profile', user_id=u.id) }}">Profile</a> -->
+             <a class="retro-button" href="{{ url_for('web.user_profile') }}">Profile</a>
             <a class="retro-button" href="{{ url_for('web.portfolio') }}">Portfolio</a>
           </div>
         </div>
@@ -27,9 +28,9 @@
         </div>
         <div class="card pf-dash-panel">
           <h2>Quick Actions</h2>
-          <a class="retro-button" href="{{ url_for('web.pool', symbol='gBTC') }}">Trade gBTC</a>
-          <a class="retro-button" href="{{ url_for('web.pool', symbol='gUSD') }}">Trade gUSD</a>
-          <a class="retro-button" href="{{ url_for('web.launchpad') }}">Launch Token</a>
+          <a class="retro-button" href="{{ url_for('web.trading.pool', symbol='gBTC') }}">Trade gBTC</a>
+          <a class="retro-button" href="{{ url_for('web.trading.pool', symbol='gUSD') }}">Trade gUSD</a>
+          <a class="retro-button" href="{{ url_for('web.tokens.launchpad') }}">Launch Token</a>
           <a class="retro-button" href="{{ url_for('web.stats') }}">View Stats</a>
         </div>
       </div>
@@ -54,8 +55,8 @@
             <div>24h Vol: <span class="pf-green">{{ '%.2f'|format(it.volume_24h or 0) }}</span></div>
           </div>
           <div class="pf-card-actions">
-            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
-            <a class="retro-button" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+            <a class="retro-button" href="{{ url_for('web.tokens.token_detail', symbol=it.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=it.symbol) }}">Pool</a>
           </div>
         </div>
       {% else %}

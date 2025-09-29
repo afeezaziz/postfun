@@ -1,9 +1,28 @@
 {% extends 'base.html' %}
 {% block title %}404 Not Found | Postfun{% endblock %}
 {% block content %}
-  <section class="card">
-    <h1>404 — Page not found</h1>
-    <p>The page you requested could not be found.</p>
-    <p><a class="retro-button" href="{{ url_for('web.home') }}">Go Home</a> <a class="retro-button" href="{{ url_for('web.explore') }}">Explore</a></p>
-  </section>
+  <div class="flex items-center justify-center min-h-[50vh]">
+    <div class="text-center">
+      <div class="text-9xl font-bold text-terminal-green mb-4 animate-pulse">404</div>
+      <h1 class="text-4xl font-bold text-terminal-green mb-4">Page Not Found</h1>
+      <p class="text-terminal-dim-green mb-8 max-w-md mx-auto">
+        The page you're looking for seems to have ventured into the terminal void...
+      </p>
+      <div class="space-x-4">
+        <a href="{{ url_for('web.home') }}" class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black">
+          Return Home
+        </a>
+        <a href="{{ url_for('web.explore') }}" class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black">
+          Explore Tokens
+        </a>
+      </div>
+      {% if request.path %}
+        <div class="mt-8 p-4 bg-base-200 border border-terminal-green rounded">
+          <p class="text-sm text-terminal-dim-green">
+            <strong>Requested path:</strong> <code class="bg-base-300 px-2 py-1 rounded">{{ request.path }}</code>
+          </p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
 {% endblock %}

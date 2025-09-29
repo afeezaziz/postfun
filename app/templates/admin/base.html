@@ -63,7 +63,7 @@
           </li>
           <li><a class="text-admin-blue hover:text-admin-cyan" href="{{ url_for('web.user_profile', user_id=g.admin_user.id) }}">👤 Profile</a></li>
           <li><a class="text-admin-blue hover:text-admin-cyan" href="{{ url_for('web.portfolio') }}">💼 Portfolio</a></li>
-          <li><a class="text-admin-blue hover:text-admin-cyan" href="{{ url_for('web.wallet') }}">⚡ Wallet</a></li>
+          <li><a class="text-admin-blue hover:text-admin-cyan" href="{{ url_for('web.users.wallet') }}">⚡ Wallet</a></li>
           <div class="divider border-admin-blue/30"></div>
           <li class="menu-title text-admin-blue font-bold">Admin Navigation</li>
           <li><a href="{{ url_for('admin.dashboard') }}" class="{% if request.endpoint == 'admin.dashboard' %}text-admin-cyan font-bold{% else %}text-admin-blue{% endif %} hover:text-admin-cyan">📊 Dashboard</a></li>

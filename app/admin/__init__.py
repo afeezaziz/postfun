@@ -27,7 +27,8 @@ from ..models import (
     IdempotencyKey,
     FeatureFlag,
 )
-from ..web import get_jwt_from_cookie, _fee_summary_for_pool_cached
+from ..web.main.routes import get_jwt_from_cookie
+from ..web.utils import fee_summary_for_pool_cached
 from ..services.audit import log_action
 from sqlalchemy import select, or_, case, func, exists, and_
 from ..services.lightning import LNBitsClient
@@ -603,7 +604,7 @@ def fees_detail(pool_id: int):
                 db.session.add(rule)
                 db.session.commit()
                 try:
-                    cache.delete_memoized(_fee_summary_for_pool_cached, pool.id)
+                    cache.delete_memoized(fee_summary_for_pool_cached, pool.id)
                 except Exception:
                     pass
                 flash("Fee rule saved", "success")
@@ -647,7 +648,7 @@ def fees_detail(pool_id: int):
                 db.session.add(payout)
                 db.session.commit()
                 try:
-                    cache.delete_memoized(_fee_summary_for_pool_cached, pool.id)
+                    cache.delete_memoized(fee_summary_for_pool_cached, pool.id)
                 except Exception:
                     pass
                 log_action(g.admin_user.id, "fees_payout", meta=f"pool_id={pool.id} entity={entity} asset={asset} amount={amount}")
@@ -671,7 +672,7 @@ def fees_detail(pool_id: int):
                 db.session.add(payout)
                 db.session.commit()
                 try:
-                    cache.delete_memoized(_fee_summary_for_pool_cached, pool.id)
+                    cache.delete_memoized(fee_summary_for_pool_cached, pool.id)
                 except Exception:
                     pass
                 log_action(g.admin_user.id, "fees_force_payout", meta=f"pool_id={pool.id} entity={entity} asset={asset} amount={amount}")

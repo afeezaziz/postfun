@@ -86,7 +86,7 @@
     </div>
 
     <!-- Token Creation Form -->
-    <form method="POST" action="{{ url_for('web.launchpad') }}" class="max-w-4xl mx-auto">
+    <form method="POST" action="{{ url_for('web.tokens.launchpad') }}" class="max-w-4xl mx-auto">
       <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
       <input type="hidden" id="hiddenPostUrl" name="post_url" value="{{ form.post_url or '' }}" />
 
@@ -207,7 +207,7 @@
       <h2 class="text-2xl font-bold text-terminal-green font-terminal flex items-center">
         <span class="mr-2">🔥</span> Recent Launches
       </h2>
-      <a href="{{ url_for('web.tokens_list') }}" class="terminal-button text-sm">
+      <a href="{{ url_for('web.tokens.tokens_list') }}" class="terminal-button text-sm">
         View All
       </a>
     </div>

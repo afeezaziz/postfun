@@ -38,8 +38,8 @@
                   <span class="badge">{{ t.symbol }}</span>
                   <strong>{{ t.name }}</strong>
                   <span class="pf-green">{{ '%.6f'|format((price_by_symbol.get(t.symbol) if price_by_symbol else None) or (t.price or 0)) }}</span>
-                  <a class="retro-button" style="margin-left:6px;" href="{{ url_for('web.token_detail', symbol=t.symbol) }}">Details</a>
-                  <a class="retro-button" href="{{ url_for('web.pool', symbol=t.symbol) }}">Pool</a>
+                  <a class="retro-button" style="margin-left:6px;" href="{{ url_for('web.tokens.token_detail', symbol=t.symbol) }}">Details</a>
+                  <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=t.symbol) }}">Pool</a>
                 {% else %}
                   Token {{ info.token_id }}
                 {% endif %}

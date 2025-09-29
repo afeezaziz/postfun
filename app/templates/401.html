@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}401 Unauthorized | Postfun{% endblock %}
+{% block content %}
+  <div class="flex items-center justify-center min-h-[50vh]">
+    <div class="text-center">
+      <div class="text-9xl font-bold text-terminal-yellow mb-4 animate-pulse">401</div>
+      <h1 class="text-4xl font-bold text-terminal-yellow mb-4">Unauthorized</h1>
+      <p class="text-terminal-dim-green mb-8 max-w-md mx-auto">
+        You need to authenticate to access this resource. Please connect your wallet to continue.
+      </p>
+      <div class="space-y-4">
+        <button onclick="pfDashboardLogin()" class="btn btn-outline border-terminal-green text-terminal-green hover:bg-terminal-green hover:text-terminal-black">
+          Connect Wallet
+        </button>
+        <a href="{{ url_for('web.home') }}" class="btn btn-ghost text-terminal-dim-green hover:text-terminal-green ml-4">
+          Return Home
+        </a>
+      </div>
+      {% if request.path %}
+        <div class="mt-8 p-4 bg-base-200 border border-terminal-yellow rounded">
+          <p class="text-sm text-terminal-dim-green">
+            <strong>Protected resource:</strong> <code class="bg-base-300 px-2 py-1 rounded">{{ request.path }}</code>
+          </p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

@@ -29,18 +29,18 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" /></svg>
         </div>
         <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52 border border-terminal-green">
-          <li><a href="{{ url_for('web.tokens_list') }}" class="{% if request.endpoint == 'web.tokens_list' %}text-accent font-bold{% endif %}">Token</a></li>
-          <li><a href="{{ url_for('web.explore') }}" class="{% if request.endpoint == 'web.explore' %}text-accent font-bold{% endif %}">Explore</a></li>
-          <li><a href="{{ url_for('web.launchpad') }}" class="{% if request.endpoint == 'web.launchpad' %}text-accent font-bold{% endif %}">Launchpad</a></li>
+          <li><a href="{{ url_for('web.tokens.tokens_list') }}" class="{% if request.endpoint == 'web.tokens.tokens_list' %}text-accent font-bold{% endif %}">Token</a></li>
+          <li><a href="{{ url_for('web.tokens.explore') }}" class="{% if request.endpoint == 'web.tokens.explore' %}text-accent font-bold{% endif %}">Explore</a></li>
+          <li><a href="{{ url_for('web.tokens.launchpad') }}" class="{% if request.endpoint == 'web.tokens.launchpad' %}text-accent font-bold{% endif %}">Launchpad</a></li>
         </ul>
       </div>
-      <a href="{{ url_for('web.home') }}" class="btn btn-ghost text-xl font-bold text-terminal-green hover:text-accent transition-colors">Postfun</a>
+      <a href="{{ url_for('web.main.home') }}" class="btn btn-ghost text-xl font-bold text-terminal-green hover:text-accent transition-colors">Postfun</a>
     </div>
     <div class="navbar-center hidden lg:flex">
       <ul class="menu menu-horizontal px-1">
-        <li><a href="{{ url_for('web.tokens_list') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tokens_list' %}text-accent font-bold underline{% endif %}">Token</a></li>
-        <li><a href="{{ url_for('web.explore') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.explore' %}text-accent font-bold underline{% endif %}">Explore</a></li>
-        <li><a href="{{ url_for('web.launchpad') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.launchpad' %}text-accent font-bold underline{% endif %}">Launchpad</a></li>
+        <li><a href="{{ url_for('web.tokens.tokens_list') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tokens.tokens_list' %}text-accent font-bold underline{% endif %}">Token</a></li>
+        <li><a href="{{ url_for('web.tokens.explore') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tokens.explore' %}text-accent font-bold underline{% endif %}">Explore</a></li>
+        <li><a href="{{ url_for('web.tokens.launchpad') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tokens.launchpad' %}text-accent font-bold underline{% endif %}">Launchpad</a></li>
       </ul>
     </div>
     <div class="navbar-end">
@@ -51,9 +51,9 @@
           </div>
           <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-64 border border-terminal-green">
             <li class="menu-title text-terminal-green font-bold">{{ (current_user.npub or current_user.pubkey_hex)[:10] }}...{{ (current_user.npub or current_user.pubkey_hex)[-4:] }}</li>
-            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.user_profile', user_id=current_user.id) }}">Profile</a></li>
-            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.portfolio') }}">Portfolio</a></li>
-            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.wallet') }}">Wallet</a></li>
+            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.users.user_profile') }}">Profile</a></li>
+            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.users.portfolio') }}">Portfolio</a></li>
+            <li><a class="text-terminal-green hover:text-accent" href="{{ url_for('web.users.wallet') }}">Wallet</a></li>
             <div class="divider border-terminal-green"></div>
             <li><button onclick="pfLogout()" class="text-terminal-red hover:text-red-600 font-bold">Logout</button></li>
           </ul>
@@ -97,12 +97,10 @@
       <div class="border-t border-terminal-green/10 py-4">
         <div class="flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
           <p class="text-terminal-dim-green text-xs">
-            © 2025 Postfun. All rights reserved.
+            © 2025 Postfun. Built with ❤️ for the community.
           </p>
           <div class="flex items-center space-x-4 text-xs text-terminal-dim-green">
-            <span>Built with ❤️ for the community</span>
-            <span class="hidden sm:inline">•</span>
-            <span class="text-terminal-green">Decentralized • Open Source</span>
+            <span class="text-terminal-green">Decentralized • Nostr • Taproot Asset</span>
           </div>
         </div>
       </div>

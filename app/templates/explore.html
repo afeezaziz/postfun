@@ -3,7 +3,7 @@
 {% block content %}
   <section class="card">
     <h1>Explore</h1>
-    <form method="GET" action="{{ url_for('web.explore') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items: end;">
+    <form method="GET" action="{{ url_for('web.tokens.explore') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items: end;">
       <div>
         <label>Search</label>
         <input class="retro-input" type="text" name="q" value="{{ q }}" placeholder="symbol or name" />
@@ -81,7 +81,7 @@
     <h2>Top Categories</h2>
     <div style="display:flex; flex-wrap: wrap; gap: 8px;">
       {% for cat in top_categories %}
-        <a class="retro-button" href="{{ url_for('web.explore', category=cat) }}">#{{ cat }}</a>
+        <a class="retro-button" href="{{ url_for('web.tokens.explore', category=cat) }}">#{{ cat }}</a>
       {% endfor %}
     </div>
   </section>
@@ -103,8 +103,8 @@
                 <div>Volume 24h: <span class="pf-green">{{ '%.2f'|format(row.vol_24h or 0) }}</span></div>
               </div>
               <div class="pf-card-actions">
-                <a class="retro-button" href="{{ url_for('web.token_detail', symbol=row.token.symbol) }}">Details</a>
-                <a class="retro-button" href="{{ url_for('web.pool', symbol=row.token.symbol) }}">Pool</a>
+                <a class="retro-button" href="{{ url_for('web.tokens.token_detail', symbol=row.token.symbol) }}">Details</a>
+                <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=row.token.symbol) }}">Pool</a>
               </div>
             </div>
           {% else %}
@@ -128,8 +128,8 @@
                 <div>Stage: <span class="pf-green">{{ it.stage }}</span></div>
               </div>
               <div class="pf-card-actions">
-                <a class="retro-button" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
-                <a class="retro-button" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+                <a class="retro-button" href="{{ url_for('web.tokens.token_detail', symbol=it.symbol) }}">Details</a>
+                <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=it.symbol) }}">Pool</a>
               </div>
             </div>
           {% else %}
@@ -156,8 +156,8 @@
           </div>
           <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ (price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0) }}"></div>
           <div class="pf-card-actions">
-            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=token.symbol) }}">Details</a>
-            <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Pool</a>
+            <a class="retro-button" href="{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=token.symbol) }}">Pool</a>
           </div>
         </div>
       {% else %}
@@ -168,16 +168,16 @@
       <div>Page {{ page }} of {{ pages }} ({{ total }} results)</div>
       <div class="pf-pagination-controls">
         {% set args = request.args.to_dict() %}
-        <a class="retro-button" href="{{ url_for('web.export_explore_csv', **args) }}">Export CSV</a>
+        <a class="retro-button" href="{{ url_for('web.tokens.export_explore_csv', **args) }}">Export CSV</a>
         {% if page > 1 %}
           {% set prev_args = args.copy() %}
           {% set _ = prev_args.update({'page': page - 1}) %}
-          <a class="retro-button" href="{{ url_for('web.explore', **prev_args) }}">Prev</a>
+          <a class="retro-button" href="{{ url_for('web.tokens.explore', **prev_args) }}">Prev</a>
         {% endif %}
         {% if page < pages %}
           {% set next_args = args.copy() %}
           {% set _ = next_args.update({'page': page + 1}) %}
-          <a class="retro-button" href="{{ url_for('web.explore', **next_args) }}">Next</a>
+          <a class="retro-button" href="{{ url_for('web.tokens.explore', **next_args) }}">Next</a>
         {% endif %}
       </div>
     </div>

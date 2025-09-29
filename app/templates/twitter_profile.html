@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}{{ twitter_user.username }} - Twitter Profile{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-6xl">
+  <div class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-3xl font-bold text-terminal-green font-terminal flex items-center">
+        <span class="mr-3">🐦</span>
+        @{{ twitter_user.username }}
+      </h1>
+      {% if twitter_user.verified %}
+        <div class="terminal-badge bg-blue-500 text-white px-3 py-1 rounded-full text-sm">
+          ✓ Verified
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Twitter Profile Info -->
+    <div class="mb-8">
+      {% if twitter_user.display_name %}
+        <h2 class="text-xl text-terminal-green mb-2">{{ twitter_user.display_name }}</h2>
+      {% endif %}
+
+      {% if twitter_user.description %}
+        <p class="text-terminal-dim-green mb-4">{{ twitter_user.description }}</p>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-terminal-dim-green">
+        {% if twitter_user.location %}
+          <div>📍 {{ twitter_user.location }}</div>
+        {% endif %}
+        {% if twitter_user.followers_count %}
+          <div>👥 {{ twitter_user.followers_count | number_format }} followers</div>
+        {% endif %}
+        {% if twitter_user.tweet_count %}
+          <div>📝 {{ twitter_user.tweet_count | number_format }} tweets</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Connection Status -->
+    <div class="terminal-card bg-terminal-black border border-terminal-yellow p-6 rounded-lg">
+      <div class="flex items-center justify-center mb-4">
+        <span class="text-4xl text-terminal-yellow mr-3">⚠️</span>
+        <h3 class="text-xl font-bold text-terminal-yellow">Twitter Account Not Connected</h3>
+      </div>
+
+      <p class="text-terminal-dim-green text-center mb-6">
+        This Twitter account has not been connected to a Postfun user profile yet.
+        The owner needs to connect their Twitter account to view their trading activity.
+      </p>
+
+      <div class="text-center">
+        <a href="{{ url_for('web.home') }}" class="terminal-btn bg-terminal-green text-terminal-black px-6 py-3 rounded font-bold hover:bg-terminal-dim-green transition-colors">
+          Return to Home
+        </a>
+      </div>
+    </div>
+
+    <!-- Recent Tweets (placeholder) -->
+    <div class="mt-8">
+      <h3 class="text-xl font-bold text-terminal-green mb-4 flex items-center">
+        <span class="mr-2">🕐</span>
+        Recent Activity
+      </h3>
+      <div class="terminal-card bg-terminal-black border border-terminal-green p-4 rounded-lg">
+        <p class="text-terminal-dim-green text-center">
+          Recent tweets will be shown here once this account is connected to Postfun.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

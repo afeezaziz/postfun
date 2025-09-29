@@ -45,7 +45,7 @@
         <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
         <div>24h Change: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
         {% if launcher %}
-        <div>Creator: <a class="pf-green" href="{{ url_for('web.creator_profile', user_id=launcher.id) }}">{{ launcher.npub or launcher.pubkey_hex }}</a></div>
+        <div>Creator: <a class="pf-green" href="{{ url_for('web.users.creator_profile', user_id=launcher.id) }}">{{ launcher.npub or launcher.pubkey_hex }}</a></div>
         {% if current_user and current_user.id != launcher.id %}
         <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
           {% if is_following %}
@@ -74,10 +74,10 @@
       </div>
       <div class="card pf-token-panel">
         <h2>Actions</h2>
-        <a class="retro-button" href="{{ url_for('web.pool', symbol=token.symbol) }}">Go to Pool</a>
+        <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=token.symbol) }}">Go to Pool</a>
         <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-          <a class="retro-button" href="#" data-share-url="{{ url_for('web.token_detail', symbol=token.symbol, _external=True) }}" data-share-text="Check out {{ token.symbol }} on Postfun">Share</a>
-          <button class="retro-button" data-copy-url="{{ url_for('web.token_detail', symbol=token.symbol, _external=True) }}">Copy Link</button>
+          <a class="retro-button" href="#" data-share-url="{{ url_for('web.tokens.token_detail', symbol=token.symbol, _external=True) }}" data-share-text="Check out {{ token.symbol }} on Postfun">Share</a>
+          <button class="retro-button" data-copy-url="{{ url_for('web.tokens.token_detail', symbol=token.symbol, _external=True) }}">Copy Link</button>
         </div>
         {% if not current_user %}
           <button class="retro-button" onclick="pfNostrLogin()">Login to Trade</button>

@@ -9,7 +9,7 @@
         <div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-6">
           <input class="terminal-input input input-bordered w-full max-w-md" id="pf-tokenize-input" type="text" placeholder="Paste a post/tweet URL or enter a name (e.g. PEPE MOMENT)" />
           {% if current_user %}
-            <a class="terminal-button btn btn-outline" href="{{ url_for('web.launchpad') }}">Tokenize Now</a>
+            <a class="terminal-button btn btn-outline" href="{{ url_for('web.tokens.launchpad') }}">Tokenize Now</a>
           {% else %}
             <button class="terminal-button btn btn-outline" onclick="pfNostrLogin()">Login to Tokenize</button>
           {% endif %}
@@ -85,10 +85,10 @@
               </div>
             </div>
             <div class="card-actions justify-center flex-wrap gap-2">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="#" data-share-url="{{ url_for('web.token_detail', symbol=it.symbol, _external=True) }}" data-share-text="Fresh launch: {{ it.symbol }} — {{ it.name }} on Postfun">Share</a>
-              <button class="terminal-button btn btn-outline btn-sm" data-copy-url="{{ url_for('web.token_detail', symbol=it.symbol, _external=True) }}">Copy</button>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.tokens.token_detail', symbol=it.symbol) }}">Details</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.trading.pool', symbol=it.symbol) }}">Pool</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="#" data-share-url="{{ url_for('web.tokens.token_detail', symbol=it.symbol, _external=True) }}" data-share-text="Fresh launch: {{ it.symbol }} — {{ it.name }} on Postfun">Share</a>
+              <button class="terminal-button btn btn-outline btn-sm" data-copy-url="{{ url_for('web.tokens.token_detail', symbol=it.symbol, _external=True) }}">Copy</button>
               <button class="terminal-button btn btn-outline btn-sm pf-watchlist-btn" data-symbol="{{ it.symbol }}" data-active="0">☆ Watch</button>
             </div>
           </div>
@@ -128,8 +128,8 @@
               </div>
             </div>
             <div class="card-actions justify-center gap-2">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.tokens.token_detail', symbol=it.symbol) }}">Details</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.trading.pool', symbol=it.symbol) }}">Pool</a>
               <button class="terminal-button btn btn-outline btn-sm pf-watchlist-btn" data-symbol="{{ it.symbol }}" data-active="0">☆ Watch</button>
             </div>
           </div>
@@ -168,8 +168,8 @@
               </div>
             </div>
             <div class="card-actions justify-center gap-2">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.pool', symbol=it.symbol) }}">Boost</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.trading.pool', symbol=it.symbol) }}">Boost</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.tokens.token_detail', symbol=it.symbol) }}">Details</a>
             </div>
           </div>
         </div>
@@ -201,7 +201,7 @@
               <div class="text-terminal-green font-bold text-lg">{{ u.count }}</div>
             </div>
             <div class="card-actions justify-center">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.creator_profile', user_id=u.user_id) }}">Profile</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.users.creator_profile', user_id=u.user_id) }}">Profile</a>
             </div>
           </div>
         </div>
@@ -251,8 +251,8 @@
               {% endif %}
             </div>
             <div class="card-actions justify-center gap-2">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.token_detail', symbol=it.symbol) }}">Details</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.pool', symbol=it.symbol) }}">Pool</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.tokens.token_detail', symbol=it.symbol) }}">Details</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.trading.pool', symbol=it.symbol) }}">Pool</a>
               <button class="terminal-button btn btn-outline btn-sm pf-watchlist-btn" data-symbol="{{ it.symbol }}" data-active="0">☆ Watch</button>
             </div>
           </div>
@@ -294,8 +294,8 @@
                     </div>
                   </div>
                   <div class="card-actions justify-center gap-2 mt-4">
-                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.token_detail', symbol=t.symbol) }}">Details</a>
-                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.pool', symbol=t.symbol) }}">Pool</a>
+                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.tokens.token_detail', symbol=t.symbol) }}">Details</a>
+                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.trading.pool', symbol=t.symbol) }}">Pool</a>
                   </div>
                 </div>
               </div>
@@ -329,8 +329,8 @@
                     </div>
                   </div>
                   <div class="card-actions justify-center gap-2 mt-4">
-                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.token_detail', symbol=t.symbol) }}">Details</a>
-                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.pool', symbol=t.symbol) }}">Pool</a>
+                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.tokens.token_detail', symbol=t.symbol) }}">Details</a>
+                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.trading.pool', symbol=t.symbol) }}">Pool</a>
                   </div>
                 </div>
               </div>
@@ -368,8 +368,8 @@
             </div>
             <div class="pf-spark mb-4 h-16 bg-terminal-black border border-terminal-green rounded" data-symbol="{{ token.symbol }}" data-price="{{ (price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0) }}"></div>
             <div class="card-actions justify-center gap-2">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.token_detail', symbol=token.symbol) }}">Details</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.pool', symbol=token.symbol) }}">Pool</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}">Details</a>
+              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.trading.pool', symbol=token.symbol) }}">Pool</a>
               <button class="terminal-button btn btn-outline btn-sm pf-watchlist-btn" data-symbol="{{ token.symbol }}" data-active="0">☆ Watch</button>
             </div>
           </div>

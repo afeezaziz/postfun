@@ -33,8 +33,8 @@
           </div>
           <div class="pf-spark" data-symbol="{{ t.symbol }}" data-price="{{ t.price or 0 }}"></div>
           <div class="pf-card-actions">
-            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=t.symbol) }}">Details</a>
-            <a class="retro-button" href="{{ url_for('web.pool', symbol=t.symbol) }}">Pool</a>
+            <a class="retro-button" href="{{ url_for('web.tokens.token_detail', symbol=t.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=t.symbol) }}">Pool</a>
           </div>
         </div>
       {% else %}
@@ -52,8 +52,8 @@
           <div>
             {{ t.symbol }} — <span class="pf-green">{{ '%.2f'|format(t.change_24h or 0) }}%</span>
             <span style="margin-left:8px;">
-              <a href="{{ url_for('web.token_detail', symbol=t.symbol) }}">Details</a> ·
-              <a href="{{ url_for('web.pool', symbol=t.symbol) }}">Pool</a>
+              <a href="{{ url_for('web.tokens.token_detail', symbol=t.symbol) }}">Details</a> ·
+              <a href="{{ url_for('web.trading.pool', symbol=t.symbol) }}">Pool</a>
             </span>
           </div>
         {% else %}
@@ -66,8 +66,8 @@
           <div>
             {{ t.symbol }} — <span class="pf-green">{{ '%.2f'|format(t.change_24h or 0) }}%</span>
             <span style="margin-left:8px;">
-              <a href="{{ url_for('web.token_detail', symbol=t.symbol) }}">Details</a> ·
-              <a href="{{ url_for('web.pool', symbol=t.symbol) }}">Pool</a>
+              <a href="{{ url_for('web.tokens.token_detail', symbol=t.symbol) }}">Details</a> ·
+              <a href="{{ url_for('web.trading.pool', symbol=t.symbol) }}">Pool</a>
             </span>
           </div>
         {% else %}
@@ -90,8 +90,8 @@
             <div>Volume 24h: <span class="pf-green">{{ '%.2f'|format(row.vol_24h or 0) }}</span></div>
           </div>
           <div class="pf-card-actions">
-            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=row.token.symbol) }}">Details</a>
-            <a class="retro-button" href="{{ url_for('web.pool', symbol=row.token.symbol) }}">Pool</a>
+            <a class="retro-button" href="{{ url_for('web.tokens.token_detail', symbol=row.token.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=row.token.symbol) }}">Pool</a>
           </div>
         </div>
       {% else %}
@@ -113,8 +113,8 @@
             <div>Stage: <span class="pf-green">{{ row.stage }}</span></div>
           </div>
           <div class="pf-card-actions">
-            <a class="retro-button" href="{{ url_for('web.token_detail', symbol=row.token.symbol) }}">Details</a>
-            <a class="retro-button" href="{{ url_for('web.pool', symbol=row.token.symbol) }}">Pool</a>
+            <a class="retro-button" href="{{ url_for('web.tokens.token_detail', symbol=row.token.symbol) }}">Details</a>
+            <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=row.token.symbol) }}">Pool</a>
           </div>
         </div>
       {% else %}

@@ -69,10 +69,10 @@
           <span class="mr-2">📊</span> Quick Actions
         </h3>
         <div class="space-y-2">
-          <a href="{{ url_for('web.launchpad') }}" class="terminal-button w-full text-center block mb-2">
+          <a href="{{ url_for('web.tokens.launchpad') }}" class="terminal-button w-full text-center block mb-2">
             Create Token
           </a>
-          <a href="{{ url_for('web.wallet') }}" class="terminal-button w-full text-center block">
+          <a href="{{ url_for('web.users.wallet') }}" class="terminal-button w-full text-center block">
             Lightning Wallet
           </a>
         </div>
@@ -134,10 +134,10 @@
 
           <!-- Actions -->
           <div class="flex gap-2 pt-3 border-t border-terminal-green/30">
-            <a href="{{ url_for('web.token_detail', symbol=token.symbol) }}" class="terminal-button text-xs flex-1 text-center">
+            <a href="{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}" class="terminal-button text-xs flex-1 text-center">
               Details
             </a>
-            <a href="{{ url_for('web.pool', symbol=token.symbol) }}" class="terminal-button text-xs flex-1 text-center">
+            <a href="{{ url_for('web.trading.pool', symbol=token.symbol) }}" class="terminal-button text-xs flex-1 text-center">
               Trade
             </a>
           </div>
