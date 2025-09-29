@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import json
 import urllib.parse
+import secrets
+import base64
+import hashlib
 
 from flask import render_template, request, g, redirect, url_for, abort, flash, Response, current_app, session
 from sqlalchemy import case, func
@@ -549,7 +552,20 @@ TWITTER_AUTH_URL = "https://twitter.com/i/oauth2/authorize"
 TWITTER_TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
 TWITTER_SCOPES = ["tweet.read", "users.read", "offline.access"]
 
-def get_twitter_oauth():
+def generate_pkce_codes():
+    """Generate PKCE code verifier and challenge"""
+    # Generate code verifier (43-128 characters)
+    code_verifier = secrets.token_urlsafe(64)
+
+    # Generate code challenge (S256 method)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).decode().rstrip('=')
+
+    return code_verifier, code_challenge
+
+
+def get_twitter_oauth(code_verifier=None):
     """Initialize Twitter OAuth2 session"""
     global TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET
 
@@ -565,11 +581,26 @@ def get_twitter_oauth():
     if not current_app.debug and not redirect_uri.startswith('https://'):
         redirect_uri = redirect_uri.replace('http://', 'https://', 1)
 
-    return OAuth2Session(
-        client_id=TWITTER_CLIENT_ID,
-        scope=TWITTER_SCOPES,
-        redirect_uri=redirect_uri
-    )
+    # For authorization request, include PKCE code challenge
+    if code_verifier is None:
+        code_verifier, code_challenge = generate_pkce_codes()
+        session['twitter_code_verifier'] = code_verifier
+
+        return OAuth2Session(
+            client_id=TWITTER_CLIENT_ID,
+            scope=TWITTER_SCOPES,
+            redirect_uri=redirect_uri,
+            code_challenge=code_challenge,
+            code_challenge_method="S256"
+        )
+    else:
+        # For token request, include code verifier
+        return OAuth2Session(
+            client_id=TWITTER_CLIENT_ID,
+            scope=TWITTER_SCOPES,
+            redirect_uri=redirect_uri,
+            code_verifier=code_verifier
+        )
 
 
 # Twitter OAuth2 authentication routes
@@ -591,14 +622,9 @@ def twitter_auth():
 
     try:
         twitter = get_twitter_oauth()
-        authorization_url, state = twitter.authorization_url(
-            TWITTER_AUTH_URL,
-            # Optional parameters
-            code_challenge="challenge",
-            code_challenge_method="plain"
-        )
+        authorization_url, state = twitter.authorization_url(TWITTER_AUTH_URL)
 
-        # Store state in session for security
+        # Store state and PKCE verifier in session for security
         session['twitter_oauth_state'] = state
         session['twitter_user_id'] = user.id
 
@@ -643,8 +669,14 @@ def twitter_callback():
         return redirect(url_for("web.users.user_profile"))
 
     try:
-        # Exchange authorization code for access token
-        twitter = get_twitter_oauth()
+        # Get PKCE code verifier from session
+        code_verifier = session.get('twitter_code_verifier')
+        if not code_verifier:
+            flash("Invalid OAuth2 session", "error")
+            return redirect(url_for("web.users.user_profile"))
+
+        # Exchange authorization code for access token with PKCE
+        twitter = get_twitter_oauth(code_verifier=code_verifier)
         token = twitter.fetch_token(
             TWITTER_TOKEN_URL,
             client_secret=current_app.config.get('TWITTER_CLIENT_SECRET'),
@@ -725,3 +757,4 @@ def twitter_callback():
         # Clean up session
         session.pop('twitter_oauth_state', None)
         session.pop('twitter_user_id', None)
+        session.pop('twitter_code_verifier', None)
