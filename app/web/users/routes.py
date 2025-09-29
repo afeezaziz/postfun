@@ -687,11 +687,12 @@ def twitter_callback():
             'code': code,
             'redirect_uri': twitter.redirect_uri,
             'code_verifier': code_verifier,
-            'client_id': TWITTER_CLIENT_ID,
-            'client_secret': current_app.config.get('TWITTER_CLIENT_SECRET')
+            'client_id': TWITTER_CLIENT_ID
         }
 
-        token_response = requests.post(TWITTER_TOKEN_URL, data=token_data)
+        # Use Basic Authentication for client credentials
+        auth = (TWITTER_CLIENT_ID, current_app.config.get('TWITTER_CLIENT_SECRET'))
+        token_response = requests.post(TWITTER_TOKEN_URL, data=token_data, auth=auth)
         if token_response.status_code != 200:
             current_app.logger.error(f"Token exchange failed: {token_response.status_code}")
             current_app.logger.error(f"Response: {token_response.text}")
