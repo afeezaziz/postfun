@@ -13,6 +13,7 @@ import hashlib
 from flask import render_template, request, g, redirect, url_for, abort, flash, Response, current_app, session
 from sqlalchemy import case, func
 from requests_oauthlib import OAuth2Session
+import requests
 
 from ...utils.jwt_utils import verify_jwt
 from ...extensions import db, cache
