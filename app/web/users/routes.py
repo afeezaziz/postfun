@@ -560,10 +560,15 @@ def get_twitter_oauth():
     if not TWITTER_CLIENT_ID or not TWITTER_CLIENT_SECRET:
         raise ValueError("Twitter OAuth2 credentials not configured")
 
+    # Generate redirect URI and force HTTPS for production
+    redirect_uri = url_for('web.users.twitter_callback', _external=True)
+    if not current_app.debug and not redirect_uri.startswith('https://'):
+        redirect_uri = redirect_uri.replace('http://', 'https://', 1)
+
     return OAuth2Session(
         client_id=TWITTER_CLIENT_ID,
         scope=TWITTER_SCOPES,
-        redirect_uri=url_for('web.users.twitter_callback', _external=True)
+        redirect_uri=redirect_uri
     )
 
 
