@@ -91,3 +91,7 @@ class Config:
     OP_ALERTS_MIN_SUCCESS_15M = float(os.getenv("OP_ALERTS_MIN_SUCCESS_15M", "0.8"))  # fraction
     OP_ALERTS_INVARIANT_TOL_SATS = int(os.getenv("OP_ALERTS_INVARIANT_TOL_SATS", "0"))
 
+    # Twitter OAuth2
+    TWITTER_CLIENT_ID = os.getenv("TWITTER_CLIENT_ID", "")
+    TWITTER_CLIENT_SECRET = os.getenv("TWITTER_CLIENT_SECRET", "")
+
