@@ -1,58 +1,134 @@
 {% extends 'base.html' %}
-{% block title %}Postfun — Home{% endblock %}
+{% block title %}Postfun — Turn Social Content into Tokens{% endblock %}
 {% block content %}
-  <section class="hero bg-base-100 border border-terminal-green p-8 rounded-lg shadow-lg mb-8">
-    <div class="hero-content text-center">
-      <div class="max-w-2xl">
-        <h1 class="text-4xl md:text-5xl font-bold text-terminal-green mb-4 font-terminal">Tokenize Posts & Tweets</h1>
-        <p class="text-lg text-terminal-dim-green mb-8">From posts to markets. Turn vibes into value on Postfun.</p>
-        <div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-6">
-          <input class="terminal-input input input-bordered w-full max-w-md" id="pf-tokenize-input" type="text" placeholder="Paste a post/tweet URL or enter a name (e.g. PEPE MOMENT)" />
+  <!-- Hero Section - Clear Value Proposition -->
+  <section class="terminal-card mb-8 relative overflow-hidden">
+    <div class="absolute inset-0 bg-gradient-to-br from-terminal-green/5 to-transparent"></div>
+    <div class="relative z-10 py-12 px-4">
+      <div class="max-w-6xl mx-auto text-center">
+        <div class="mb-6">
+          <span class="terminal-badge terminal-badge-green mb-4 inline-block">🚀 Now Live</span>
+          <h1 class="text-5xl md:text-7xl font-bold text-terminal-green mb-6 font-terminal leading-tight">
+            Turn Social Posts<br>into <span class="text-terminal-yellow animate-pulse">Tradeable Tokens</span>
+          </h1>
+          <p class="text-xl md:text-2xl text-terminal-dim-green mb-8 max-w-3xl mx-auto leading-relaxed">
+            Create tokens from tweets, posts, and content. Build communities. Trade vibes. Join the decentralized social economy.
+          </p>
+        </div>
+
+        <!-- Main CTA Area -->
+        <div class="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8">
+          <div class="relative flex-1 max-w-md">
+            <input
+              class="terminal-input w-full pr-12"
+              id="pf-tokenize-input"
+              type="text"
+              placeholder="Paste tweet/post URL or enter name"
+              onkeyup="handleTokenizeInput(event)"
+            />
+            <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-terminal-dim-green">🔗</span>
+          </div>
           {% if current_user %}
-            <a class="terminal-button btn btn-outline" href="{{ url_for('web.tokens.launchpad') }}">Tokenize Now</a>
+            <button class="terminal-button terminal-button-buy px-8 py-3 text-lg font-bold hover:scale-105 transition-transform" onclick="handleTokenizeSubmit()">
+              🚀 Create Token
+            </button>
           {% else %}
-            <button class="terminal-button btn btn-outline" onclick="pfNostrLogin()">Login to Tokenize</button>
+            <button class="terminal-button px-8 py-3 text-lg font-bold hover:scale-105 transition-transform" onclick="pfNostrLogin()">
+              🔑 Login to Start
+            </button>
           {% endif %}
         </div>
-        <div id="pf-og-preview" class="hidden bg-base-100 border border-terminal-green rounded-lg p-4 mt-4">
-          <div class="flex items-center gap-4">
-            <img id="pf-og-img" src="" alt="preview" class="hidden w-12 h-12 object-cover rounded-lg" />
-            <div class="text-left">
-              <div id="pf-og-title" class="text-lg font-bold text-terminal-green"></div>
-              <div id="pf-og-desc" class="text-terminal-dim-green"></div>
+
+        <!-- OG Preview -->
+        <div id="pf-og-preview" class="hidden terminal-card mx-auto max-w-2xl mt-6 border-2 border-terminal-yellow">
+          <div class="p-4">
+            <div class="flex items-start gap-4">
+              <img id="pf-og-img" src="" alt="preview" class="hidden w-16 h-16 object-cover rounded-lg" />
+              <div class="text-left flex-1">
+                <div id="pf-og-title" class="text-lg font-bold text-terminal-green mb-2"></div>
+                <div id="pf-og-desc" class="text-terminal-dim-green text-sm"></div>
+                <button class="terminal-button text-xs mt-2">Tokenize This Content</button>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Quick Stats -->
         {% if stats %}
-        <div class="flex flex-wrap gap-2 justify-center mt-6">
-          <div class="badge badge-outline border-terminal-green text-terminal-green">{{ stats.tokens }} tokens</div>
-          <div class="badge badge-outline border-terminal-green text-terminal-green">{{ stats.pools }} pools</div>
-          <div class="badge badge-outline border-terminal-green text-terminal-green">{{ stats.creators }} creators</div>
-          <div class="badge badge-outline border-terminal-green text-terminal-green">{{ stats.trades_24h }} trades/24h</div>
-          <div class="badge badge-outline border-terminal-green text-terminal-green">{{ '%.2f'|format(stats.volume_24h or 0) }} gUSD vol/24h</div>
-          <div class="badge badge-outline border-terminal-green text-terminal-green">{{ stats.watchlists }} watchlists</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mt-12 max-w-2xl mx-auto">
+          <div class="text-center">
+            <div class="text-3xl font-bold text-terminal-green mb-1">{{ stats.tokens }}</div>
+            <div class="text-sm text-terminal-dim-green">Tokens Created</div>
+          </div>
+          <div class="text-center">
+            <div class="text-3xl font-bold text-terminal-green mb-1">${{ '%.0f'|format(stats.volume_24h or 0) }}</div>
+            <div class="text-sm text-terminal-dim-green">24h Volume</div>
+          </div>
+          <div class="text-center">
+            <div class="text-3xl font-bold text-terminal-green mb-1">{{ stats.trades_24h }}</div>
+            <div class="text-sm text-terminal-dim-green">24h Trades</div>
+          </div>
+          <div class="text-center">
+            <div class="text-3xl font-bold text-terminal-green mb-1">{{ stats.creators }}</div>
+            <div class="text-sm text-terminal-dim-green">Creators</div>
+          </div>
         </div>
         {% endif %}
       </div>
     </div>
   </section>
 
+  <!-- How It Works - Education -->
+  <section class="mb-8">
+    <div class="text-center mb-8">
+      <h2 class="text-3xl md:text-4xl font-bold text-terminal-green mb-4">How Postfun Works</h2>
+      <p class="text-lg text-terminal-dim-green max-w-2xl mx-auto">Turn any social content into a tradeable token in minutes</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+      <div class="terminal-card text-center hover:scale-105 transition-transform duration-300">
+        <div class="text-4xl mb-4">🔗</div>
+        <h3 class="text-xl font-bold text-terminal-green mb-3">1. Share Content</h3>
+        <p class="text-terminal-dim-green text-sm">Paste any tweet, post, or content URL. Add a name and symbol for your token.</p>
+      </div>
+
+      <div class="terminal-card text-center hover:scale-105 transition-transform duration-300">
+        <div class="text-4xl mb-4">🏗️</div>
+        <h3 class="text-xl font-bold text-terminal-green mb-3">2. Tokenize</h3>
+        <p class="text-terminal-dim-green text-sm">We create a liquidity pool and token. Your content now has market value.</p>
+      </div>
+
+      <div class="terminal-card text-center hover:scale-105 transition-transform duration-300">
+        <div class="text-4xl mb-4">📈</div>
+        <h3 class="text-xl font-bold text-terminal-green mb-3">3. Trade & Earn</h3>
+        <p class="text-terminal-dim-green text-sm">Trade tokens, build communities, and earn as your content gains value.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Market Activity -->
   {% if live_trades %}
-  <section class="card bg-base-100 border border-terminal-green rounded-lg shadow-lg mb-8 overflow-hidden">
-    <div class="card-body p-4">
-      <div class="flex items-center gap-4">
-        <div class="badge badge-error badge-lg animate-pulse">LIVE</div>
-        <div class="flex-1 overflow-hidden">
-          <div id="pf-ticker" class="relative overflow-hidden w-full">
-            <div id="pf-ticker-track" class="inline-block whitespace-nowrap will-change-transform">
-              {% for t in live_trades %}
-                <span class="inline-block mr-6 flex items-center gap-2">
-                  <span class="badge badge-outline border-terminal-green text-terminal-green">{{ t.symbol }}</span>
-                  <span class="text-terminal-green font-bold uppercase">{{ t.side }}</span>
-                  <span class="text-terminal-dim-green">{{ '%.6f'|format(t.price or 0) }}</span>
-                </span>
-              {% endfor %}
-            </div>
+  <section class="terminal-card mb-8 relative overflow-hidden">
+    <div class="absolute top-0 right-0 w-24 h-24 bg-terminal-green opacity-5 rounded-full blur-xl animate-pulse"></div>
+    <div class="p-4 relative z-10">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-4">
+          <div class="terminal-badge terminal-badge-red animate-pulse">🔴 LIVE</div>
+          <h3 class="text-lg font-bold text-terminal-green">Live Market Activity</h3>
+        </div>
+        <div class="text-sm text-terminal-dim-green">Real-time trades</div>
+      </div>
+      <div class="overflow-hidden">
+        <div id="pf-ticker" class="relative overflow-hidden w-full">
+          <div id="pf-ticker-track" class="inline-block whitespace-nowrap will-change-transform">
+            {% for t in live_trades %}
+              <span class="inline-block mr-8 flex items-center gap-2">
+                <span class="terminal-badge terminal-badge-green text-xs">{{ t.symbol }}</span>
+                <span class="text-terminal-green font-bold uppercase">{{ t.side }}</span>
+                <span class="text-terminal-dim-green">${{ '%.6f'|format(t.price or 0) }}</span>
+                <span class="text-terminal-green">{{ '%.4f'|format(t.amount or 0) }}</span>
+              </span>
+            {% endfor %}
           </div>
         </div>
       </div>
@@ -60,282 +136,224 @@
   </section>
   {% endif %}
 
-  {% if recent_launches %}
-  <section class="mb-8">
-    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal">Fresh Launches</h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {% for it in recent_launches %}
-        <div class="card bg-base-100 border border-terminal-green shadow-lg hover:shadow-xl transition-shadow">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-4">
-              <div class="badge badge-outline border-terminal-green text-terminal-green">{{ it.symbol }}</div>
-              <div class="text-terminal-dim-green">{{ it.name }}</div>
-            </div>
-            <div class="flex items-center gap-4 mb-4">
-              {% if it.logo_url %}
-                <img src="{{ it.logo_url }}" alt="{{ it.symbol }}" class="w-12 h-12 object-cover rounded-lg" />
-              {% else %}
-                <div class="w-12 h-12 bg-terminal-black border-2 border-terminal-green rounded-lg flex items-center justify-center">
-                  <span class="text-terminal-green font-bold">{{ it.symbol[:2] }}</span>
-                </div>
-              {% endif %}
-              <div>
-                <div class="text-sm text-terminal-dim-green">Launched</div>
-                <div class="text-terminal-green font-bold">{{ it.launch_at }}</div>
-              </div>
-            </div>
-            <div class="card-actions justify-center flex-wrap gap-2">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.tokens.token_detail', symbol=it.symbol) }}">Details</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.trading.pool', symbol=it.symbol) }}">Pool</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="#" data-share-url="{{ url_for('web.tokens.token_detail', symbol=it.symbol, _external=True) }}" data-share-text="Fresh launch: {{ it.symbol }} — {{ it.name }} on Postfun">Share</a>
-              <button class="terminal-button btn btn-outline btn-sm" data-copy-url="{{ url_for('web.tokens.token_detail', symbol=it.symbol, _external=True) }}">Copy</button>
-              <button class="terminal-button btn btn-outline btn-sm pf-watchlist-btn" data-symbol="{{ it.symbol }}" data-active="0">☆ Watch</button>
-            </div>
-          </div>
-        </div>
-      {% else %}
-        <div class="text-center text-terminal-dim-green py-8">No recent launches.</div>
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
-
-  {% if meme_hot %}
-  <section class="mb-8">
-    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal flex items-center gap-2">
-      <span class="text-red-500">🔥</span> Meme Heat
-    </h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {% for it in meme_hot %}
-        <div class="card bg-base-100 border border-terminal-green shadow-lg hover:shadow-xl transition-shadow">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-4">
-              <div class="badge badge-outline border-terminal-green text-terminal-green">{{ it.symbol }}</div>
-              <div class="text-terminal-dim-green">{{ it.name }}</div>
-            </div>
-            <div class="space-y-2 mb-4">
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Price:</span>
-                <span class="text-terminal-green font-bold">{{ '%.6f'|format(it.price or 0) }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">24h Vol:</span>
-                <span class="text-terminal-green font-bold">{{ '%.2f'|format(it.volume_24h or 0) }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Stage/Fee:</span>
-                <span class="text-terminal-green font-bold">S{{ it.stage }} • {{ it.fee_bps }} bps</span>
-              </div>
-            </div>
-            <div class="card-actions justify-center gap-2">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.tokens.token_detail', symbol=it.symbol) }}">Details</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.trading.pool', symbol=it.symbol) }}">Pool</a>
-              <button class="terminal-button btn btn-outline btn-sm pf-watchlist-btn" data-symbol="{{ it.symbol }}" data-active="0">☆ Watch</button>
-            </div>
-          </div>
-        </div>
-      {% else %}
-        <div class="text-center text-terminal-dim-green py-8">No memes trending right now.</div>
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
-
-  {% if fair_radar %}
-  <section class="mb-8">
-    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal flex items-center gap-2">
-      <span class="text-blue-500">📡</span> Fair Launch Radar
-    </h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {% for it in fair_radar %}
-        <div class="card bg-base-100 border border-terminal-green shadow-lg hover:shadow-xl transition-shadow">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-4">
-              <div class="badge badge-outline border-terminal-green text-terminal-green">{{ it.symbol }}</div>
-              <div class="text-terminal-dim-green">{{ it.name }}</div>
-            </div>
-            <div class="mb-4">
-              <div class="text-terminal-dim-green mb-2">Stage/Fee</div>
-              <div class="text-terminal-green font-bold">S{{ it.stage }} → S{{ it.next_stage }} • {{ it.fee_bps }} bps</div>
-            </div>
-            <div class="mb-4">
-              <div class="flex justify-between text-sm mb-2">
-                <span class="text-terminal-dim-green">Progress</span>
-                <span class="text-terminal-green font-bold">{{ it.progress_pct }}%</span>
-              </div>
-              <div class="w-full bg-terminal-black rounded-full h-2 border border-terminal-green">
-                <div class="bg-gradient-to-r from-terminal-green to-green-400 h-2 rounded-full" style="width: {{ it.progress_pct }}%" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ it.progress_pct }}"></div>
-              </div>
-            </div>
-            <div class="card-actions justify-center gap-2">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.trading.pool', symbol=it.symbol) }}">Boost</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.tokens.token_detail', symbol=it.symbol) }}">Details</a>
-            </div>
-          </div>
-        </div>
-      {% else %}
-        <div class="text-center text-terminal-dim-green py-8">No pools near the next stage right now.</div>
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
-
-  {% if top_creators %}
-  <section class="mb-8">
-    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal flex items-center gap-2">
-      <span class="text-yellow-500">👑</span> Top Creators
-    </h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      {% for u in top_creators %}
-        <div class="card bg-base-100 border border-terminal-green shadow-lg hover:shadow-xl transition-shadow">
-          <div class="card-body text-center">
-            <div class="w-16 h-16 bg-terminal-black border-2 border-terminal-green rounded-full mx-auto mb-4 flex items-center justify-center">
-              <span class="text-terminal-green font-bold text-lg">{{ (u.npub or 'U')[:2].upper() }}</span>
-            </div>
-            <div class="mb-2">
-              <div class="text-terminal-dim-green text-sm">Creator</div>
-              <div class="text-terminal-green font-bold truncate">{{ u.npub }}</div>
-            </div>
-            <div class="mb-4">
-              <div class="text-terminal-dim-green text-sm">Launches</div>
-              <div class="text-terminal-green font-bold text-lg">{{ u.count }}</div>
-            </div>
-            <div class="card-actions justify-center">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.users.creator_profile', user_id=u.user_id) }}">Profile</a>
-            </div>
-          </div>
-        </div>
-      {% else %}
-        <div class="text-center text-terminal-dim-green py-8">No creators yet.</div>
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
-
-  {% if trending %}
-  <section class="mb-8">
-    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal flex items-center gap-2">
-      <span class="text-orange-500">📈</span> Hot Today (AMM Volume)
-    </h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {% for it in trending %}
-        <div class="card bg-base-100 border border-terminal-green shadow-lg hover:shadow-xl transition-shadow">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-4">
-              <div class="badge badge-outline border-terminal-green text-terminal-green">{{ it.symbol }}</div>
-              <div class="text-terminal-dim-green">{{ it.name }}</div>
-            </div>
-            <div class="space-y-2 mb-4">
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Price:</span>
-                <span class="text-terminal-green font-bold">{{ '%.6f'|format(it.price or 0) }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">24h Vol:</span>
-                <span class="text-terminal-green font-bold">{{ '%.2f'|format(it.volume_24h or 0) }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Stage/Fee:</span>
-                <span class="text-terminal-green font-bold">S{{ it.stage }} • {{ it.fee_bps }} bps</span>
-              </div>
-              {% if it.next_stage %}
-                <div class="mt-3">
-                  <div class="flex justify-between text-sm mb-2">
-                    <span class="text-terminal-dim-green">S{{ it.stage }} → S{{ it.next_stage }}</span>
-                    <span class="text-terminal-green font-bold">{{ it.progress_pct }}%</span>
+  <!-- Featured Tokens & Trending -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+    {% if recent_launches %}
+    <div>
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-terminal-green flex items-center gap-2">
+          <span class="text-yellow-500">🚀</span> Latest Launches
+        </h2>
+        <div class="text-sm text-terminal-dim-green">New tokens</div>
+      </div>
+      <div class="space-y-4">
+        {% for it in recent_launches[:3] %}
+          <div class="terminal-card hover:scale-105 transition-all duration-300">
+            <div class="p-4">
+              <div class="flex items-center gap-4">
+                {% if it.logo_url %}
+                  <img src="{{ it.logo_url }}" alt="{{ it.symbol }}" class="w-12 h-12 object-cover rounded-lg" />
+                {% else %}
+                  <div class="avatar avatar-user w-12 h-12">{{ it.symbol[:2]|upper }}</div>
+                {% endif %}
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 mb-1">
+                    <div class="terminal-badge terminal-badge-green text-xs">{{ it.symbol }}</div>
+                    <span class="text-xs text-terminal-dim-green">{{ it.name }}</span>
                   </div>
-                  <div class="w-full bg-terminal-black rounded-full h-2 border border-terminal-green">
-                    <div class="bg-gradient-to-r from-terminal-green to-green-400 h-2 rounded-full" style="width: {{ it.progress_pct }}%" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ it.progress_pct }}"></div>
+                  {% if price_by_symbol and price_by_symbol.get(it.symbol) %}
+                  <div class="text-sm text-terminal-green font-bold">${{ '%.6f'|format(price_by_symbol.get(it.symbol) or 0) }}</div>
+                  {% endif %}
+                </div>
+                <div class="text-right">
+                  <div class="text-xs text-terminal-dim-green">Launched</div>
+                  <div class="text-sm text-terminal-green font-bold">{{ it.launch_at[:5] if it.launch_at and (it.launch_at.startswith('2025') or it.launch_at.startswith('2024') or it.launch_at.startswith('2023')) else 'Recent' }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if trending %}
+    <div>
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-terminal-green flex items-center gap-2">
+          <span class="text-orange-500">📈</span> Trending Now
+        </h2>
+        <div class="text-sm text-terminal-dim-green">Top volume</div>
+      </div>
+      <div class="space-y-4">
+        {% for it in trending[:3] %}
+          <div class="terminal-card hover:scale-105 transition-all duration-300">
+            <div class="p-4">
+              <div class="flex items-center gap-4">
+                {% if it.logo_url %}
+                  <img src="{{ it.logo_url }}" alt="{{ it.symbol }}" class="w-12 h-12 object-cover rounded-lg" />
+                {% else %}
+                  <div class="avatar avatar-user w-12 h-12">{{ it.symbol[:2]|upper }}</div>
+                {% endif %}
+                <div class="flex-1">
+                  <div class="flex items-center gap-2 mb-1">
+                    <div class="terminal-badge terminal-badge-green text-xs">{{ it.symbol }}</div>
+                    <span class="text-xs text-terminal-dim-green">{{ it.name }}</span>
+                  </div>
+                  <div class="flex items-center gap-4 text-sm">
+                    <span class="text-terminal-green font-bold">${{ '%.6f'|format(it.price or 0) }}</span>
+                    {% if it.change_24h and it.change_24h > 0 %}
+                      <span class="text-terminal-green animate-pulse">+{{ '%.2f'|format(it.change_24h or 0) }}%</span>
+                    {% elif it.change_24h and it.change_24h < 0 %}
+                      <span class="text-terminal-red">{{ '%.2f'|format(it.change_24h or 0) }}%</span>
+                    {% endif %}
                   </div>
                 </div>
-              {% endif %}
-            </div>
-            <div class="card-actions justify-center gap-2">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.tokens.token_detail', symbol=it.symbol) }}">Details</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.trading.pool', symbol=it.symbol) }}">Pool</a>
-              <button class="terminal-button btn btn-outline btn-sm pf-watchlist-btn" data-symbol="{{ it.symbol }}" data-active="0">☆ Watch</button>
+                <div class="text-right">
+                  <div class="text-xs text-terminal-dim-green">24h Vol</div>
+                  <div class="text-sm text-terminal-green font-bold">${{ '%.0f'|format(it.volume_24h or 0) }}</div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      {% else %}
-        <div class="text-center text-terminal-dim-green py-8">No trending items.</div>
-      {% endfor %}
+        {% endfor %}
+      </div>
     </div>
-  </section>
-  {% endif %}
+    {% endif %}
+  </div>
 
+  <!-- Market Overview - Movers & Shakers -->
   {% if movers_gainers or movers_losers %}
   <section class="mb-8">
-    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal flex items-center gap-2">
-      <span class="text-purple-500">🚀</span> Movers & Shakers
-    </h2>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="card bg-base-100 border border-terminal-green shadow-lg">
-        <div class="card-body">
-          <h3 class="text-lg font-bold text-terminal-green mb-4 flex items-center gap-2">
-            <span class="text-green-500">📈</span> Top Gainers
-          </h3>
-          <div class="space-y-4">
-            {% for t in movers_gainers %}
-              <div class="card bg-base-100 border border-terminal-green">
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between mb-2">
-                    <div class="badge badge-outline border-terminal-green text-terminal-green">{{ t.symbol }}</div>
-                    <div class="text-terminal-dim-green text-sm">{{ t.name }}</div>
-                  </div>
-                  <div class="flex justify-between items-center gap-4">
-                    <div>
-                      <div class="text-terminal-dim-green text-sm">Price</div>
-                      <div class="text-terminal-green font-bold">{{ '%.6f'|format((price_by_symbol.get(t.symbol) if price_by_symbol else None) or (t.price or 0)) }}</div>
+    <div class="text-center mb-8">
+      <h2 class="text-3xl md:text-4xl font-bold text-terminal-green mb-4 flex items-center justify-center gap-3">
+        <span class="text-purple-500 animate-pulse">🚀</span>
+        Market Movers & Shakers
+        <span class="text-purple-500 animate-pulse">📉</span>
+      </h2>
+      <p class="text-lg text-terminal-dim-green max-w-2xl mx-auto">Today's biggest price movements and trading opportunities</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <!-- Moon Mission - Top Gainers -->
+      <div class="terminal-card relative overflow-hidden border-2 border-terminal-green">
+        <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-green opacity-10 rounded-full blur-2xl animate-pulse"></div>
+        <div class="p-6 relative z-10">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="text-2xl font-bold text-terminal-green flex items-center gap-2">
+              <span class="text-green-500 animate-bounce">📈</span>
+              Moon Mission
+            </h3>
+            <div class="terminal-badge terminal-badge-green animate-pulse">🔥 HOT</div>
+          </div>
+
+          <div class="space-y-4" id="gainersContainer">
+            {% for t in movers_gainers[:3] %}
+              <div class="terminal-card bg-terminal-black/50 hover:scale-105 transition-all duration-300 gainers-item" data-change="{{ t.change_24h or 0 }}">
+                <div class="p-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                      <div class="text-3xl">🚀</div>
+                      <div>
+                        <div class="terminal-badge terminal-badge-green text-sm font-bold">{{ t.symbol }}</div>
+                        <div class="text-xs text-terminal-dim-green">{{ t.name }}</div>
+                      </div>
                     </div>
                     <div class="text-right">
-                      <div class="text-terminal-dim-green text-sm">24h</div>
-                      <div class="text-green-500 font-bold">+{{ '%.2f'|format(t.change_24h or 0) }}%</div>
+                      <div class="text-lg font-bold text-terminal-green animate-pulse">+{{ '%.2f'|format(t.change_24h or 0) }}%</div>
+                      <div class="text-xs text-terminal-dim-green">24h change</div>
                     </div>
                   </div>
-                  <div class="card-actions justify-center gap-2 mt-4">
-                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.tokens.token_detail', symbol=t.symbol) }}">Details</a>
-                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.trading.pool', symbol=t.symbol) }}">Pool</a>
+
+                  <div class="flex items-center justify-between mb-4">
+                    <div>
+                      <div class="text-xs text-terminal-dim-green">Price</div>
+                      <div class="text-terminal-green font-bold text-lg">${{ '%.6f'|format((price_by_symbol.get(t.symbol) if price_by_symbol else None) or (t.price or 0)) }}</div>
+                    </div>
+                    <div>
+                      <div class="text-xs text-terminal-dim-green">24h Volume</div>
+                      <div class="text-terminal-green font-bold">${{ '%.0f'|format(t.volume_24h or 0) }}</div>
+                    </div>
+                  </div>
+
+                  <div class="flex gap-2">
+                    <a class="terminal-button terminal-button-buy flex-1 text-center hover:scale-105 transition-transform" href="{{ url_for('web.trading.pool', symbol=t.symbol) }}">
+                      🚀 Buy Now
+                    </a>
+                    <a class="terminal-button flex-1 text-center hover:scale-105 transition-transform" href="{{ url_for('web.tokens.token_detail', symbol=t.symbol) }}">
+                      📊 Chart
+                    </a>
                   </div>
                 </div>
               </div>
             {% else %}
-              <div class="text-center text-terminal-dim-green py-4">No gainers.</div>
+              <div class="text-center text-terminal-dim-green py-8">
+                <div class="text-4xl mb-3">🌙</div>
+                <div class="text-lg mb-2">No moon missions today</div>
+                <div class="text-sm">Check back for rockets launching!</div>
+              </div>
             {% endfor %}
           </div>
         </div>
       </div>
-      <div class="card bg-base-100 border border-terminal-green shadow-lg">
-        <div class="card-body">
-          <h3 class="text-lg font-bold text-terminal-green mb-4 flex items-center gap-2">
-            <span class="text-red-500">📉</span> Top Losers
-          </h3>
-          <div class="space-y-4">
-            {% for t in movers_losers %}
-              <div class="card bg-base-100 border border-terminal-green">
-                <div class="card-body p-4">
-                  <div class="flex items-center justify-between mb-2">
-                    <div class="badge badge-outline border-terminal-green text-terminal-green">{{ t.symbol }}</div>
-                    <div class="text-terminal-dim-green text-sm">{{ t.name }}</div>
-                  </div>
-                  <div class="flex justify-between items-center gap-4">
-                    <div>
-                      <div class="text-terminal-dim-green text-sm">Price</div>
-                      <div class="text-terminal-green font-bold">{{ '%.6f'|format((price_by_symbol.get(t.symbol) if price_by_symbol else None) or (t.price or 0)) }}</div>
+
+      <!-- Red Sea - Top Losers -->
+      <div class="terminal-card relative overflow-hidden border-2 border-terminal-red">
+        <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-red opacity-10 rounded-full blur-2xl animate-pulse"></div>
+        <div class="p-6 relative z-10">
+          <div class="flex items-center justify-between mb-6">
+            <h3 class="text-2xl font-bold text-terminal-green flex items-center gap-2">
+              <span class="text-red-500 animate-bounce">📉</span>
+              Red Sea
+            </h3>
+            <div class="terminal-badge terminal-badge-red animate-pulse">💎 BUY DIP</div>
+          </div>
+
+          <div class="space-y-4" id="losersContainer">
+            {% for t in movers_losers[:3] %}
+              <div class="terminal-card bg-terminal-black/50 hover:scale-105 transition-all duration-300 losers-item" data-change="{{ t.change_24h or 0 }}">
+                <div class="p-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                      <div class="text-3xl">💎</div>
+                      <div>
+                        <div class="terminal-badge terminal-badge-red text-sm font-bold">{{ t.symbol }}</div>
+                        <div class="text-xs text-terminal-dim-green">{{ t.name }}</div>
+                      </div>
                     </div>
                     <div class="text-right">
-                      <div class="text-terminal-dim-green text-sm">24h</div>
-                      <div class="text-red-500 font-bold">{{ '%.2f'|format(t.change_24h or 0) }}%</div>
+                      <div class="text-lg font-bold text-terminal-red animate-pulse">{{ '%.2f'|format(t.change_24h or 0) }}%</div>
+                      <div class="text-xs text-terminal-dim-green">24h change</div>
                     </div>
                   </div>
-                  <div class="card-actions justify-center gap-2 mt-4">
-                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.tokens.token_detail', symbol=t.symbol) }}">Details</a>
-                    <a class="terminal-button btn btn-outline btn-xs" href="{{ url_for('web.trading.pool', symbol=t.symbol) }}">Pool</a>
+
+                  <div class="flex items-center justify-between mb-4">
+                    <div>
+                      <div class="text-xs text-terminal-dim-green">Price</div>
+                      <div class="text-terminal-green font-bold text-lg">${{ '%.6f'|format((price_by_symbol.get(t.symbol) if price_by_symbol else None) or (t.price or 0)) }}</div>
+                    </div>
+                    <div>
+                      <div class="text-xs text-terminal-dim-green">24h Volume</div>
+                      <div class="text-terminal-green font-bold">${{ '%.0f'|format(t.volume_24h or 0) }}</div>
+                    </div>
+                  </div>
+
+                  <div class="flex gap-2">
+                    <a class="terminal-button terminal-button-sell flex-1 text-center hover:scale-105 transition-transform" href="{{ url_for('web.trading.pool', symbol=t.symbol) }}">
+                      💰 Buy Dip
+                    </a>
+                    <a class="terminal-button flex-1 text-center hover:scale-105 transition-transform" href="{{ url_for('web.tokens.token_detail', symbol=t.symbol) }}">
+                      📊 Chart
+                    </a>
                   </div>
                 </div>
               </div>
             {% else %}
-              <div class="text-center text-terminal-dim-green py-4">No losers.</div>
+              <div class="text-center text-terminal-dim-green py-8">
+                <div class="text-4xl mb-3">🌈</div>
+                <div class="text-lg mb-2">No drama today</div>
+                <div class="text-sm">All charts are green! Amazing!</div>
+              </div>
             {% endfor %}
           </div>
         </div>
@@ -344,39 +362,232 @@
   </section>
   {% endif %}
 
+  <!-- Top Tokens - Market Leaders -->
   <section class="mb-8">
-    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal flex items-center gap-2">
-      <span class="text-blue-500">💎</span> Top by Market Cap
-    </h2>
+    <div class="text-center mb-8">
+      <h2 class="text-3xl md:text-4xl font-bold text-terminal-green mb-4 flex items-center justify-center gap-3">
+        <span class="text-blue-500 animate-pulse">💎</span>
+        Elite Token League
+        <span class="text-yellow-500">👑</span>
+      </h2>
+      <p class="text-lg text-terminal-dim-green max-w-2xl mx-auto">Top tokens by market cap - The market leaders setting trends</p>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {% for token in tokens %}
-        <div class="card bg-base-100 border border-terminal-green shadow-lg hover:shadow-xl transition-shadow">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-4">
-              <div class="badge badge-outline border-terminal-green text-terminal-green">{{ token.symbol }}</div>
-              <div class="text-terminal-dim-green">{{ token.name }}</div>
+      {% for token in tokens[:6] %}
+        <div class="terminal-card hover:scale-105 transition-all duration-300 transform hover:shadow-[0_0_30px_rgba(0,255,0,0.4)] relative overflow-hidden">
+          <!-- Ranking Badge -->
+          <div class="absolute top-2 left-2 z-20">
+            {% if loop.index0 == 0 %}
+              <span class="text-2xl">🥇</span>
+            {% elif loop.index0 == 1 %}
+              <span class="text-2xl">🥈</span>
+            {% elif loop.index0 == 2 %}
+              <span class="text-2xl">🥉</span>
+            {% else %}
+              <span class="terminal-badge terminal-badge-green">#{{ loop.index0 + 1 }}</span>
+            {% endif %}
+          </div>
+
+          <!-- Animated background -->
+          <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-green opacity-5 rounded-full blur-2xl animate-pulse"></div>
+
+          <div class="p-6 relative z-10">
+            <div class="text-center mb-4">
+              {% if token.logo_url %}
+                <img src="{{ token.logo_url }}" alt="{{ token.symbol }}" class="w-16 h-16 object-cover rounded-lg mx-auto mb-3" />
+              {% else %}
+                <div class="avatar avatar-user w-16 h-16 mx-auto mb-3 text-2xl">{{ token.symbol[:2]|upper }}</div>
+              {% endif %}
+              <div class="terminal-badge terminal-badge-green text-lg font-bold mb-1">{{ token.symbol }}</div>
+              <div class="text-sm text-terminal-dim-green">{{ token.name }}</div>
             </div>
-            <div class="space-y-2 mb-4">
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Price:</span>
-                <span class="text-terminal-green font-bold">{{ '%.4f'|format((price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0)) }}</span>
+
+            <div class="space-y-3 mb-4">
+              <div class="flex justify-between items-center">
+                <span class="text-terminal-dim-green text-sm">Price:</span>
+                <div class="text-right">
+                  <div class="text-terminal-green font-bold">${{ '%.6f'|format((price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0)) }}</div>
+                  {% if token.change_24h and token.change_24h > 0 %}
+                    <div class="text-xs text-terminal-green animate-pulse">+{{ '%.2f'|format(token.change_24h or 0) }}% 📈</div>
+                  {% elif token.change_24h and token.change_24h < 0 %}
+                    <div class="text-xs text-terminal-red">{{ '%.2f'|format(token.change_24h or 0) }}% 📉</div>
+                  {% endif %}
+                </div>
               </div>
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">24h:</span>
-                <span class="text-terminal-green font-bold">{{ '%.2f'|format(token.change_24h or 0) }}%</span>
+
+              <div class="flex justify-between items-center">
+                <span class="text-terminal-dim-green text-sm">Market Cap:</span>
+                <div class="text-terminal-green font-bold text-lg">${{ '%.0f'|format(token.market_cap or 0) }}</div>
+              </div>
+
+              <div class="flex justify-between items-center">
+                <span class="text-terminal-dim-green text-sm">24h Volume:</span>
+                <div class="text-terminal-green font-bold">${{ '%.0f'|format(token.volume_24h or 0) }}</div>
               </div>
             </div>
-            <div class="pf-spark mb-4 h-16 bg-terminal-black border border-terminal-green rounded" data-symbol="{{ token.symbol }}" data-price="{{ (price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0) }}"></div>
-            <div class="card-actions justify-center gap-2">
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}">Details</a>
-              <a class="terminal-button btn btn-outline btn-sm" href="{{ url_for('web.trading.pool', symbol=token.symbol) }}">Pool</a>
-              <button class="terminal-button btn btn-outline btn-sm pf-watchlist-btn" data-symbol="{{ token.symbol }}" data-active="0">☆ Watch</button>
+
+            <!-- Mini Chart Placeholder -->
+            <div class="pf-spark mb-4 h-16 bg-terminal-black border-2 border-terminal-green rounded-lg relative overflow-hidden" data-symbol="{{ token.symbol }}" data-price="{{ (price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0) }}">
+              <div class="absolute inset-0 bg-gradient-to-r from-terminal-green/5 to-transparent animate-pulse"></div>
+            </div>
+
+            <div class="flex gap-2">
+              <a class="terminal-button terminal-button-buy flex-1 text-center hover:scale-105 transition-transform" href="{{ url_for('web.trading.pool', symbol=token.symbol) }}">
+                🚀 Trade
+              </a>
+              <a class="terminal-button flex-1 text-center hover:scale-105 transition-transform" href="{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}">
+                📊 Details
+              </a>
             </div>
           </div>
         </div>
       {% else %}
-        <div class="text-center text-terminal-dim-green py-8">No tokens yet.</div>
+        <div class="col-span-full text-center text-terminal-dim-green py-12">
+          <div class="text-6xl mb-4">🏗️</div>
+          <div class="text-xl mb-2">Building the future...</div>
+          <div class="text-sm">No elite tokens yet. Be the first to build an empire!</div>
+        </div>
       {% endfor %}
     </div>
   </section>
+
+  <!-- Community & Trust Indicators -->
+  <section class="mb-8">
+    <div class="text-center mb-8">
+      <h2 class="text-3xl md:text-4xl font-bold text-terminal-green mb-4">Join the Revolution</h2>
+      <p class="text-lg text-terminal-dim-green max-w-2xl mx-auto">Be part of the future of social finance</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+      <div class="terminal-card text-center hover:scale-105 transition-transform duration-300">
+        <div class="text-4xl mb-4">🔒</div>
+        <h3 class="text-xl font-bold text-terminal-green mb-3">Secure & Decentralized</h3>
+        <p class="text-terminal-dim-green text-sm">Built on blockchain technology with audited smart contracts</p>
+      </div>
+
+      <div class="terminal-card text-center hover:scale-105 transition-transform duration-300">
+        <div class="text-4xl mb-4">🌍</div>
+        <h3 class="text-xl font-bold text-terminal-green mb-3">Global Community</h3>
+        <p class="text-terminal-dim-green text-sm">Join thousands of creators and traders worldwide</p>
+      </div>
+
+      <div class="terminal-card text-center hover:scale-105 transition-transform duration-300">
+        <div class="text-4xl mb-4">⚡</div>
+        <h3 class="text-xl font-bold text-terminal-green mb-3">Instant Trading</h3>
+        <p class="text-terminal-dim-green text-sm">No waiting period - trade immediately after launch</p>
+      </div>
+    </div>
+
+    <!-- Final CTA -->
+    <div class="text-center mt-12">
+      <div class="terminal-card inline-block p-8 max-w-2xl">
+        <h3 class="text-2xl font-bold text-terminal-green mb-4">Ready to Create Your Token?</h3>
+        <p class="text-terminal-dim-green mb-6">Join thousands of creators turning their content into valuable digital assets</p>
+        {% if current_user %}
+          <a class="terminal-button terminal-button-buy px-8 py-3 text-lg font-bold hover:scale-105 transition-transform" href="{{ url_for('web.tokens.launchpad') }}">
+            🚀 Start Creating Now
+          </a>
+        {% else %}
+          <button class="terminal-button px-8 py-3 text-lg font-bold hover:scale-105 transition-transform" onclick="pfNostrLogin()">
+            🔑 Login to Get Started
+          </button>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+  <!-- Enhanced JavaScript -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Enhanced input handling with Enter key support
+      window.handleTokenizeInput = function(event) {
+        if (event.key === 'Enter') {
+          handleTokenizeSubmit();
+        }
+      };
+
+      window.handleTokenizeSubmit = function() {
+        const input = document.getElementById('pf-tokenize-input');
+        const url = input.value.trim();
+        if (url) {
+          if ({{ 'true' if current_user else 'false' }}) {
+            window.location.href = '{{ url_for('web.tokens.launchpad') }}?url=' + encodeURIComponent(url);
+          } else {
+            pfNostrLogin();
+          }
+        }
+      };
+
+      // Enhanced animations for movers & shakers
+      const animateMovers = () => {
+        // Gainers animations
+        const gainers = document.querySelectorAll('.gainers-item');
+        gainers.forEach((item, index) => {
+          const change = parseFloat(item.dataset.change) || 0;
+          const delay = index * 200;
+
+          setTimeout(() => {
+            item.style.transform = `scale(1.02)`;
+            item.style.boxShadow = '0 0 20px rgba(0, 255, 0, 0.3)';
+            setTimeout(() => {
+              item.style.transform = `scale(1)`;
+              item.style.boxShadow = '';
+            }, 300);
+          }, delay);
+        });
+
+        // Losers animations
+        const losers = document.querySelectorAll('.losers-item');
+        losers.forEach((item, index) => {
+          const change = parseFloat(item.dataset.change) || 0;
+          const delay = index * 200;
+
+          setTimeout(() => {
+            item.style.opacity = '0.8';
+            item.style.boxShadow = '0 0 20px rgba(255, 0, 0, 0.3)';
+            setTimeout(() => {
+              item.style.opacity = '1';
+              item.style.boxShadow = '';
+            }, 300);
+          }, delay);
+        });
+      };
+
+      // Start animations
+      animateMovers();
+      setInterval(animateMovers, 8000);
+
+      // Enhanced hover effects
+      const cards = document.querySelectorAll('.terminal-card');
+      cards.forEach(card => {
+        card.addEventListener('mouseenter', function() {
+          this.style.transform = 'scale(1.02)';
+        });
+
+        card.addEventListener('mouseleave', function() {
+          this.style.transform = '';
+        });
+      });
+
+      // Ticker animation
+      const ticker = document.getElementById('pf-ticker-track');
+      if (ticker) {
+        let position = 0;
+        const speed = 1;
+
+        const animateTicker = () => {
+          position -= speed;
+          ticker.style.transform = `translateX(${position}px)`;
+
+          if (position <= -ticker.scrollWidth / 2) {
+            position = 0;
+          }
+
+          requestAnimationFrame(animateTicker);
+        };
+
+        animateTicker();
+      }
+    });
+  </script>
 {% endblock %}
