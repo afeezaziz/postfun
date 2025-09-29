@@ -92,7 +92,7 @@
             </div>
             <div>
               <label class="block text-terminal-dim-green text-sm mb-1">Followers</label>
-              <div class="text-terminal-green font-terminal">{{ user.twitter_connection.twitter_user.followers_count | number_format if user.twitter_connection.twitter_user.followers_count else '0' }}</div>
+              <div class="text-terminal-green font-terminal">{{ "{:,}".format(user.twitter_connection.twitter_user.followers_count) if user.twitter_connection.twitter_user.followers_count else '0' }}</div>
             </div>
             <div class="flex items-center justify-between mt-4">
               <div class="text-sm text-terminal-dim-green">
