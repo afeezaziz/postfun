@@ -573,6 +573,7 @@ def get_twitter_oauth():
     if not TWITTER_CLIENT_ID:
         TWITTER_CLIENT_ID = current_app.config.get('TWITTER_CLIENT_ID')
         TWITTER_CLIENT_SECRET = current_app.config.get('TWITTER_CLIENT_SECRET')
+        current_app.logger.info(f"Twitter credentials loaded - Client ID: {TWITTER_CLIENT_ID[:10]}...")
 
     if not TWITTER_CLIENT_ID or not TWITTER_CLIENT_SECRET:
         raise ValueError("Twitter OAuth2 credentials not configured")
@@ -692,10 +693,14 @@ def twitter_callback():
 
         token_response = requests.post(TWITTER_TOKEN_URL, data=token_data)
         if token_response.status_code != 200:
+            current_app.logger.error(f"Token exchange failed: {token_response.status_code}")
+            current_app.logger.error(f"Response: {token_response.text}")
+            current_app.logger.error(f"Token data sent: {token_data}")
             flash("Failed to exchange authorization code", "error")
             return redirect(url_for("web.users.user_profile"))
 
         token = token_response.json()
+        current_app.logger.info(f"Token exchange successful: {list(token.keys())}")
 
         # Get user information from Twitter API
         headers = {
