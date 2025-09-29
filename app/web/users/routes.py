@@ -565,7 +565,7 @@ def generate_pkce_codes():
     return code_verifier, code_challenge
 
 
-def get_twitter_oauth(code_verifier=None):
+def get_twitter_oauth():
     """Initialize Twitter OAuth2 session"""
     global TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET
 
@@ -581,26 +581,11 @@ def get_twitter_oauth(code_verifier=None):
     if not current_app.debug and not redirect_uri.startswith('https://'):
         redirect_uri = redirect_uri.replace('http://', 'https://', 1)
 
-    # For authorization request, include PKCE code challenge
-    if code_verifier is None:
-        code_verifier, code_challenge = generate_pkce_codes()
-        session['twitter_code_verifier'] = code_verifier
-
-        return OAuth2Session(
-            client_id=TWITTER_CLIENT_ID,
-            scope=TWITTER_SCOPES,
-            redirect_uri=redirect_uri,
-            code_challenge=code_challenge,
-            code_challenge_method="S256"
-        )
-    else:
-        # For token request, include code verifier
-        return OAuth2Session(
-            client_id=TWITTER_CLIENT_ID,
-            scope=TWITTER_SCOPES,
-            redirect_uri=redirect_uri,
-            code_verifier=code_verifier
-        )
+    return OAuth2Session(
+        client_id=TWITTER_CLIENT_ID,
+        scope=TWITTER_SCOPES,
+        redirect_uri=redirect_uri
+    )
 
 
 # Twitter OAuth2 authentication routes
@@ -621,14 +606,30 @@ def twitter_auth():
         return redirect(url_for("web.users.user_profile"))
 
     try:
-        twitter = get_twitter_oauth()
-        authorization_url, state = twitter.authorization_url(TWITTER_AUTH_URL)
+        # Generate PKCE codes
+        code_verifier, code_challenge = generate_pkce_codes()
+        session['twitter_code_verifier'] = code_verifier
 
-        # Store state and PKCE verifier in session for security
-        session['twitter_oauth_state'] = state
+        twitter = get_twitter_oauth()
+
+        # Manually build authorization URL with PKCE parameters
+        params = {
+            'response_type': 'code',
+            'client_id': TWITTER_CLIENT_ID,
+            'redirect_uri': twitter.redirect_uri,
+            'scope': ' '.join(TWITTER_SCOPES),
+            'state': secrets.token_urlsafe(16),
+            'code_challenge': code_challenge,
+            'code_challenge_method': 'S256'
+        }
+
+        # Store state in session for security
+        session['twitter_oauth_state'] = params['state']
         session['twitter_user_id'] = user.id
 
-        return redirect(authorization_url)
+        # Build authorization URL
+        auth_url = f"{TWITTER_AUTH_URL}?{urllib.parse.urlencode(params)}"
+        return redirect(auth_url)
 
     except Exception as e:
         current_app.logger.error(f"Twitter OAuth2 error: {str(e)}")
@@ -675,25 +676,42 @@ def twitter_callback():
             flash("Invalid OAuth2 session", "error")
             return redirect(url_for("web.users.user_profile"))
 
+        # Create OAuth2 session for token exchange
+        twitter = get_twitter_oauth()
+
         # Exchange authorization code for access token with PKCE
-        twitter = get_twitter_oauth(code_verifier=code_verifier)
-        token = twitter.fetch_token(
-            TWITTER_TOKEN_URL,
-            client_secret=current_app.config.get('TWITTER_CLIENT_SECRET'),
-            code=code
-        )
+        token_data = {
+            'grant_type': 'authorization_code',
+            'code': code,
+            'redirect_uri': twitter.redirect_uri,
+            'code_verifier': code_verifier,
+            'client_id': TWITTER_CLIENT_ID,
+            'client_secret': current_app.config.get('TWITTER_CLIENT_SECRET')
+        }
+
+        token_response = requests.post(TWITTER_TOKEN_URL, data=token_data)
+        if token_response.status_code != 200:
+            flash("Failed to exchange authorization code", "error")
+            return redirect(url_for("web.users.user_profile"))
+
+        token = token_response.json()
 
         # Get user information from Twitter API
-        response = twitter.get(
+        headers = {
+            'Authorization': f'Bearer {token["access_token"]}',
+            'Content-Type': 'application/json'
+        }
+        user_response = requests.get(
             "https://api.twitter.com/2/users/me",
+            headers=headers,
             params={"user.fields": "public_metrics,profile_image_url,verified,description"}
         )
 
-        if response.status_code != 200:
+        if user_response.status_code != 200:
             flash("Failed to fetch Twitter user information", "error")
             return redirect(url_for("web.users.user_profile"))
 
-        twitter_user_data = response.json().get('data', {})
+        twitter_user_data = user_response.json().get('data', {})
         twitter_user_id = twitter_user_data.get('id')
         username = twitter_user_data.get('username')
         display_name = twitter_user_data.get('name', username)
