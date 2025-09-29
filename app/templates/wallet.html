@@ -1,214 +1,144 @@
 {% extends 'base.html' %}
 {% block title %}Wallet | Postfun{% endblock %}
 {% block content %}
-  <!-- Header Section -->
-  <section class="hero bg-base-100 border border-terminal-green p-8 rounded-lg shadow-lg mb-8">
-    <div class="hero-content text-center">
-      <div class="max-w-4xl">
-        <h1 class="text-4xl md:text-5xl font-bold text-terminal-green mb-4 font-terminal">⚡ Lightning Wallet</h1>
-        <p class="text-lg text-terminal-dim-green mb-6">{{ user.display_name or user.npub[:16] }}...{{ user.npub[-4:] }}</p>
-
-        <div class="flex flex-col sm:flex-row gap-6 justify-center items-center mb-6">
-          <div class="text-center">
-            <div class="text-terminal-dim-green text-sm uppercase tracking-widest mb-2">Total Transactions</div>
-            <div class="text-terminal-green text-3xl font-bold">{{ lightning_invoices|length + lightning_withdrawals|length }}</div>
-          </div>
-          <div class="text-center">
-            <div class="text-terminal-dim-green text-sm uppercase tracking-widest mb-2">Invoices</div>
-            <div class="text-terminal-green text-3xl font-bold">{{ lightning_invoices|length }}</div>
-          </div>
-          <div class="text-center">
-            <div class="text-terminal-dim-green text-sm uppercase tracking-widest mb-2">Withdrawals</div>
-            <div class="text-terminal-green text-3xl font-bold">{{ lightning_withdrawals|length }}</div>
-          </div>
-        </div>
-
-        <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
-          <button class="terminal-button btn btn-outline" onclick="openReceiveModal()">
-            <span class="mr-2">⚡</span> Receive Lightning
-          </button>
-          <button class="terminal-button btn btn-outline" onclick="openSendModal()">
-            <span class="mr-2">📤</span> Send Lightning
-          </button>
-        </div>
+  <section class="card">
+    <!-- Summary Section -->
+    <div class="stats shadow">
+      <div class="stat place-items-center">
+        <div class="stat-title">Total Transactions</div>
+        <div class="stat-value">{{ lightning_invoices|length + lightning_withdrawals|length }}</div>
+        <div class="stat-desc">All transactions</div>
+      </div>
+      <div class="stat place-items-center">
+        <div class="stat-title">Invoices</div>
+        <div class="stat-value">{{ lightning_invoices|length }}</div>
+        <div class="stat-desc">Created</div>
+      </div>
+      <div class="stat place-items-center">
+        <div class="stat-title">Withdrawals</div>
+        <div class="stat-value">{{ lightning_withdrawals|length }}</div>
+        <div class="stat-desc">Sent</div>
+      </div>
+      <div class="stat place-items-center">
+        <div class="stat-title">Balance</div>
+        <div class="stat-value">{{ "{:,}".format((lightning_invoices|selectattr('status', 'equalto', 'paid')|sum(attribute='amount_sats') or 0) - (lightning_withdrawals|selectattr('status', 'equalto', 'confirmed')|sum(attribute='amount_sats') or 0)) }}</div>
+        <div class="stat-desc">Sats</div>
       </div>
     </div>
-  </section>
 
-  <!-- Lightning Activity Section -->
-  <section class="mb-8">
-    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal flex items-center gap-2">
-      <span class="text-yellow-500">⚡</span> Lightning Activity
-      <span class="badge badge-outline border-terminal-green text-terminal-green ml-2">{{ lightning_invoices|length + lightning_withdrawals|length }}</span>
-    </h2>
+    <!-- Quick Actions -->
+    <div class="flex justify-center gap-6 my-8">
+      <button class="btn btn-lg btn-primary shadow-lg" onclick="openReceiveModal()">
+        <span class="mr-2">⚡</span> Receive Lightning
+      </button>
+      <button class="btn btn-lg btn-secondary shadow-lg" onclick="openSendModal()">
+        <span class="mr-2">📤</span> Send Lightning
+      </button>
+    </div>
 
+    <!-- Lightning Transactions Table -->
     {% if lightning_invoices or lightning_withdrawals %}
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- Recent Invoices -->
-        <div class="card bg-base-100 border border-terminal-green shadow-lg">
-          <div class="card-body">
-            <h3 class="text-lg font-bold text-terminal-green mb-4 flex items-center gap-2">
-              <span class="text-green-500">📥</span> Recent Invoices
-            </h3>
-            <div class="space-y-3">
-              {% for invoice in lightning_invoices[:8] %}
-                <div class="card bg-base-100 border border-terminal-green">
-                  <div class="card-body p-4">
-                    <div class="flex justify-between items-start mb-2">
-                      <div class="flex items-center gap-3">
-                        <span class="badge badge-outline border-terminal-green text-terminal-green">{{ invoice.status }}</span>
-                        <span class="text-terminal-green font-bold">+{{ invoice.amount_sats }} sats</span>
-                      </div>
-                      <span class="text-terminal-dim-green text-sm">{{ invoice.created_at.strftime('%m/%d %H:%M') }}</span>
-                    </div>
-                    {% if invoice.memo %}
-                      <div class="text-terminal-dim-green text-sm mb-2">{{ invoice.memo }}</div>
-                    {% endif %}
-                    <div class="pf-monospace text-sm mb-3">{{ invoice.payment_hash[:20] }}...</div>
-                    {% if invoice.status == 'pending' %}
-                      <div class="flex gap-2">
-                        <button class="terminal-button btn btn-outline btn-xs" onclick="copyInvoice('{{ invoice.payment_request }}')">Copy</button>
-                        <button class="terminal-button btn btn-outline btn-xs" onclick="showQR('{{ invoice.payment_request }}')">QR</button>
-                      </div>
-                    {% endif %}
-                  </div>
-                </div>
-              {% else %}
-                <div class="text-center text-terminal-dim-green py-4">No invoices yet.</div>
-              {% endfor %}
-            </div>
-          </div>
+      <div class="overflow-x-auto">
+        <div class="flex justify-between items-center mb-4 px-4 py-2 bg-base-200 rounded-lg">
+          <span class="text-sm">Lightning Transactions</span>
+          <span class="text-sm">{{ lightning_invoices|length + lightning_withdrawals|length }} total</span>
         </div>
 
-        <!-- Recent Withdrawals -->
-        <div class="card bg-base-100 border border-terminal-green shadow-lg">
-          <div class="card-body">
-            <h3 class="text-lg font-bold text-terminal-green mb-4 flex items-center gap-2">
-              <span class="text-red-500">📤</span> Recent Withdrawals
-            </h3>
-            <div class="space-y-3">
-              {% for withdrawal in lightning_withdrawals[:8] %}
-                <div class="card bg-base-100 border border-terminal-green">
-                  <div class="card-body p-4">
-                    <div class="flex justify-between items-start mb-2">
-                      <div class="flex items-center gap-3">
-                        <span class="badge badge-outline border-terminal-green text-terminal-green">{{ withdrawal.status }}</span>
-                        <span class="text-terminal-red font-bold">-{{ withdrawal.amount_sats }} sats</span>
-                      </div>
-                      <span class="text-terminal-dim-green text-sm">{{ withdrawal.created_at.strftime('%m/%d %H:%M') }}</span>
-                    </div>
-                    {% if withdrawal.fee_sats %}
-                      <div class="text-terminal-dim-green text-sm mb-2">Fee: {{ withdrawal.fee_sats }} sats</div>
-                    {% endif %}
-                    {% if withdrawal.payment_hash %}
-                      <div class="pf-monospace text-sm">{{ withdrawal.payment_hash[:20] }}...</div>
+        <table class="table table-xs">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Amount (sats)</th>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Invoices -->
+            {% for invoice in lightning_invoices %}
+              <tr>
+                <td>
+                  <span class="badge badge-success">Invoice</span>
+                </td>
+                <td>
+                  <span class="badge badge-{{ 'success' if invoice.status == 'paid' else 'warning' if invoice.status == 'pending' else 'error' }}">
+                    {{ invoice.status|title }}
+                  </span>
+                </td>
+                <td class="font-bold text-green-600">+{{ invoice.amount_sats }}</td>
+                <td>{{ invoice.created_at.strftime('%Y-%m-%d %H:%M') if invoice.created_at.__class__.__name__ == 'datetime' else invoice.created_at }}</td>
+                <td>
+                  {% if invoice.memo %}
+                    {{ invoice.memo }}
+                  {% else %}
+                    <span class="text-gray-400">No description</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="flex gap-1">
+                    {% if invoice.status == 'pending' %}
+                      <button class="btn btn-xs" onclick="copyInvoice('{{ invoice.payment_request }}')" title="Copy Invoice">
+                        📋
+                      </button>
                     {% endif %}
                   </div>
-                </div>
-              {% else %}
-                <div class="text-center text-terminal-dim-green py-4">No withdrawals yet.</div>
-              {% endfor %}
-            </div>
-          </div>
-        </div>
+                </td>
+              </tr>
+            {% endfor %}
+
+            <!-- Withdrawals -->
+            {% for withdrawal in lightning_withdrawals %}
+              <tr>
+                <td>
+                  <span class="badge badge-error">Withdrawal</span>
+                </td>
+                <td>
+                  <span class="badge badge-{{ 'success' if withdrawal.status == 'confirmed' else 'warning' if withdrawal.status == 'pending' else 'error' }}">
+                    {{ withdrawal.status|title }}
+                  </span>
+                </td>
+                <td class="font-bold text-red-600">-{{ withdrawal.amount_sats }}</td>
+                <td>{{ withdrawal.created_at.strftime('%Y-%m-%d %H:%M') if withdrawal.created_at.__class__.__name__ == 'datetime' else withdrawal.created_at }}</td>
+                <td>
+                  {% if withdrawal.fee_sats %}
+                    Fee: {{ withdrawal.fee_sats }} sats
+                  {% else %}
+                    <span class="text-gray-400">Lightning payment</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="flex gap-1">
+                    <!-- No actions for withdrawals -->
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Amount (sats)</th>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Actions</th>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     {% else %}
-      <div class="card bg-base-100 border border-terminal-green shadow-lg">
+      <div class="card bg-base-200">
         <div class="card-body text-center">
           <div class="text-6xl mb-4">⚡</div>
-          <h3 class="text-xl font-bold text-terminal-green mb-2">No Lightning Activity Yet</h3>
-          <p class="text-terminal-dim-green mb-6">Start by receiving your first lightning payment</p>
-          <button class="terminal-button btn btn-outline" onclick="openReceiveModal()">Receive Lightning</button>
+          <h3 class="text-xl font-bold mb-2">No Lightning Activity Yet</h3>
+          <p class="text-gray-600 mb-6">Start by receiving your first lightning payment</p>
+          <button class="btn btn-primary" onclick="openReceiveModal()">Receive Lightning</button>
         </div>
       </div>
     {% endif %}
   </section>
-
-  <!-- Detailed Lightning History Section -->
-  {% if lightning_invoices or lightning_withdrawals %}
-  <section class="mb-8">
-    <h2 class="text-2xl font-bold text-terminal-green mb-6 font-terminal flex items-center gap-2">
-      <span class="text-yellow-500">📋</span> Transaction History
-      <span class="badge badge-outline border-terminal-green text-terminal-green">{{ lightning_invoices|length + lightning_withdrawals|length }}</span>
-    </h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {% for invoice in lightning_invoices %}
-        <div class="card bg-base-100 border border-terminal-green shadow-lg hover:shadow-xl transition-shadow">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-4">
-              <div class="badge badge-outline border-terminal-green text-terminal-green">{{ invoice.status }}</div>
-              <div class="text-terminal-green font-bold text-lg">+{{ invoice.amount_sats }} sats</div>
-            </div>
-            <div class="space-y-2 mb-4">
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Type:</span>
-                <span class="text-terminal-green font-bold">Invoice</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Hash:</span>
-                <span class="text-terminal-green font-mono text-xs">{{ invoice.payment_hash[:16] }}...</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Date:</span>
-                <span class="text-terminal-green">{{ invoice.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
-              </div>
-            </div>
-            {% if invoice.memo %}
-              <div class="mb-4">
-                <div class="text-terminal-dim-green text-sm mb-1">Memo:</div>
-                <div class="text-terminal-green">{{ invoice.memo }}</div>
-              </div>
-            {% endif %}
-            <div class="card-actions justify-center gap-2">
-              {% if invoice.status == 'pending' %}
-                <button class="terminal-button btn btn-outline btn-xs" onclick="copyInvoice('{{ invoice.payment_request }}')">Copy</button>
-                <button class="terminal-button btn btn-outline btn-xs" onclick="showQR('{{ invoice.payment_request }}')">QR</button>
-              {% endif %}
-              <button class="terminal-button btn btn-outline btn-xs" onclick="copyPaymentHash('{{ invoice.payment_hash }}')">Hash</button>
-            </div>
-          </div>
-        </div>
-      {% endfor %}
-
-      {% for withdrawal in lightning_withdrawals %}
-        <div class="card bg-base-100 border border-terminal-green shadow-lg hover:shadow-xl transition-shadow">
-          <div class="card-body">
-            <div class="flex items-center justify-between mb-4">
-              <div class="badge badge-outline border-terminal-green text-terminal-green">{{ withdrawal.status }}</div>
-              <div class="text-terminal-red font-bold text-lg">-{{ withdrawal.amount_sats }} sats</div>
-            </div>
-            <div class="space-y-2 mb-4">
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Type:</span>
-                <span class="text-terminal-green font-bold">Withdrawal</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Hash:</span>
-                <span class="text-terminal-green font-mono text-xs">{{ withdrawal.payment_hash[:16] }}...</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-terminal-dim-green">Date:</span>
-                <span class="text-terminal-green">{{ withdrawal.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
-              </div>
-            </div>
-            {% if withdrawal.fee_sats %}
-              <div class="mb-4">
-                <div class="text-terminal-dim-green text-sm mb-1">Fee:</div>
-                <div class="text-terminal-red">{{ withdrawal.fee_sats }} sats</div>
-              </div>
-            {% endif %}
-            <div class="card-actions justify-center gap-2">
-              <button class="terminal-button btn btn-outline btn-xs" onclick="copyPaymentHash('{{ withdrawal.payment_hash }}')">Hash</button>
-              {% if withdrawal.status == 'pending' %}
-                <button class="terminal-button btn btn-outline btn-xs text-red-500" onclick="cancelWithdrawal('{{ withdrawal.id }}')">Cancel</button>
-              {% endif %}
-            </div>
-          </div>
-        </div>
-      {% endfor %}
-    </div>
-  </section>
-  {% endif %}
 
 
   <!-- Receive Lightning Modal -->
@@ -225,21 +155,21 @@
           <label class="label">
             <span class="label-text text-terminal-green">Amount (sats):</span>
           </label>
-          <input type="number" id="receiveAmount" name="amount" min="100" required
-                 class="terminal-input input-bordered w-full" />
+          <input type="number" id="receiveAmount" name="amount" min="100" max="1000000" required
+                 class="terminal-input input-bordered w-full" placeholder="Minimum: 100 sats" />
+          <div id="amountError" class="text-terminal-red text-sm mt-1 hidden"></div>
+          <div class="text-terminal-dim-green text-xs mt-1">Recommended: 1,000 - 100,000 sats</div>
         </div>
         <div class="form-control mb-6">
           <label class="label">
             <span class="label-text text-terminal-green">Memo (optional):</span>
           </label>
           <input type="text" id="receiveMemo" name="memo" maxlength="255"
-                 class="terminal-input input-bordered w-full" />
+                 class="terminal-input input-bordered w-full" placeholder="Add a note..." />
         </div>
         <div class="modal-action">
-          <button type="submit" class="terminal-button">Create Invoice</button>
-          <form method="dialog">
-            <button class="terminal-button">Cancel</button>
-          </form>
+          <button type="submit" class="terminal-button" id="createInvoiceBtn">Create Invoice</button>
+          <button type="button" class="terminal-button" onclick="closeReceiveModal()">Cancel</button>
         </div>
       </form>
       <div id="invoiceResult" class="hidden">
@@ -283,6 +213,8 @@
           <textarea id="sendInvoice" name="invoice" rows="3" required
                     placeholder="lnbc..."
                     class="terminal-input input-bordered w-full font-terminal"></textarea>
+          <div id="invoiceError" class="text-terminal-red text-sm mt-1 hidden"></div>
+          <div class="text-terminal-dim-green text-xs mt-1">Paste a lightning invoice starting with 'lnbc'</div>
         </div>
         <div class="form-control mb-6">
           <label class="label">
@@ -290,12 +222,11 @@
           </label>
           <input type="number" id="sendAmount" name="amount" readonly
                  class="terminal-input input-bordered w-full" />
+          <div id="amountDisplay" class="text-terminal-dim-green text-xs mt-1">Amount will be extracted from invoice</div>
         </div>
         <div class="modal-action">
-          <button type="submit" class="terminal-button">Send Payment</button>
-          <form method="dialog">
-            <button class="terminal-button">Cancel</button>
-          </form>
+          <button type="submit" class="terminal-button" id="sendPaymentBtn">Send Payment</button>
+          <button type="button" class="terminal-button" onclick="closeSendModal()">Cancel</button>
         </div>
       </form>
       <div id="sendResult" class="hidden terminal-card border-terminal-green p-4 mt-4 text-center">
@@ -695,7 +626,9 @@
 
     function copyInvoice(invoice) {
       navigator.clipboard.writeText(invoice).then(() => {
-        alert('Invoice copied to clipboard!');
+        showNotification('Invoice copied to clipboard!', 'success');
+      }).catch(() => {
+        showNotification('Failed to copy invoice', 'error');
       });
     }
 
@@ -709,54 +642,337 @@
       document.getElementById('qrModal').showModal();
     }
 
+    function validateAmount(amount) {
+      const amountNum = parseInt(amount);
+      if (isNaN(amountNum) || amountNum < 100) {
+        return { valid: false, error: 'Minimum amount is 100 sats' };
+      }
+      if (amountNum > 1000000) {
+        return { valid: false, error: 'Maximum amount is 1,000,000 sats' };
+      }
+      return { valid: true };
+    }
+
+    function validateInvoice(invoice) {
+      if (!invoice || typeof invoice !== 'string') {
+        return { valid: false, error: 'Invoice is required' };
+      }
+      if (!invoice.startsWith('lnbc')) {
+        return { valid: false, error: 'Invoice must start with lnbc' };
+      }
+      if (invoice.length < 100) {
+        return { valid: false, error: 'Invoice appears to be too short' };
+      }
+      return { valid: true };
+    }
+
+    function showError(elementId, message) {
+      const errorElement = document.getElementById(elementId);
+      errorElement.textContent = message;
+      errorElement.classList.remove('hidden');
+    }
+
+    function hideError(elementId) {
+      const errorElement = document.getElementById(elementId);
+      errorElement.classList.add('hidden');
+    }
+
+    function setLoading(buttonId, isLoading) {
+      const button = document.getElementById(buttonId);
+      if (isLoading) {
+        button.disabled = true;
+        button.textContent = 'Processing...';
+      } else {
+        button.disabled = false;
+        button.textContent = buttonId === 'createInvoiceBtn' ? 'Create Invoice' : 'Send Payment';
+      }
+    }
+
+    // Helper function to create and sign Nostr event for authentication
+    async function createNostrAuthEvent() {
+      try {
+        console.log('Creating Nostr auth event...');
+
+        // Check for Nostr provider (supports both standard Nostr and OKX wallet)
+        let nostrProvider = null;
+
+        console.log('Checking for window.nostr:', !!window.nostr);
+        console.log('Checking for window.okxwallet:', !!window.okxwallet);
+        console.log('Checking for window.okxwallet.nostr:', !!window.okxwallet?.nostr);
+
+        if (window.nostr && window.nostr.getPublicKey && window.nostr.signEvent) {
+          nostrProvider = window.nostr;
+          console.log('Using standard Nostr provider');
+        } else if (window.okxwallet && window.okxwallet.nostr && window.okxwallet.nostr.getPublicKey && window.okxwallet.nostr.signEvent) {
+          nostrProvider = window.okxwallet.nostr;
+          console.log('Using OKX wallet Nostr provider');
+        } else {
+          console.error('Nostr provider not found');
+          throw new Error('Nostr provider not available. Please connect a Nostr wallet like Alby, nos2x, or OKX wallet.');
+        }
+
+        console.log('Getting public key from Nostr provider...');
+        const pubkey = await nostrProvider.getPublicKey();
+        console.log('Got pubkey:', pubkey);
+
+        const content = JSON.stringify({
+          action: 'lightning_invoice',
+          domain: 'postfun',
+          exp: Math.floor(Date.now() / 1000) + 300  // 5 minutes expiration
+        });
+
+        const event = {
+          kind: 27235,  // NIP-42 authentication
+          content,
+          tags: [],
+          created_at: Math.floor(Date.now() / 1000),
+          pubkey
+        };
+
+        console.log('Created Nostr event, signing...');
+        const signed = await nostrProvider.signEvent(event);
+        console.log('Event signed successfully');
+
+        // Base64 encode the signed event
+        const eventJson = JSON.stringify(signed);
+        const eventBase64 = btoa(eventJson);
+        console.log('Base64 encoded event length:', eventBase64.length);
+
+        return eventBase64;
+      } catch (error) {
+        console.error('Error creating Nostr auth event:', error);
+        return null;
+      }
+    }
+
     async function createInvoice(event) {
       event.preventDefault();
       const formData = new FormData(event.target);
+      const amount = formData.get('amount');
+      const memo = formData.get('memo') || '';
+
+      // Validate amount
+      hideError('amountError');
+      const validation = validateAmount(amount);
+      if (!validation.valid) {
+        showError('amountError', validation.error);
+        return;
+      }
+
+      setLoading('createInvoiceBtn', true);
 
       try {
+        // Create Nostr authentication event
+        const nostrAuth = await createNostrAuthEvent();
+        if (!nostrAuth) {
+          showError('amountError', 'Nostr authentication failed. Please ensure your Nostr wallet is connected.');
+          return;
+        }
+
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Nostr ${nostrAuth}`
+        };
+
+        console.log('Creating invoice with Nostr authentication...');
         const response = await fetch('/api/lightning/invoice', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify({
-            amount: parseInt(formData.get('amount')),
-            memo: formData.get('memo') || ''
+            amount: parseInt(amount),
+            memo: memo
           })
         });
 
         const result = await response.json();
 
-        if (response.ok) {
-          document.getElementById('invoiceText').value = result.payment_request;
-          document.getElementById('invoiceResult').classList.remove('hidden');
+        console.log('Create invoice response status:', response.status);
+        console.log('Create invoice response body:', result);
 
-          // Show QR code
-          document.getElementById('invoiceQR').innerHTML =
-            `<div class="text-center p-4">
-              <div class="font-terminal text-xs break-all p-2 border border-terminal-green bg-terminal-black">${result.payment_request}</div>
-              <p class="text-terminal-dim-green mt-2 text-sm">Invoice text (scan with a QR code reader)</p>
-            </div>`;
+        if (response.ok) {
+          // Show success notification and refresh page
+          showNotification('Invoice created successfully!', 'success');
+          setTimeout(() => {
+            location.reload();
+          }, 1500);
         } else {
-          alert('Error creating invoice: ' + result.error);
+          showError('amountError', result.error || 'Failed to create invoice');
         }
       } catch (error) {
-        alert('Error creating invoice: ' + error.message);
+        showError('amountError', 'Network error: ' + error.message);
+      } finally {
+        setLoading('createInvoiceBtn', false);
       }
     }
+
+    // Improved invoice decoder to extract amount, description (memo), expiry, and payee pubkey
+    function decodeInvoice(invoice) {
+      try {
+        if (!invoice || !invoice.startsWith('lnbc')) {
+          return null;
+        }
+
+        // Extract amount from bech32 string
+        let amount = null;
+        let amountMultiplier = 1;
+
+        // Extract amount part after lnbc
+        const amountMatch = invoice.match(/^lnbc([0-9]+)([munp]?)1/);
+        if (amountMatch) {
+          amount = parseInt(amountMatch[1]);
+          const multiplier = amountMatch[2];
+
+          // Handle multipliers correctly (m = milli, u = micro, n = nano, p = pico)
+          switch (multiplier) {
+            case 'm': amountMultiplier = 0.001; break;
+            case 'u': amountMultiplier = 0.000001; break;
+            case 'n': amountMultiplier = 0.000000001; break;
+            case 'p': amountMultiplier = 0.000000000001; break;
+            default: amountMultiplier = 1;
+          }
+
+          amount = Math.round(amount * amountMultiplier * 100000000); // Convert to sats
+        }
+
+        // Extract description (memo) from lightning invoice
+        // Lightning invoices use 'd' field for description/description_hash
+        let description = 'Lightning payment';
+
+        // Look for description field pattern (simplified approach)
+        // In real lightning invoices, description is encoded in the bech32 string
+        const descMatch = invoice.match(/[^\d]+[a-z]/);
+        if (descMatch) {
+          try {
+            // Try to extract readable text from the human-readable part
+            const hrp = invoice.split('1')[0]; // Human-readable part
+            if (hrp.length > 4) {
+              const potentialDesc = hrp.substring(4).replace(/[0-9]/g, '');
+              if (potentialDesc.length > 0) {
+                description = potentialDesc;
+              }
+            }
+          } catch (e) {
+            console.log('Could not parse description from invoice');
+          }
+        }
+
+        // Extract expiry (typically 3600 seconds = 1 hour by default)
+        let expiry = 3600; // Default 1 hour
+
+        // Look for expiry patterns in the data part
+        const dataPart = invoice.split('1')[1] || '';
+        const expiryPatterns = dataPart.match(/\d+/g);
+        if (expiryPatterns && expiryPatterns.length > 1) {
+          // The second number might be expiry
+          const potentialExpiry = parseInt(expiryPatterns[1]);
+          if (potentialExpiry > 0 && potentialExpiry < 1000000) {
+            expiry = potentialExpiry;
+          }
+        }
+
+        // Extract payee pubkey (simplified - would require proper bech32 decoding)
+        let payeePubkey = '';
+        const dataParts = dataPart.match(/[02-9ac-hj-np-z]+/g);
+        if (dataParts && dataParts.length > 0) {
+          payeePubkey = dataParts[0].substring(0, 32);
+        }
+
+        return {
+          amount: amount,
+          description: description,
+          expiry: expiry,
+          payeePubkey: payeePubkey || 'Unknown'
+        };
+      } catch (e) {
+        console.error('Error decoding invoice:', e);
+        return null;
+      }
+    }
+
+    // Add real-time invoice validation
+    document.addEventListener('DOMContentLoaded', function() {
+      const invoiceInput = document.getElementById('sendInvoice');
+      const amountInput = document.getElementById('sendAmount');
+      const amountDisplay = document.getElementById('amountDisplay');
+
+      invoiceInput.addEventListener('input', function() {
+        const invoice = this.value.trim();
+        hideError('invoiceError');
+
+        if (invoice) {
+          const validation = validateInvoice(invoice);
+          if (!validation.valid) {
+            showError('invoiceError', validation.error);
+            amountInput.value = '';
+            amountDisplay.textContent = 'Invalid invoice format';
+            return;
+          }
+
+          const decoded = decodeInvoice(invoice);
+          if (decoded && decoded.amount) {
+            amountInput.value = decoded.amount;
+            amountDisplay.textContent = `Amount: ${decoded.amount.toLocaleString()} sats | Description: ${decoded.description} | Expires: ${decoded.expiry}s`;
+            amountDisplay.className = 'text-terminal-green text-xs mt-1';
+          } else {
+            amountInput.value = '';
+            amountDisplay.textContent = 'Amount not specified in invoice';
+            amountDisplay.className = 'text-terminal-yellow text-xs mt-1';
+          }
+        } else {
+          amountInput.value = '';
+          amountDisplay.textContent = 'Amount will be extracted from invoice';
+          amountDisplay.className = 'text-terminal-dim-green text-xs mt-1';
+        }
+      });
+
+      // Add real-time amount validation
+      const amountInput2 = document.getElementById('receiveAmount');
+      amountInput2.addEventListener('input', function() {
+        hideError('amountError');
+        const amount = this.value;
+        if (amount) {
+          const validation = validateAmount(amount);
+          if (!validation.valid) {
+            showError('amountError', validation.error);
+          }
+        }
+      });
+    });
 
     async function sendPayment(event) {
       event.preventDefault();
       const formData = new FormData(event.target);
+      const invoice = formData.get('invoice');
+
+      // Validate invoice
+      hideError('invoiceError');
+      const validation = validateInvoice(invoice);
+      if (!validation.valid) {
+        showError('invoiceError', validation.error);
+        return;
+      }
+
+      setLoading('sendPaymentBtn', true);
 
       try {
-        const response = await fetch('/api/lightning/pay', {
+        // Create Nostr authentication event
+        const nostrAuth = await createNostrAuthEvent();
+        if (!nostrAuth) {
+          showError('invoiceError', 'Nostr authentication failed. Please ensure your Nostr wallet is connected.');
+          return;
+        }
+
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Nostr ${nostrAuth}`
+        };
+
+        console.log('Sending payment with Nostr authentication...');
+        const response = await fetch('/api/lightning/withdraw', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify({
-            invoice: formData.get('invoice')
+            invoice: invoice
           })
         });
 
@@ -765,9 +981,13 @@
         if (response.ok) {
           document.getElementById('sendResult').innerHTML =
             `<div class="text-terminal-green p-4 border border-terminal-green rounded">
-              Payment sent successfully!<br>
-              Amount: ${result.amount_sats} sats<br>
-              Fee: ${result.fee_sats || 0} sats
+              <div class="text-lg font-bold mb-2">✓ Payment Sent Successfully!</div>
+              <div class="space-y-1">
+                <div>Amount: ${result.amount_sats.toLocaleString()} sats</div>
+                <div>Fee: ${result.fee_sats || 0} sats</div>
+                <div>Payment Hash: ${result.payment_hash ? result.payment_hash.substring(0, 16) + '...' : 'N/A'}</div>
+              </div>
+              <div class="text-terminal-dim-green text-sm mt-3">Page will refresh in 3 seconds...</div>
             </div>`;
           document.getElementById('sendResult').classList.remove('hidden');
 
@@ -776,17 +996,47 @@
             location.reload();
           }, 3000);
         } else {
-          alert('Error sending payment: ' + result.error);
+          showError('invoiceError', result.error || 'Failed to send payment');
         }
       } catch (error) {
-        alert('Error sending payment: ' + error.message);
+        showError('invoiceError', 'Network error: ' + error.message);
+      } finally {
+        setLoading('sendPaymentBtn', false);
       }
     }
 
     function copyPaymentHash(hash) {
       navigator.clipboard.writeText(hash).then(() => {
-        alert('Payment hash copied to clipboard!');
+        showNotification('Payment hash copied to clipboard!', 'success');
+      }).catch(() => {
+        showNotification('Failed to copy payment hash', 'error');
       });
+    }
+
+    function showNotification(message, type = 'info') {
+      // Create notification element
+      const notification = document.createElement('div');
+      notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 transition-all transform translate-x-full ${
+        type === 'success' ? 'bg-terminal-green text-terminal-black' :
+        type === 'error' ? 'bg-terminal-red text-terminal-white' :
+        'bg-terminal-yellow text-terminal-black'
+      }`;
+      notification.textContent = message;
+
+      document.body.appendChild(notification);
+
+      // Animate in
+      setTimeout(() => {
+        notification.classList.remove('translate-x-full');
+      }, 100);
+
+      // Remove after 3 seconds
+      setTimeout(() => {
+        notification.classList.add('translate-x-full');
+        setTimeout(() => {
+          document.body.removeChild(notification);
+        }, 300);
+      }, 3000);
     }
 
     async function cancelWithdrawal(withdrawalId) {
@@ -795,24 +1045,34 @@
       }
 
       try {
+        // Create Nostr authentication event
+        const nostrAuth = await createNostrAuthEvent();
+        if (!nostrAuth) {
+          showNotification('Nostr authentication failed. Please ensure your Nostr wallet is connected.', 'error');
+          return;
+        }
+
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Nostr ${nostrAuth}`
+        };
+
         const response = await fetch(`/api/lightning/withdrawal/${withdrawalId}/cancel`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          }
+          headers
         });
 
         const result = await response.json();
 
         if (response.ok) {
-          alert('Withdrawal cancelled successfully!');
+          showNotification('Withdrawal cancelled successfully!', 'success');
           location.reload();
         } else {
-          alert('Error cancelling withdrawal: ' + result.error);
+          showNotification('Error cancelling withdrawal: ' + result.error, 'error');
         }
       } catch (error) {
-        alert('Error cancelling withdrawal: ' + error.message);
+        showNotification('Error cancelling withdrawal: ' + error.message, 'error');
       }
     }
   </script>
-{% endblock %}
+{% endblock content %}

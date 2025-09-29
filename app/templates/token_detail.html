@@ -7,133 +7,779 @@
   {% endif %}
 {% endblock %}
 {% block content %}
-  <section class="card" data-sse-symbol="{{ token.symbol }}">
-    <h1>Token: <span class="badge">{{ token.symbol }}</span></h1>
-    <div class="pf-grid pf-token-detail">
-      <div class="card pf-token-panel">
-        <h2>Chart</h2>
-        <div class="pf-chart" id="pf-chart" data-series='[]'>
-          <div class="pf-chart-toolbar" style="display:flex; align-items:center; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
-            <div class="pf-chart-modes" style="display:flex; gap:8px;">
-              <button class="retro-button pf-active" data-chart-mode="line">Line</button>
-              <button class="retro-button" data-chart-mode="candle">Candles</button>
-            </div>
-            <div class="pf-chart-controls" style="display:flex; align-items:center; gap:8px;">
-              <label for="pf-interval" style="font-size: 12px; color: var(--dim-green);">Interval</label>
-              <select id="pf-interval" class="retro-input" data-chart-interval>
-                <option value="1m" selected>1m</option>
-                <option value="5m">5m</option>
-                <option value="1h">1h</option>
-              </select>
-              <button class="retro-button" data-chart-refresh>Refresh</button>
-            </div>
-          </div>
-          <svg class="pf-chart-svg" width="100%" height="160" preserveAspectRatio="none">
-            <path class="pf-chart-path" d="" fill="none" stroke="currentColor" stroke-width="2" />
-          </svg>
-        </div>
-        <div style="display:flex; justify-content: space-between; font-size: 14px; color: var(--dim-green);">
-          <span>Min: <span id="pf-chart-min">—</span></span>
-          <span>Max: <span id="pf-chart-max">—</span></span>
-        </div>
+  <section class="terminal-card mb-8" data-sse-symbol="{{ token.symbol }}">
+    <!-- Hero Header Section -->
+    <div class="text-center py-6 border-b border-terminal-green/20">
+      <div class="flex items-center justify-center gap-4 mb-4">
+        <h1 class="text-4xl md:text-5xl font-bold text-terminal-green">{{ token.symbol }}</h1>
+        <span class="terminal-badge text-sm">TOKEN</span>
       </div>
-      <div class="card pf-token-panel">
-        <h2>Overview</h2>
-        <div>Symbol: <strong>{{ token.symbol }}</strong></div>
-        <div>Name: <span class="pf-green">{{ token.name }}</span></div>
-        <div>Price: <span class="pf-green" data-price-target>{{ '%.4f'|format(price or 0) }}</span></div>
-        <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
-        <div>24h Change: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
-        {% if launcher %}
-        <div>Creator: <a class="pf-green" href="{{ url_for('web.users.creator_profile', user_id=launcher.id) }}">{{ launcher.npub or launcher.pubkey_hex }}</a></div>
-        {% if current_user and current_user.id != launcher.id %}
-        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-          {% if is_following %}
-            <form method="POST" action="{{ url_for('web.creator_unfollow', user_id=launcher.id) }}">
-              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-              <button class="retro-button" type="submit">Unfollow</button>
-            </form>
-          {% else %}
-            <form method="POST" action="{{ url_for('web.creator_follow', user_id=launcher.id) }}">
-              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-              <button class="retro-button" type="submit">Follow</button>
-            </form>
-          {% endif %}
-        </div>
-        {% endif %}
-        {% endif %}
-      </div>
-      <div class="card pf-token-panel">
-        <h2>Activity</h2>
-        <div>Recent trades</div>
-        <ul>
-          <li>—</li>
-          <li>—</li>
-          <li>—</li>
-        </ul>
-      </div>
-      <div class="card pf-token-panel">
-        <h2>Actions</h2>
-        <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=token.symbol) }}">Go to Pool</a>
-        <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-          <a class="retro-button" href="#" data-share-url="{{ url_for('web.tokens.token_detail', symbol=token.symbol, _external=True) }}" data-share-text="Check out {{ token.symbol }} on Postfun">Share</a>
-          <button class="retro-button" data-copy-url="{{ url_for('web.tokens.token_detail', symbol=token.symbol, _external=True) }}">Copy Link</button>
-        </div>
-        {% if not current_user %}
-          <button class="retro-button" onclick="pfNostrLogin()">Login to Trade</button>
+      <div class="flex items-center justify-center gap-6 text-base">
+        <span class="text-terminal-green">Market Cap: <span class="font-bold">${{ '%.2f'|format(token.market_cap or 0) }}</span></span>
+        {% if token.change_24h and token.change_24h > 0 %}
+        <span class="text-terminal-green">24h: {{ '%.2f'|format(token.change_24h or 0) }}%</span>
+        {% elif token.change_24h and token.change_24h < 0 %}
+        <span class="text-terminal-red">24h: {{ '%.2f'|format(token.change_24h or 0) }}%</span>
         {% else %}
-          <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
-            {% if watchlisted %}
-              <form method="POST" action="{{ url_for('web.watchlist_remove', symbol=token.symbol, next=request.path) }}">
-                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-                <button class="retro-button" type="submit">Remove from Watchlist</button>
-              </form>
-            {% else %}
-              <form method="POST" action="{{ url_for('web.watchlist_add', symbol=token.symbol, next=request.path) }}">
-                <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
-                <button class="retro-button" type="submit">Add to Watchlist</button>
-              </form>
-            {% endif %}
-            <a class="retro-button" href="{{ url_for('web.watchlist') }}">View Watchlist</a>
-          </div>
+        <span class="text-terminal-dim-green">24h: {{ '%.2f'|format(token.change_24h or 0) }}%</span>
         {% endif %}
       </div>
-      {% if fee_summary %}
-      <div class="card pf-token-panel">
-        <h2>Protocol Fee Summary</h2>
-        <div class="pf-table-wrap">
-          <table class="pf-table">
+      <div class="flex items-center justify-center gap-6 text-sm mt-2 text-terminal-dim-green">
+        {% if launcher %}
+        <span>Minter: {{ launcher.npub[:20] }}...</span>
+        {% endif %}
+        {% if info and info.tweet_author %}
+        <span>Poster: @{{ info.tweet_author }}</span>
+        {% endif %}
+        {% if info and info.tweet_url %}
+        <span>Tweet: {{ info.tweet_url.split('/')[-1] }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
+
+      <!-- Chart Section - Takes 2 columns on large screens -->
+      <div class="lg:col-span-2 space-y-6">
+        <!-- Chart Panel -->
+        <div class="terminal-card">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-terminal-green">Price Chart</h2>
+            <div class="flex items-center gap-4">
+              <div class="flex gap-2">
+                <button class="terminal-button text-xs pf-active" data-chart-mode="line">LINE</button>
+                <button class="terminal-button text-xs" data-chart-mode="candle">CANDLES</button>
+              </div>
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-terminal-dim-green">Interval:</label>
+                <select class="terminal-input text-xs py-1 px-2" data-chart-interval>
+                  <option value="1m" selected>1m</option>
+                  <option value="5m">5m</option>
+                  <option value="1h">1h</option>
+                </select>
+                <button class="terminal-button text-xs" data-chart-refresh>REFRESH</button>
+              </div>
+            </div>
+          </div>
+          <div class="bg-terminal-black/50 rounded-lg p-4 border border-terminal-green/20">
+            <svg class="pf-chart-svg w-full h-48" preserveAspectRatio="none">
+              <path class="pf-chart-path" d="" fill="none" stroke="currentColor" stroke-width="2" />
+            </svg>
+            <div class="flex justify-between text-xs text-terminal-dim-green mt-2">
+              <span>Min: <span id="pf-chart-min">—</span></span>
+              <span>Max: <span id="pf-chart-max">—</span></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity Section -->
+        <div class="terminal-card">
+          <h2 class="text-xl font-bold text-terminal-green mb-4">Recent Activity</h2>
+          <div class="space-y-2">
+            <div class="flex justify-between items-center py-2 border-b border-terminal-green/10">
+              <span class="text-terminal-dim-green">Trade Volume (24h)</span>
+              <span class="text-terminal-green">—</span>
+            </div>
+            <div class="flex justify-between items-center py-2 border-b border-terminal-green/10">
+              <span class="text-terminal-dim-green">Unique Traders</span>
+              <span class="text-terminal-green">—</span>
+            </div>
+            <div class="flex justify-between items-center py-2">
+              <span class="text-terminal-dim-green">Last Trade</span>
+              <span class="text-terminal-green">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar - Takes 1 column on large screens -->
+      <div class="space-y-6">
+
+        <!-- Poster Info (Tweet Author) -->
+        {% if info and info.tweet_author %}
+        <div class="terminal-card">
+          <h2 class="text-lg font-bold text-terminal-green mb-4">Poster</h2>
+          <div class="space-y-3">
+            <div>
+              <span class="text-terminal-green">{{ info.tweet_author }}</span>
+            </div>
+            {% if info.tweet_url %}
+            <div>
+              <a href="{{ info.tweet_url }}" target="_blank" class="terminal-button text-sm w-full text-center block">
+                VIEW TWEET
+              </a>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Minter Info (Token Creator) -->
+        {% if launcher %}
+        <div class="terminal-card">
+          <h2 class="text-lg font-bold text-terminal-green mb-4">Minter</h2>
+          <div class="space-y-3">
+            <div>
+              <a href="{{ url_for('web.users.user_profile_by_identifier', identifier=launcher.npub) }}" class="text-terminal-green hover:text-terminal-dim-green transition-colors">
+                {{ launcher.npub or launcher.pubkey_hex }}
+              </a>
+            </div>
+            {% if current_user and current_user.id != launcher.id %}
+            <div>
+              {% if is_following %}
+                <form method="POST" action="{{ url_for('web.users.creator_unfollow', user_id=launcher.id) }}" class="inline">
+                  <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                  <button type="submit" class="terminal-button text-sm w-full">UNFOLLOW</button>
+                </form>
+              {% else %}
+                <form method="POST" action="{{ url_for('web.users.creator_follow', user_id=launcher.id) }}" class="inline">
+                  <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+                  <button type="submit" class="terminal-button text-sm w-full">FOLLOW</button>
+                </form>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Quick Actions -->
+        <div class="terminal-card">
+          <h2 class="text-lg font-bold text-terminal-green mb-4">Quick Trade</h2>
+          <div class="space-y-4">
+            <!-- Trade Type Selector -->
+            <div class="flex border border-terminal-green/20 rounded-lg overflow-hidden">
+              <button type="button" id="quickBuyTab" class="flex-1 py-2 px-4 text-center font-medium transition-colors bg-terminal-green text-terminal-black" onclick="setQuickTradeType('buy')">
+                BUY
+              </button>
+              <button type="button" id="quickSellTab" class="flex-1 py-2 px-4 text-center font-medium transition-colors text-terminal-dim-green hover:text-terminal-green" onclick="setQuickTradeType('sell')">
+                SELL
+              </button>
+            </div>
+
+            <!-- Quick Trade Form -->
+            <form id="quickTradeForm" method="POST" action="{{ url_for('web.trading.pool_trade', symbol=token.symbol) }}">
+              <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+              <input type="hidden" id="quickTradeType" name="type" value="buy" />
+
+              <!-- From Amount -->
+              <div>
+                <label class="block text-terminal-dim-green mb-2">
+                  <span id="fromLabel">From (USD)</span>
+                </label>
+                <div class="relative">
+                  <input
+                    type="number"
+                    id="fromAmount"
+                    name="usd_amount"
+                    step="0.01"
+                    min="0"
+                    class="terminal-input w-full pr-16"
+                    placeholder="0.00"
+                    oninput="calculateQuickTrade()"
+                  >
+                  <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-terminal-dim-green">USD</span>
+                </div>
+                <div class="text-xs text-terminal-dim-green mt-1">
+                  Balance: <span id="usdBalance">$1,000.00</span>
+                </div>
+              </div>
+
+              <!-- Swap Arrow -->
+              <div class="flex justify-center">
+                <button type="button" onclick="swapQuickTrade()" class="text-terminal-green hover:text-terminal-dim-green p-2">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
+                  </svg>
+                </button>
+              </div>
+
+              <!-- To Amount -->
+              <div>
+                <label class="block text-terminal-dim-green mb-2">
+                  <span id="toLabel">To ({{ token.symbol }})</span>
+                </label>
+                <div class="relative">
+                  <input
+                    type="number"
+                    id="toAmount"
+                    name="token_amount"
+                    step="0.00000001"
+                    min="0"
+                    class="terminal-input w-full pr-20"
+                    placeholder="0.00000000"
+                    oninput="calculateQuickTradeReverse()"
+                  >
+                  <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-terminal-dim-green">{{ token.symbol }}</span>
+                </div>
+                <div class="text-xs text-terminal-dim-green mt-1">
+                  Balance: <span id="tokenBalance">0.00 {{ token.symbol }}</span>
+                </div>
+              </div>
+
+              <!-- Price Display -->
+              <div class="text-center">
+                <div class="text-xs text-terminal-dim-green">Price</div>
+                <div class="text-sm text-terminal-green">1 {{ token.symbol }} = $<span id="quickPrice">{{ '%.8f'|format(price or 0) }}</span></div>
+              </div>
+
+              <!-- Action Button -->
+              <div>
+                <button type="submit" class="terminal-button w-full bg-terminal-green text-terminal-black hover:bg-terminal-dim-green" id="quickSubmitBtn">
+                  Buy {{ token.symbol }}
+                </button>
+              </div>
+            </form>
+
+            <!-- Share/Copy Actions -->
+            <div class="flex gap-2 pt-2 border-t border-terminal-green/20">
+              <button class="terminal-button text-sm flex-1" data-share-url="{{ url_for('web.tokens.token_detail', symbol=token.symbol, _external=True) }}" data-share-text="Check out {{ token.symbol }} on Postfun">
+                SHARE
+              </button>
+              <button class="terminal-button text-sm flex-1" data-copy-url="{{ url_for('web.tokens.token_detail', symbol=token.symbol, _external=True) }}">
+                COPY
+              </button>
+            </div>
+          </div>
+        </div>
+
+  
+        <!-- Tweet Details Section -->
+        {% if info and info.tweet_url %}
+        <div class="terminal-card">
+          <h2 class="text-xl font-bold text-terminal-green mb-4">Tweet Details</h2>
+          <div class="space-y-3">
+            <div>
+              <span class="text-terminal-dim-green block mb-2">Tweet URL:</span>
+              <a href="{{ info.tweet_url }}" target="_blank" class="text-terminal-green hover:text-terminal-dim-green transition-colors break-all">
+                {{ info.tweet_url }}
+              </a>
+            </div>
+            {% if info.tweet_content %}
+            <div>
+              <span class="text-terminal-dim-green block mb-2">Content:</span>
+              <p class="text-terminal-green bg-terminal-black/50 p-3 rounded border border-terminal-green/20">
+                {{ info.tweet_content }}
+              </p>
+            </div>
+            {% endif %}
+            {% if info.tweet_author %}
+            <div>
+              <span class="text-terminal-dim-green block mb-2">Author:</span>
+              <span class="text-terminal-green">{{ info.tweet_author }}</span>
+            </div>
+            {% endif %}
+            {% if info.tweet_created_at %}
+            <div>
+              <span class="text-terminal-dim-green block mb-2">Posted:</span>
+              <span class="text-terminal-green">{{ info.tweet_created_at.strftime('%Y-%m-%d %H:%M:%S') if info.tweet_created_at else 'Unknown' }}</span>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Protocol Fee Summary -->
+    {% if fee_summary %}
+    <div class="p-6 border-t border-terminal-green/20">
+      <h2 class="text-xl font-bold text-terminal-green mb-4">Protocol Fee Distribution</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-terminal-green/20">
+              <th class="text-left py-2 px-4 text-terminal-dim-green">Entity</th>
+              <th class="text-right py-2 px-4 text-terminal-dim-green">Alloc A</th>
+              <th class="text-right py-2 px-4 text-terminal-dim-green">Alloc B</th>
+              <th class="text-right py-2 px-4 text-terminal-dim-green">Paid A</th>
+              <th class="text-right py-2 px-4 text-terminal-dim-green">Paid B</th>
+              <th class="text-right py-2 px-4 text-terminal-dim-green">Pending A</th>
+              <th class="text-right py-2 px-4 text-terminal-dim-green">Pending B</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for key in ['creator','minter','treasury'] %}
+              {% set row = fee_summary.get(key) %}
+              {% if row %}
+              <tr class="border-b border-terminal-green/10 last:border-b-0">
+                <td class="py-2 px-4 text-terminal-green font-bold">{{ key|capitalize }}</td>
+                <td class="py-2 px-4 text-terminal-dim-green text-right">{{ '%.8f'|format(row.alloc['A'] or 0) }}</td>
+                <td class="py-2 px-4 text-terminal-dim-green text-right">{{ '%.8f'|format(row.alloc['B'] or 0) }}</td>
+                <td class="py-2 px-4 text-terminal-dim-green text-right">{{ '%.8f'|format(row.paid['A'] or 0) }}</td>
+                <td class="py-2 px-4 text-terminal-dim-green text-right">{{ '%.8f'|format(row.paid['B'] or 0) }}</td>
+                <td class="py-2 px-4 text-terminal-dim-green text-right">{{ '%.8f'|format(row.pending['A'] or 0) }}</td>
+                <td class="py-2 px-4 text-terminal-dim-green text-right">{{ '%.8f'|format(row.pending['B'] or 0) }}</td>
+              </tr>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Token Holders Section -->
+    <div class="p-6 border-t border-terminal-green/20">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold text-terminal-green">Token Holders</h2>
+        <div class="text-sm text-terminal-dim-green">
+          Total Holders: <span class="text-terminal-green font-bold">{{ holders_count or 0 }}</span>
+        </div>
+      </div>
+      {% if token_holders %}
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
             <thead>
-              <tr>
-                <th>Entity</th>
-                <th>Alloc A</th>
-                <th>Alloc B</th>
-                <th>Paid A</th>
-                <th>Paid B</th>
-                <th>Pending A</th>
-                <th>Pending B</th>
+              <tr class="border-b border-terminal-green/20">
+                <th class="text-left py-3 px-4 text-terminal-dim-green">#</th>
+                <th class="text-left py-3 px-4 text-terminal-dim-green">Holder</th>
+                <th class="text-right py-3 px-4 text-terminal-dim-green">Balance</th>
+                <th class="text-right py-3 px-4 text-terminal-dim-green">Percentage</th>
+                <th class="text-right py-3 px-4 text-terminal-dim-green">Value (USD)</th>
+                <th class="text-center py-3 px-4 text-terminal-dim-green">Type</th>
               </tr>
             </thead>
             <tbody>
-              {% for key in ['creator','minter','treasury'] %}
-                {% set row = fee_summary.get(key) %}
-                {% if row %}
-                <tr>
-                  <td><strong>{{ key|capitalize }}</strong></td>
-                  <td>{{ '%.8f'|format(row.alloc['A'] or 0) }}</td>
-                  <td>{{ '%.8f'|format(row.alloc['B'] or 0) }}</td>
-                  <td>{{ '%.8f'|format(row.paid['A'] or 0) }}</td>
-                  <td>{{ '%.8f'|format(row.paid['B'] or 0) }}</td>
-                  <td>{{ '%.8f'|format(row.pending['A'] or 0) }}</td>
-                  <td>{{ '%.8f'|format(row.pending['B'] or 0) }}</td>
-                </tr>
-                {% endif %}
+              {% for holder in token_holders %}
+              <tr class="border-b border-terminal-green/10 last:border-b-0 hover:bg-terminal-black/30 transition-colors">
+                <td class="py-3 px-4 text-terminal-green font-bold">{{ holder.rank }}</td>
+                <td class="py-3 px-4 text-terminal-green">
+                  <div class="flex items-center gap-2">
+                    {% if holder.user %}
+                      <div class="w-6 h-6 rounded-full bg-terminal-green/20 flex items-center justify-center text-xs font-bold text-terminal-green">
+                        {{ (holder.user.display_name or holder.user.npub or 'U')[0:1]|upper }}
+                      </div>
+                      <div>
+                        <a href="{{ url_for('web.users.user_profile_by_identifier', identifier=holder.user.npub or holder.user.pubkey_hex) }}" class="hover:text-terminal-dim-green transition-colors font-medium">
+                          {{ holder.user.display_name or holder.user.npub[:20] }}...
+                        </a>
+                        <div class="text-xs text-terminal-dim-green">
+                          {{ holder.user.npub[:12] }}...
+                        </div>
+                      </div>
+                    {% else %}
+                      <div class="w-6 h-6 rounded-full bg-terminal-dim-green/20 flex items-center justify-center text-xs font-bold text-terminal-dim-green">
+                        E
+                      </div>
+                      <div>
+                        <div class="font-medium">{{ holder.address[:12] }}...</div>
+                        <div class="text-xs text-terminal-dim-green">External</div>
+                      </div>
+                    {% endif %}
+                  </div>
+                </td>
+                <td class="py-3 px-4 text-terminal-dim-green text-right font-mono">{{ '%.4f'|format(holder.amount) }}</td>
+                <td class="py-3 px-4 text-right">
+                  <div class="font-mono text-terminal-green">{{ '%.2f'|format(holder.percentage) }}%</div>
+                  <div class="w-full bg-terminal-black/50 rounded-full h-1.5 mt-1">
+                    <div class="bg-terminal-green h-1.5 rounded-full" style="width: {{ holder.percentage }}%"></div>
+                  </div>
+                </td>
+                <td class="py-3 px-4 text-terminal-dim-green text-right font-mono">
+                  ${{ '%.2f'|format(holder.amount * (price or 0)) }}
+                </td>
+                <td class="py-3 px-4 text-center">
+                  {% if holder.user %}
+                    <span class="terminal-badge terminal-badge-green text-xs">USER</span>
+                  {% else %}
+                    <span class="terminal-badge terminal-badge-dim text-xs">EXT</span>
+                  {% endif %}
+                </td>
+              </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
+        {% if token_holders|length > 10 %}
+        <div class="mt-4 text-center">
+          <button class="terminal-button text-sm" onclick="loadMoreHolders()">
+            Load More Holders
+          </button>
+        </div>
+        {% endif %}
+      {% else %}
+        <div class="text-center py-8">
+          <div class="text-terminal-dim-green mb-2">No token holders found</div>
+          <div class="text-xs text-terminal-dim-green">Be the first to hold {{ token.symbol }}!</div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Recent Trades Section -->
+    <div class="p-6 border-t border-terminal-green/20">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold text-terminal-green">Recent Trades</h2>
+        <div class="flex gap-4 text-sm text-terminal-dim-green">
+          <div>Volume (24h): <span class="text-terminal-green font-bold">$0.00</span></div>
+          <div>Trades: <span class="text-terminal-green font-bold">{{ recent_trades|length or 0 }}</span></div>
+        </div>
       </div>
+      {% if recent_trades %}
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-terminal-green/20">
+                <th class="text-left py-3 px-4 text-terminal-dim-green">Time</th>
+                <th class="text-left py-3 px-4 text-terminal-dim-green">Type</th>
+                <th class="text-right py-3 px-4 text-terminal-dim-green">{{ token.symbol }}</th>
+                <th class="text-right py-3 px-4 text-terminal-dim-green">Price</th>
+                <th class="text-right py-3 px-4 text-terminal-dim-green">Total</th>
+                <th class="text-center py-3 px-4 text-terminal-dim-green">Trader</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for trade in recent_trades %}
+              <tr class="border-b border-terminal-green/10 last:border-b-0 hover:bg-terminal-black/30 transition-colors">
+                <td class="py-3 px-4 text-terminal-green">
+                  <div class="font-mono text-xs">{{ trade.created_at.strftime('%H:%M:%S') if trade.created_at else 'Unknown' }}</div>
+                  <div class="text-xs text-terminal-dim-green">{{ trade.created_at.strftime('%m/%d') if trade.created_at else '' }}</div>
+                </td>
+                <td class="py-3 px-4">
+                  <div class="flex items-center gap-2">
+                    {% if trade.type == 'buy' %}
+                      <span class="terminal-badge terminal-badge-green text-xs">BUY</span>
+                      <svg class="w-4 h-4 text-terminal-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                      </svg>
+                    {% else %}
+                      <span class="terminal-badge terminal-badge-red text-xs">SELL</span>
+                      <svg class="w-4 h-4 text-terminal-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"></path>
+                      </svg>
+                    {% endif %}
+                  </div>
+                </td>
+                <td class="py-3 px-4 text-terminal-dim-green text-right font-mono">{{ '%.4f'|format(trade.amount) }}</td>
+                <td class="py-3 px-4 text-right">
+                  <div class="font-mono text-terminal-green">${{ '%.8f'|format(trade.price) }}</div>
+                  {% if trade.price_change %}
+                    <div class="text-xs {% if trade.price_change > 0 %}text-terminal-green{% else %}text-terminal-red{% endif %}">
+                      {{ '+' if trade.price_change > 0 }}{{ '%.2f'|format(trade.price_change) }}%
+                    </div>
+                  {% endif %}
+                </td>
+                <td class="py-3 px-4 text-terminal-dim-green text-right font-mono">${{ '%.4f'|format(trade.total) }}</td>
+                <td class="py-3 px-4 text-center">
+                  {% if trade.user %}
+                    <a href="{{ url_for('web.users.user_profile_by_identifier', identifier=trade.user.npub or trade.user.pubkey_hex) }}" class="text-terminal-green hover:text-terminal-dim-green transition-colors">
+                      <div class="flex items-center justify-center gap-1">
+                        <div class="w-5 h-5 rounded-full bg-terminal-green/20 flex items-center justify-center text-xs font-bold text-terminal-green">
+                          {{ (trade.user.display_name or trade.user.npub or 'T')[0:1]|upper }}
+                        </div>
+                        <span class="text-xs">{{ trade.user.display_name or trade.user.npub[:8] }}...</span>
+                      </div>
+                    </a>
+                  {% else %}
+                    <div class="text-terminal-dim-green text-xs">Bot</div>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if recent_trades|length > 15 %}
+        <div class="mt-4 text-center">
+          <button class="terminal-button text-sm" onclick="loadMoreTrades()">
+            Load More Trades
+          </button>
+        </div>
+        {% endif %}
+      {% else %}
+        <div class="text-center py-8">
+          <div class="text-terminal-dim-green mb-2">No recent trades</div>
+          <div class="text-xs text-terminal-dim-green">Be the first to trade {{ token.symbol }}!</div>
+          <button class="terminal-button text-sm mt-3" onclick="openTradeModal('buy')">
+            Start Trading
+          </button>
+        </div>
       {% endif %}
     </div>
   </section>
+
+  <!-- Trade Modal -->
+  <div id="tradeModal" class="fixed inset-0 bg-terminal-black/80 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+    <div class="terminal-card max-w-md w-full">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-xl font-bold text-terminal-green" id="modalTitle">Trade {{ token.symbol }}</h3>
+        <button onclick="closeTradeModal()" class="text-terminal-dim-green hover:text-terminal-green text-2xl">×</button>
+      </div>
+
+      <form id="tradeForm" method="POST" action="{{ url_for('web.trading.pool_trade', symbol=token.symbol) }}">
+        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
+        <input type="hidden" id="tradeType" name="type" value="buy" />
+
+        <div class="space-y-4">
+          <!-- Trade Type Tabs -->
+          <div class="flex border border-terminal-green/20 rounded-lg overflow-hidden">
+            <button type="button" id="buyTab" class="flex-1 py-2 px-4 text-center font-medium transition-colors bg-terminal-green text-terminal-black" onclick="setTradeType('buy')">
+              Buy {{ token.symbol }}
+            </button>
+            <button type="button" id="sellTab" class="flex-1 py-2 px-4 text-center font-medium transition-colors text-terminal-dim-green hover:text-terminal-green" onclick="setTradeType('sell')">
+              Sell {{ token.symbol }}
+            </button>
+          </div>
+
+          <!-- Amount Input -->
+          <div>
+            <label class="block text-terminal-dim-green mb-2">Amount</label>
+            <div class="relative">
+              <input
+                type="number"
+                id="amount"
+                name="amount"
+                step="0.00000001"
+                min="0"
+                class="terminal-input w-full pr-16"
+                placeholder="0.00000000"
+                oninput="calculateTotal()"
+              >
+              <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-terminal-dim-green">{{ token.symbol }}</span>
+            </div>
+          </div>
+
+          <!-- Price Display -->
+          <div>
+            <label class="block text-terminal-dim-green mb-2">Price</label>
+            <div class="terminal-input w-full bg-terminal-black/50">
+              $<span id="currentPrice">{{ '%.8f'|format(price or 0) }}</span>
+            </div>
+          </div>
+
+          <!-- Total Display -->
+          <div>
+            <label class="block text-terminal-dim-green mb-2">Total (USD)</label>
+            <div class="terminal-input w-full bg-terminal-black/50">
+              $<span id="totalAmount">0.00</span>
+            </div>
+          </div>
+
+          <!-- Available Balance -->
+          <div class="text-sm text-terminal-dim-green">
+            <span id="balanceLabel">Available Balance:</span>
+            <span id="availableBalance">-</span>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex gap-2">
+            <button type="submit" class="terminal-button flex-1 bg-terminal-green text-terminal-black hover:bg-terminal-dim-green" id="submitBtn">
+              Buy {{ token.symbol }}
+            </button>
+            <button type="button" onclick="closeTradeModal()" class="terminal-button flex-1">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Quick Trade functionality
+    let currentQuickTradeType = 'buy';
+    const currentPrice = {{ price or 0 }};
+
+    function setQuickTradeType(type) {
+      currentQuickTradeType = type;
+      const buyTab = document.getElementById('quickBuyTab');
+      const sellTab = document.getElementById('quickSellTab');
+      const tradeTypeInput = document.getElementById('quickTradeType');
+      const submitBtn = document.getElementById('quickSubmitBtn');
+      const fromLabel = document.getElementById('fromLabel');
+      const toLabel = document.getElementById('toLabel');
+      const fromAmount = document.getElementById('fromAmount');
+      const toAmount = document.getElementById('toAmount');
+
+      tradeTypeInput.value = type;
+
+      if (type === 'buy') {
+        buyTab.className = 'flex-1 py-2 px-4 text-center font-medium transition-colors bg-terminal-green text-terminal-black';
+        sellTab.className = 'flex-1 py-2 px-4 text-center font-medium transition-colors text-terminal-dim-green hover:text-terminal-green';
+        submitBtn.textContent = `Buy {{ token.symbol }}`;
+        submitBtn.className = 'terminal-button w-full bg-terminal-green text-terminal-black hover:bg-terminal-dim-green';
+        fromLabel.textContent = 'From (USD)';
+        toLabel.textContent = `To ({{ token.symbol }})`;
+        fromAmount.name = 'usd_amount';
+        toAmount.name = 'token_amount';
+      } else {
+        sellTab.className = 'flex-1 py-2 px-4 text-center font-medium transition-colors bg-terminal-green text-terminal-black';
+        buyTab.className = 'flex-1 py-2 px-4 text-center font-medium transition-colors text-terminal-dim-green hover:text-terminal-green';
+        submitBtn.textContent = `Sell {{ token.symbol }}`;
+        submitBtn.className = 'terminal-button w-full bg-terminal-red text-terminal-white hover:bg-terminal-dim-red';
+        fromLabel.textContent = `From ({{ token.symbol }})`;
+        toLabel.textContent = 'To (USD)';
+        fromAmount.name = 'token_amount';
+        toAmount.name = 'usd_amount';
+      }
+
+      // Clear inputs and recalculate
+      fromAmount.value = '';
+      toAmount.value = '';
+    }
+
+    function swapQuickTrade() {
+      const fromAmount = document.getElementById('fromAmount');
+      const toAmount = document.getElementById('toAmount');
+      const tempValue = fromAmount.value;
+      fromAmount.value = toAmount.value;
+      toAmount.value = tempValue;
+
+      // Trigger calculation based on which field has value
+      if (fromAmount.value) {
+        calculateQuickTrade();
+      } else if (toAmount.value) {
+        calculateQuickTradeReverse();
+      }
+    }
+
+    function calculateQuickTrade() {
+      const fromAmount = parseFloat(document.getElementById('fromAmount').value) || 0;
+      const toAmount = document.getElementById('toAmount');
+
+      if (currentQuickTradeType === 'buy') {
+        // Buying: USD to Token
+        const tokenAmount = currentPrice > 0 ? fromAmount / currentPrice : 0;
+        toAmount.value = tokenAmount.toFixed(8);
+      } else {
+        // Selling: Token to USD
+        const usdAmount = fromAmount * currentPrice;
+        toAmount.value = usdAmount.toFixed(2);
+      }
+    }
+
+    function calculateQuickTradeReverse() {
+      const toAmount = parseFloat(document.getElementById('toAmount').value) || 0;
+      const fromAmount = document.getElementById('fromAmount');
+
+      if (currentQuickTradeType === 'buy') {
+        // Buying: Token to USD (reverse calculation)
+        const usdAmount = toAmount * currentPrice;
+        fromAmount.value = usdAmount.toFixed(2);
+      } else {
+        // Selling: USD to Token (reverse calculation)
+        const tokenAmount = currentPrice > 0 ? toAmount / currentPrice : 0;
+        fromAmount.value = tokenAmount.toFixed(8);
+      }
+    }
+
+    // Modal functionality
+    function openTradeModal(type) {
+      const modal = document.getElementById('tradeModal');
+      modal.classList.remove('hidden');
+      setTradeType(type);
+      document.body.style.overflow = 'hidden';
+
+      // Reset form
+      document.getElementById('amount').value = '';
+      calculateTotal();
+
+      // Focus on amount input
+      setTimeout(() => {
+        document.getElementById('amount').focus();
+      }, 100);
+    }
+
+    function closeTradeModal() {
+      const modal = document.getElementById('tradeModal');
+      modal.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    function setTradeType(type) {
+      const buyTab = document.getElementById('buyTab');
+      const sellTab = document.getElementById('sellTab');
+      const tradeTypeInput = document.getElementById('tradeType');
+      const submitBtn = document.getElementById('submitBtn');
+      const modalTitle = document.getElementById('modalTitle');
+
+      tradeTypeInput.value = type;
+
+      if (type === 'buy') {
+        buyTab.className = 'flex-1 py-2 px-4 text-center font-medium transition-colors bg-terminal-green text-terminal-black';
+        sellTab.className = 'flex-1 py-2 px-4 text-center font-medium transition-colors text-terminal-dim-green hover:text-terminal-green';
+        submitBtn.textContent = `Buy {{ token.symbol }}`;
+        submitBtn.className = 'terminal-button flex-1 bg-terminal-green text-terminal-black hover:bg-terminal-dim-green';
+        modalTitle.textContent = `Buy {{ token.symbol }}`;
+      } else {
+        sellTab.className = 'flex-1 py-2 px-4 text-center font-medium transition-colors bg-terminal-green text-terminal-black';
+        buyTab.className = 'flex-1 py-2 px-4 text-center font-medium transition-colors text-terminal-dim-green hover:text-terminal-green';
+        submitBtn.textContent = `Sell {{ token.symbol }}`;
+        submitBtn.className = 'terminal-button flex-1 bg-terminal-red text-terminal-white hover:bg-terminal-dim-red';
+        modalTitle.textContent = `Sell {{ token.symbol }}`;
+      }
+    }
+
+    function calculateTotal() {
+      const amount = parseFloat(document.getElementById('amount').value) || 0;
+      const price = parseFloat(document.getElementById('currentPrice').textContent) || 0;
+      const total = amount * price;
+      document.getElementById('totalAmount').textContent = total.toFixed(2);
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('tradeModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeTradeModal();
+      }
+    });
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeTradeModal();
+      }
+    });
+
+    // Handle form submission with loading state
+    document.getElementById('tradeForm').addEventListener('submit', function(e) {
+      const submitBtn = document.getElementById('submitBtn');
+      const originalText = submitBtn.textContent;
+
+      // Show loading state
+      submitBtn.textContent = 'Processing...';
+      submitBtn.disabled = true;
+
+      // Form will submit normally, this just shows feedback
+      setTimeout(() => {
+        if (!submitBtn.disabled) {
+          submitBtn.textContent = originalText;
+        }
+      }, 3000);
+    });
+
+    // Mock balance display (in real implementation, fetch from API)
+    function updateBalanceDisplay() {
+      const balanceEl = document.getElementById('availableBalance');
+      const tradeType = document.getElementById('tradeType').value;
+
+      // Mock balances - in real implementation, fetch from user's account
+      const mockBalances = {
+        buy: '1000.00 USD',
+        sell: '1,234.56 {{ token.symbol }}'
+      };
+
+      balanceEl.textContent = mockBalances[tradeType] || '-';
+    }
+
+    // Update balance when trade type changes
+    document.getElementById('tradeType').addEventListener('change', updateBalanceDisplay);
+
+    // Initialize balance on load
+    document.addEventListener('DOMContentLoaded', updateBalanceDisplay);
+
+    // Load more functions
+    function loadMoreHolders() {
+      // Placeholder for loading more holders
+      console.log('Loading more holders...');
+      // In real implementation, this would fetch more holders from API
+    }
+
+    function loadMoreTrades() {
+      // Placeholder for loading more trades
+      console.log('Loading more trades...');
+      // In real implementation, this would fetch more trades from API
+    }
+  </script>
 {% endblock %}

@@ -36,6 +36,100 @@ from ..services.reconcile import reconcile_invoices_once, reconcile_withdrawals_
 api_bp = Blueprint("api", __name__)
 
 
+def _validate_nostr_auth(auth_header: str) -> dict | None:
+    """Validate Nostr signature from Authorization header."""
+    try:
+        # Extract base64 encoded event from Authorization header
+        if not auth_header.startswith("Nostr "):
+            return None
+
+        event_b64 = auth_header[6:]  # Remove "Nostr " prefix
+
+        # Decode base64
+        import base64
+        event_json = base64.b64decode(event_b64).decode('utf-8')
+
+        # Parse JSON
+        import json
+        event = json.loads(event_json)
+
+        # Validate required fields
+        required_fields = ["id", "pubkey", "created_at", "kind", "tags", "content", "sig"]
+        if not all(field in event for field in required_fields):
+            return None
+
+        # Check if event is recent (within 5 minutes)
+        import time
+        if time.time() - event["created_at"] > 300:  # 5 minutes
+            return None
+
+        # Verify signature using pynostr
+        try:
+            from pynostr.event import Event
+
+            # Create Event object and verify signature
+            evt = Event()
+            evt.id = event["id"]
+            evt.pubkey = event["pubkey"]
+            evt.created_at = event["created_at"]
+            evt.kind = event["kind"]
+            evt.tags = event["tags"]
+            evt.content = event["content"]
+            evt.sig = event["sig"]
+
+            if not evt.verify():
+                return None
+
+            return event
+
+        except Exception:
+            return None
+
+    except Exception:
+        return None
+
+
+@api_bp.get("/auth/check")
+def api_auth_check():
+    """API authentication check endpoint"""
+    from flask import current_app
+    import sys
+
+    current_app.logger.info("[DEBUG] API auth check endpoint called")
+
+    # Try to get JWT from Authorization header (bearer token)
+    from flask import request
+    auth_header = request.headers.get('Authorization')
+
+    if auth_header and auth_header.startswith('Bearer '):
+        from ..utils.jwt_utils import verify_jwt
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+        ok, payload = verify_jwt(token)
+        if ok:
+            current_app.logger.info(f"[DEBUG] User authenticated via bearer token: {payload.get('uid')}")
+            return {"authenticated": True, "user_id": payload.get("uid")}
+        else:
+            current_app.logger.warning("[DEBUG] Invalid bearer token")
+
+    # Try to get JWT from cookie as fallback
+    from ..utils.jwt_utils import verify_jwt
+    from flask import request
+
+    cookie_name = "pf_jwt"
+    token = request.cookies.get(cookie_name)
+
+    if token:
+        ok, payload = verify_jwt(token)
+        if ok:
+            current_app.logger.info(f"[DEBUG] User authenticated via cookie: {payload.get('uid')}")
+            return {"authenticated": True, "user_id": payload.get("uid")}
+        else:
+            current_app.logger.warning("[DEBUG] Invalid cookie token")
+
+    current_app.logger.info("[DEBUG] User not authenticated")
+    return {"authenticated": False}
+
+
 @api_bp.get("/tokens")
 @cache.cached(timeout=60)
 def list_tokens():
@@ -98,15 +192,15 @@ def _parse_decimal(val) -> Decimal:
 @require_auth
 @csrf.exempt
 def tokens_launch():
-    """Permissionless token launch with optional initial AMM pool against gUSD.
+    """Permissionless token launch with optional initial AMM pool against gBTC.
 
     Body:
-      - symbol (str, required, A-Z0-9, 3..12)
+      - symbol (str, required, A-Z0-9, 3..12) OR post_url (str, Twitter URL)
       - name (str, required)
       - description, logo_url, website, twitter, telegram, discord (optional)
-      - total_supply (decimal, optional)
-      - initial_price_usd (decimal, optional)
-      - initial_liquidity_usd (decimal, optional) -> used with initial_price_usd to size pool
+      - total_supply (decimal, optional, defaults to 1B)
+      - initial_price_btc (decimal, optional)
+      - initial_liquidity_btc (decimal, optional, defaults to 19M sats)
       - create_pool (bool, default true)
       - fee_bps_base (int, default 30)
       - stage1_threshold, stage2_threshold, stage3_threshold (decimals, optional)
@@ -117,12 +211,57 @@ def tokens_launch():
         return jsonify({"error": "user_not_found"}), 404
 
     data = request.get_json(force=True)
-    symbol = (data.get("symbol") or "").strip().upper()
-    name = (data.get("name") or "").strip()
-    if not symbol or not name:
-        return jsonify({"error": "symbol_and_name_required"}), 400
-    if not (3 <= len(symbol) <= 12) or not symbol.replace("_", "").isalnum():
-        return jsonify({"error": "invalid_symbol"}), 400
+
+    # Check if using Twitter URL mode
+    post_url = data.get("post_url", "").strip()
+
+    if post_url:
+        # Extract post ID from Twitter URL including complex URLs with /photo/1
+        import re
+        patterns = [
+            r'https://(twitter\.com|x\.com)/.*/status/(\d+)',  # Basic status URL
+            r'https://(twitter\.com|x\.com)/.*/status/(\d+)/.*',  # Status with additional paths like /photo/1
+        ]
+
+        post_id = None
+        for pattern in patterns:
+            match = re.match(pattern, post_url)
+            if match:
+                post_id = match.group(2)
+                break
+
+        if not post_id:
+            return jsonify({"error": "invalid_twitter_url"}), 400
+
+        # Use post ID as both symbol and name
+        symbol = post_id
+        name = post_id
+
+        # Twitter-specific data
+        tweet_data = {
+            "tweet_url": post_url,
+            "tweet_author": f"Author {post_id[:4]}",  # Placeholder
+            "tweet_content": f"Tokenized tweet {post_id}",  # Placeholder
+            "tweet_created_at": datetime.utcnow(),
+        }
+    else:
+        # Traditional mode
+        symbol = (data.get("symbol") or "").strip().upper()
+        name = (data.get("name") or "").strip()
+        tweet_data = {}
+
+        if not symbol or not name:
+            return jsonify({"error": "symbol_and_name_required"}), 400
+
+    # For Twitter post IDs, allow numeric symbols of any length (post IDs are usually 18-19 digits)
+    if post_url:
+        # Post ID should be all digits and at least 3 digits
+        if not symbol.isdigit() or len(symbol) < 3:
+            return jsonify({"error": "invalid_post_id_symbol"}), 400
+    else:
+        # Traditional symbol validation
+        if not (3 <= len(symbol) <= 12) or not symbol.replace("_", "").isalnum():
+            return jsonify({"error": "invalid_symbol"}), 400
     reserved = {"GUSD", "GBTC", "PFUN"}
     if symbol in reserved or symbol.startswith("LP-"):
         return jsonify({"error": "reserved_symbol"}), 400
@@ -143,20 +282,21 @@ def tokens_launch():
         twitter=(data.get("twitter") or None),
         telegram=(data.get("telegram") or None),
         discord=(data.get("discord") or None),
-        total_supply=_parse_decimal(data.get("total_supply")) if data.get("total_supply") is not None else None,
+        total_supply=_parse_decimal(data.get("total_supply", "1000000000")),  # Default to 1B
         launch_user_id=user.id,
         launch_at=datetime.utcnow(),
+        **tweet_data
     )
     db.session.add(info)
 
-    # Optionally create AMM pool against gUSD using initial price/liquidity
+    # Optionally create AMM pool against gBTC using initial price/liquidity
     pool_obj = None
     create_pool = bool(data.get("create_pool", True))
     if create_pool:
-        gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
-        if not gusd:
+        gbtc = Token.query.filter_by(symbol="gBTC").first() or Token.query.filter_by(symbol="GBTC").first()
+        if not gbtc:
             db.session.rollback()
-            return jsonify({"error": "gusd_not_found"}), 400
+            return jsonify({"error": "gbtc_not_found"}), 400
 
         fee_bps_base = int(data.get("fee_bps_base", 30))
         s1 = data.get("stage1_threshold")
@@ -165,27 +305,45 @@ def tokens_launch():
         burn_symbol = data.get("burn_token_symbol")
         burn_token = Token.query.filter_by(symbol=burn_symbol).first() if isinstance(burn_symbol, str) else None
 
-        initial_price = data.get("initial_price_usd")
-        initial_liq_usd = data.get("initial_liquidity_usd")
-        if initial_price is not None and initial_liq_usd is not None:
+        initial_price = data.get("initial_price_btc")
+        initial_liq_btc = data.get("initial_liquidity_btc")
+
+        # Fixed parameters for Twitter-based tokens
+        if post_url:
+            # 1 billion tokens paired with 19 million sats
+            total_supply = Decimal("1000000000")
+            sats_amount = Decimal("19000000")
+
+            # Calculate initial price: 19M sats / 1B tokens = 0.000019 sats per token
+            if initial_price is None:
+                initial_price = sats_amount / total_supply
+
+            if initial_liq_btc is None:
+                initial_liq_btc = sats_amount
+
+        if initial_price is not None and initial_liq_btc is not None:
             try:
                 p = _parse_decimal(initial_price)
-                L = _parse_decimal(initial_liq_usd)
+                L = _parse_decimal(initial_liq_btc)
             except Exception:
                 return jsonify({"error": "invalid_initial_price_or_liquidity"}), 400
             if p <= 0 or L <= 0:
                 return jsonify({"error": "initial_price_and_liquidity_must_be_positive"}), 400
-            # Use half liquidity on each side: reserve_b (gUSD) = L/2; reserve_a (new token) = (L/2)/p
+            # Use half liquidity on each side: reserve_b (gBTC) = L/2; reserve_a (new token) = (L/2)/p
             reserve_b = (L / Decimal(2)).quantize(Decimal("1.000000000000000000"))
             reserve_a = (reserve_b / p).quantize(Decimal("1.000000000000000000"))
         else:
-            # Fallback: very small virtual reserves
-            reserve_a = Decimal("1000")
-            reserve_b = Decimal("1000")
+            # Fallback: use calculated values for Twitter tokens or small defaults
+            if post_url:
+                reserve_a = Decimal("500000000")  # Half of 1B
+                reserve_b = Decimal("9500000")   # Half of 19M
+            else:
+                reserve_a = Decimal("1000")
+                reserve_b = Decimal("1000")
 
         pool_obj = SwapPool(
             token_a_id=tok.id,
-            token_b_id=gusd.id,
+            token_b_id=gbtc.id,
             reserve_a=reserve_a,
             reserve_b=reserve_b,
             fee_bps_base=fee_bps_base,
@@ -216,12 +374,12 @@ def tokens_full(symbol: str):
         return jsonify({"error": "token_not_found"}), 404
     info = TokenInfo.query.filter_by(token_id=tok.id).first()
     # Prefer pool with gUSD pairing if present
-    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    gbtc = Token.query.filter_by(symbol="gBTC").first() or Token.query.filter_by(symbol="GBTC").first()
     pool = None
-    if gusd:
+    if gbtc:
         pool = SwapPool.query.filter(
-            ((SwapPool.token_a_id == tok.id) & (SwapPool.token_b_id == gusd.id))
-            | ((SwapPool.token_b_id == tok.id) & (SwapPool.token_a_id == gusd.id))
+            ((SwapPool.token_a_id == tok.id) & (SwapPool.token_b_id == gbtc.id))
+            | ((SwapPool.token_b_id == tok.id) & (SwapPool.token_a_id == gbtc.id))
         ).first()
     if not pool:
         pool = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).first()
@@ -235,18 +393,18 @@ def tokens_full(symbol: str):
 @api_bp.get("/tokens/trending")
 def tokens_trending():
     """Return tokens ranked by 24h trade volume (approx), along with pool and price.
-    For now, measure volume as sum of amount_in (token A units) for pools with gUSD pairing.
+    For now, measure volume as sum of amount_in (token A units) for pools with gBTC pairing.
     """
     from datetime import timedelta as _td
 
     since = datetime.utcnow() - _td(days=1)
-    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    gbtc = Token.query.filter_by(symbol="gBTC").first() or Token.query.filter_by(symbol="GBTC").first()
     q = db.session.query(SwapPool).order_by(SwapPool.id.asc())
     pools = q.all()
     items = []
     for p in pools:
-        # Restrict to pools that involve gUSD to approximate USD pricing
-        if not gusd or (p.token_a_id != gusd.id and p.token_b_id != gusd.id):
+        # Restrict to pools that involve gBTC to approximate BTC pricing
+        if not gbtc or (p.token_a_id != gbtc.id and p.token_b_id != gbtc.id):
             continue
         vol = (
             db.session.query(SwapTrade)
@@ -254,12 +412,12 @@ def tokens_trending():
             .with_entities(db.func.coalesce(db.func.sum(SwapTrade.amount_in), 0))
             .scalar()
         )
-        token_id = p.token_a_id if p.token_b_id == gusd.id else p.token_b_id
+        token_id = p.token_a_id if p.token_b_id == gbtc.id else p.token_b_id
         tok = db.session.get(Token, token_id)
         if not tok:
             continue
-        # Approx price in USD from reserves (gUSD/token)
-        if p.token_b_id == gusd.id:
+        # Approx price in BTC from reserves (gBTC/token)
+        if p.token_b_id == gbtc.id:
             price = (Decimal(p.reserve_b) / Decimal(p.reserve_a)) if p.reserve_a and p.reserve_b else None
         else:
             price = (Decimal(p.reserve_a) / Decimal(p.reserve_b)) if p.reserve_a and p.reserve_b else None
@@ -270,7 +428,7 @@ def tokens_trending():
             "pool_id": p.id,
             "stage": int(p.stage or 1),
             "fee_bps": p.current_fee_bps(),
-            "price_usd": float(price) if price is not None else None,
+            "price_btc": float(price) if price is not None else None,
             "volume_24h": float(vol or 0),
         })
     # Sort by 24h volume desc
@@ -371,13 +529,13 @@ def ohlc_fallback():
     if not tok:
         return jsonify({"error": "token_not_found"}), 404
 
-    # Preferred pool with gUSD pairing if possible
-    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    # Preferred pool with gBTC pairing if possible
+    gbtc = Token.query.filter_by(symbol="gBTC").first() or Token.query.filter_by(symbol="GBTC").first()
     pool = None
-    if gusd:
+    if gbtc:
         pool = SwapPool.query.filter(
-            ((SwapPool.token_a_id == tok.id) & (SwapPool.token_b_id == gusd.id))
-            | ((SwapPool.token_b_id == tok.id) & (SwapPool.token_a_id == gusd.id))
+            ((SwapPool.token_a_id == tok.id) & (SwapPool.token_b_id == gbtc.id))
+            | ((SwapPool.token_b_id == tok.id) & (SwapPool.token_a_id == gbtc.id))
         ).first()
     if not pool:
         pool = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).first()
@@ -412,8 +570,8 @@ def ohlc_fallback():
     def trade_price_and_volume(t: SwapTrade):
         pr = None
         vol = None
-        if gusd and pool.token_b_id == gusd.id:
-            # price = gUSD per token (A is token, B is gUSD)
+        if gbtc and pool.token_b_id == gbtc.id:
+            # price = gBTC per token (A is token, B is gUSD)
             if t.side == "AtoB":
                 pr = (t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None
                 vol = t.amount_in if token_is_a else t.amount_out
@@ -602,12 +760,12 @@ def tokens_series(symbol: str):
     if not tok:
         return jsonify({"error": "token_not_found"}), 404
     # Prefer pool with gUSD pairing if present
-    gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+    gbtc = Token.query.filter_by(symbol="gBTC").first() or Token.query.filter_by(symbol="GBTC").first()
     pool = None
-    if gusd:
+    if gbtc:
         pool = SwapPool.query.filter(
-            ((SwapPool.token_a_id == tok.id) & (SwapPool.token_b_id == gusd.id))
-            | ((SwapPool.token_b_id == tok.id) & (SwapPool.token_a_id == gusd.id))
+            ((SwapPool.token_a_id == tok.id) & (SwapPool.token_b_id == gbtc.id))
+            | ((SwapPool.token_b_id == tok.id) & (SwapPool.token_a_id == gbtc.id))
         ).first()
     if not pool:
         pool = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).first()
@@ -637,11 +795,11 @@ def tokens_series(symbol: str):
     rows = q.order_by(SwapTrade.created_at.desc()).limit(limit).all()
     rows = list(reversed(rows))
 
-    # Build series (ISO time, price in gUSD per token)
+    # Build series (ISO time, price in gBTC per token)
     items = []
     for t in rows:
         pr = None
-        if gusd and pool.token_b_id == gusd.id:
+        if gbtc and pool.token_b_id == gbtc.id:
             if t.side == "AtoB":
                 pr = (t.amount_out / t.amount_in) if (t.amount_in and t.amount_out) else None
             else:
@@ -659,9 +817,9 @@ def tokens_series(symbol: str):
 
     # If empty, include a single point from current pool reserves if possible
     if not items and pool and pool.reserve_a and pool.reserve_b:
-        if gusd and pool.token_b_id == gusd.id:
+        if gbtc and pool.token_b_id == gbtc.id:
             pr = (pool.reserve_b / pool.reserve_a)
-        elif gusd and pool.token_a_id == gusd.id:
+        elif gbtc and pool.token_a_id == gbtc.id:
             pr = (pool.reserve_a / pool.reserve_b)
         else:
             pr = None
@@ -679,6 +837,77 @@ def lightning_balance():
         return jsonify({"error": "user_not_found"}), 404
     bal = _get_or_create_balance(user.id)
     return jsonify(bal.to_dict())
+
+
+@api_bp.post("/lightning/invoice")
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_DEFAULT", "100 per hour"))
+@csrf.exempt
+def lightning_invoice_create():
+    """Create a lightning invoice for receiving payments using Nostr signature."""
+    try:
+        data = request.get_json()
+        amount_sats = int(data.get("amount", 0))
+        memo = data.get("memo", "")
+
+        if amount_sats < 100:
+            return jsonify({"error": "Minimum amount is 100 sats"}), 400
+
+        # Validate Nostr signature from Authorization header
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Nostr "):
+            return jsonify({"error": "missing_nostr_signature"}), 401
+
+        # Extract and validate Nostr event
+        event_data = _validate_nostr_auth(auth_header)
+        if not event_data:
+            return jsonify({"error": "invalid_nostr_signature"}), 401
+
+        # Get user by pubkey
+        user = User.query.filter_by(pubkey_hex=event_data["pubkey"].lower()).first()
+        if not user:
+            return jsonify({"error": "user_not_found"}), 404
+
+        # Debug logging
+        current_app.logger.info(f"LNBITS_API_URL: {current_app.config.get('LNBITS_API_URL')}")
+        current_app.logger.info(f"LNBITS_INVOICE_KEY: {current_app.config.get('LNBITS_INVOICE_KEY')}")
+
+        try:
+            client = LNBitsClient()
+            success, result = client.create_invoice(amount_sats, memo)
+        except Exception as e:
+            current_app.logger.error(f"LNBits client error: {str(e)}")
+            return jsonify({"error": f"LNBits client error: {str(e)}"}), 500
+
+        if success and result:
+            # Create invoice record
+            invoice = LightningInvoice(
+                user_id=user.id,
+                amount_sats=amount_sats,
+                memo=memo,
+                payment_request=result["payment_request"],
+                payment_hash=result["payment_hash"],
+                checking_id=result.get("checking_id"),
+                status="pending",
+                provider="lnbits",
+            )
+            db.session.add(invoice)
+            db.session.commit()
+
+            return {
+                "id": invoice.id,
+                "payment_request": invoice.payment_request,
+                "payment_hash": invoice.payment_hash,
+                "amount_sats": invoice.amount_sats,
+                "memo": invoice.memo,
+                "status": invoice.status,
+                "created_at": invoice.created_at.isoformat() + "Z" if invoice.created_at else None
+            }
+        else:
+            current_app.logger.error(f"LNBits invoice creation failed: success={success}, result={result}")
+            return {"error": "Failed to create invoice with LNBits"}, 500
+
+    except Exception as e:
+        return {"error": str(e)}, 500
 
 
 @api_bp.post("/lightning/deposit")
@@ -761,6 +990,30 @@ def lightning_deposit_create():
     return jsonify(inv.to_dict()), 201
 
 
+@api_bp.get("/lightning/invoices")
+@require_auth
+def lightning_invoices_list():
+    """Get user's lightning invoices."""
+    user = _get_user_from_jwt()
+    if not user:
+        return jsonify({"error": "user_not_found"}), 404
+
+    try:
+        invoices = (
+            LightningInvoice.query
+            .filter_by(user_id=user.id)
+            .order_by(LightningInvoice.created_at.desc())
+            .all()
+        )
+
+        return jsonify({
+            "invoices": [invoice.to_dict() for invoice in invoices]
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.get("/lightning/invoices/<invoice_id>")
 @require_auth
 def lightning_invoice_status(invoice_id: str):
@@ -812,11 +1065,21 @@ def lightning_invoice_status(invoice_id: str):
 
 
 @api_bp.post("/lightning/withdraw")
-@require_auth
 @limiter.limit(lambda: current_app.config.get("RATE_LIMIT_DEFAULT", "100 per hour"))
 @csrf.exempt
 def lightning_withdraw():
-    user = _get_user_from_jwt()
+    # Validate Nostr signature from Authorization header
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Nostr "):
+        return jsonify({"error": "missing_nostr_signature"}), 401
+
+    # Extract and validate Nostr event
+    event_data = _validate_nostr_auth(auth_header)
+    if not event_data:
+        return jsonify({"error": "invalid_nostr_signature"}), 401
+
+    # Get user by pubkey
+    user = User.query.filter_by(pubkey_hex=event_data["pubkey"].lower()).first()
     if not user:
         return jsonify({"error": "user_not_found"}), 404
     if getattr(user, "withdraw_frozen", False):
@@ -1069,7 +1332,7 @@ def amm_quote():
         cands = SwapPool.query.filter((SwapPool.token_a_id == tok.id) | (SwapPool.token_b_id == tok.id)).all()
         if not cands:
             return jsonify({"error": "pool_not_found"}), 404
-        gusd = Token.query.filter_by(symbol="GUSD").first() or Token.query.filter_by(symbol="gUSD").first()
+        gbtc = Token.query.filter_by(symbol="gBTC").first() or Token.query.filter_by(symbol="GBTC").first()
         best = None
         for p in cands:
             try:
@@ -1083,7 +1346,7 @@ def amm_quote():
                 else:
                     continue
                 qq = quote_swap(p, side_p, amount_in)
-                score = (float(qq.amount_out), 1 if (gusd and (p.token_a_id == (gusd.id) or p.token_b_id == (gusd.id))) else 0)
+                score = (float(qq.amount_out), 1 if (gbtc and (p.token_a_id == (gbtc.id) or p.token_b_id == (gbtc.id))) else 0)
                 if best is None or score > best[0]:
                     best = (score, p, side_p, qq)
             except Exception:
@@ -1618,7 +1881,10 @@ def alerts_create():
         threshold = _parse_decimal(threshold_raw)
     except Exception:
         return jsonify({"error": "invalid_threshold"}), 400
-    tok = db.session.get(Token, int(token_id)) if token_id else None
+    if token_id:
+        tok = db.session.get(Token, int(token_id))
+    else:
+        tok = None
     if not tok and isinstance(symbol, str):
         tok = Token.query.filter_by(symbol=symbol).first()
     if not tok:

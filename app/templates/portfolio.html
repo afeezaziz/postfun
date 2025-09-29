@@ -1,161 +1,112 @@
 {% extends 'base.html' %}
 {% block title %}Portfolio | Postfun{% endblock %}
 {% block content %}
-  <!-- Portfolio Header -->
-  <section class="hero bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg mb-8">
-    <div class="hero-content">
-      <div class="w-full">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h1 class="text-3xl md:text-4xl font-bold text-terminal-green font-terminal mb-2">Your Portfolio</h1>
-            <p class="text-terminal-dim-green text-lg">Track your token holdings and performance</p>
-          </div>
-          {% if user %}
-            <div class="terminal-badge border-2 border-terminal-green px-4 py-2">
-              <span class="text-terminal-green font-bold">{{ user.display_name or 'Trader' }}</span>
-            </div>
-          {% endif %}
-        </div>
+  <section class="card">
+    <h1>Portfolio</h1>
+
+    <!-- Summary Section -->
+    <div class="stats shadow">
+      <div class="stat place-items-center">
+        <div class="stat-title">Total Value</div>
+        <div class="stat-value">{{ "%.2f"|format(holdings|sum(attribute='value') or 0) }}</div>
+        <div class="stat-desc">gUSD</div>
+      </div>
+      <div class="stat place-items-center">
+        <div class="stat-title">Positions</div>
+        <div class="stat-value">{{ holdings|length }}</div>
+        <div class="stat-desc">Tokens</div>
+      </div>
+      <div class="stat place-items-center">
+        <div class="stat-title">24h Change</div>
+        <div class="stat-value">—</div>
+        <div class="stat-desc">Combined</div>
+      </div>
+      <div class="stat place-items-center">
+        <div class="stat-title">User</div>
+        <div class="stat-value">{{ (user.display_name or 'Trader')[:8] }}</div>
+        <div class="stat-desc">Trader</div>
       </div>
     </div>
-  </section>
 
-  <!-- User Info Section -->
-  {% if user %}
-  <section class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg mb-8">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="terminal-card bg-terminal-black border border-terminal-green p-4 rounded">
-        <h3 class="text-terminal-green font-bold text-lg mb-3 flex items-center">
-          <span class="mr-2">👤</span> Profile
-        </h3>
-        <div class="space-y-2">
-          <div class="flex justify-between">
-            <span class="text-terminal-dim-green">Display:</span>
-            <span class="text-terminal-green font-terminal">{{ user.display_name or '—' }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-terminal-dim-green">npub:</span>
-            <span class="text-terminal-green font-terminal text-sm">{{ user.npub[:16] }}...{{ user.npub[-4:] if user.npub else '—' }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-terminal-dim-green">Public Key:</span>
-            <span class="text-terminal-green font-terminal text-sm">{{ user.pubkey_hex[:16] }}...{{ user.pubkey_hex[-4:] }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="terminal-card bg-terminal-black border border-terminal-green p-4 rounded">
-        <h3 class="text-terminal-green font-bold text-lg mb-3 flex items-center">
-          <span class="mr-2">💰</span> Summary
-        </h3>
-        <div class="space-y-2">
-          <div class="flex justify-between">
-            <span class="text-terminal-dim-green">Total Value:</span>
-            <span class="text-terminal-green font-bold">—</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-terminal-dim-green">Positions:</span>
-            <span class="text-terminal-green font-bold">{{ holdings|length }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-terminal-dim-green">24h Change:</span>
-            <span class="text-terminal-green font-bold">—</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="terminal-card bg-terminal-black border border-terminal-green p-4 rounded">
-        <h3 class="text-terminal-green font-bold text-lg mb-3 flex items-center">
-          <span class="mr-2">📊</span> Quick Actions
-        </h3>
-        <div class="space-y-2">
-          <a href="{{ url_for('web.tokens.launchpad') }}" class="terminal-button w-full text-center block mb-2">
-            Create Token
-          </a>
-          <a href="{{ url_for('web.users.wallet') }}" class="terminal-button w-full text-center block">
-            Lightning Wallet
-          </a>
-        </div>
-      </div>
-    </div>
-  </section>
-  {% endif %}
-
-  <!-- Holdings Section -->
-  <section class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg">
-    <div class="flex items-center justify-between mb-6">
-      <h2 class="text-2xl font-bold text-terminal-green font-terminal flex items-center">
-        <span class="mr-2">🪙</span> Token Holdings
-      </h2>
-      {% if holdings %}
-        <div class="terminal-badge border-2 border-terminal-green px-3 py-1">
-          <span class="text-terminal-green">{{ holdings|length }} tokens</span>
-        </div>
-      {% endif %}
+    <!-- Quick Actions -->
+    <div class="flex justify-center gap-6 my-8">
+      <a href="{{ url_for('web.tokens.launchpad') }}" class="btn btn-lg btn-primary shadow-lg">
+        <span class="mr-2">🪙</span> Create Token
+      </a>
+      <a href="{{ url_for('web.users.wallet') }}" class="btn btn-lg btn-secondary shadow-lg">
+        <span class="mr-2">⚡</span> Lightning Wallet
+      </a>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {% for h in holdings %}
-        {% set token = h.token %}
-        <div class="terminal-card bg-terminal-black border-2 border-terminal-green p-5 rounded-lg hover:border-terminal-green/80 transition-all duration-300">
-          <!-- Token Header -->
-          <div class="flex items-center justify-between mb-4">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="terminal-badge border-2 border-terminal-green px-2 py-1 text-terminal-green font-bold">
-                  {{ token.symbol }}
-                </span>
-                <span class="text-terminal-green font-bold text-lg">{{ token.name }}</span>
-              </div>
-            </div>
-            <div class="text-right">
-              <div class="text-terminal-dim-green text-sm">24h</div>
-              <div class="text-terminal-green font-bold">
-                {% if token.change_24h >= 0 %}+{% endif %}{{ '%.2f'|format(token.change_24h or 0) }}%
-              </div>
-            </div>
-          </div>
-
-          <!-- Token Body -->
-          <div class="space-y-3 mb-4">
-            <div class="flex justify-between">
-              <span class="text-terminal-dim-green">Balance:</span>
-              <span class="text-terminal-green font-terminal font-bold">{{ '%.4f'|format(h.amount or 0) }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-terminal-dim-green">Value:</span>
-              <span class="text-terminal-green font-terminal font-bold">{{ '%.2f'|format(h.value or 0) }} gUSD</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-terminal-dim-green">Price:</span>
-              <span class="text-terminal-green font-terminal">{{ '%.6f'|format((price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0)) }}</span>
-            </div>
-          </div>
-
-          <!-- Actions -->
-          <div class="flex gap-2 pt-3 border-t border-terminal-green/30">
-            <a href="{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}" class="terminal-button text-xs flex-1 text-center">
-              Details
-            </a>
-            <a href="{{ url_for('web.trading.pool', symbol=token.symbol) }}" class="terminal-button text-xs flex-1 text-center">
-              Trade
-            </a>
-          </div>
-
-          <!-- Mini Chart Placeholder -->
-          <div class="mt-3 h-12 bg-terminal-black border border-terminal-green rounded flex items-center justify-center">
-            <span class="text-terminal-dim-green text-xs">📈 Chart</span>
-          </div>
+    <!-- Token Holdings Table -->
+    {% if holdings %}
+      <div class="overflow-x-auto">
+        <div class="flex justify-between items-center mb-4 px-4 py-2 bg-base-200 rounded-lg">
+          <span class="text-sm">Token Holdings</span>
+          <span class="text-sm">{{ holdings|length }} tokens</span>
         </div>
-      {% else %}
-        <div class="col-span-full text-center py-12">
-          <div class="text-terminal-dim-green text-lg mb-4">No holdings yet</div>
-          <p class="text-terminal-dim-green mb-6">Start trading to build your portfolio</p>
-          <a href="{{ url_for('web.tokens_list') }}" class="terminal-button">
-            Browse Tokens
-          </a>
+
+        <table class="table table-xs">
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Balance</th>
+              <th>Price</th>
+              <th>Value</th>
+              <th>24h Change</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in holdings %}
+              {% set token = h.token %}
+              <tr>
+                <td>
+                  <div class="flex items-center gap-2">
+                    <span class="badge badge-success">{{ token.symbol }}</span>
+                    <span class="font-bold">{{ token.name }}</span>
+                  </div>
+                </td>
+                <td class="font-bold">{{ '%.4f'|format(h.amount or 0) }}</td>
+                <td>{{ '%.6f'|format((price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0)) }}</td>
+                <td class="font-bold text-green-600">{{ '%.2f'|format(h.value or 0) }} gUSD</td>
+                <td class="font-bold {% if token.change_24h and token.change_24h >= 0 %}text-green-600{% elif token.change_24h and token.change_24h < 0 %}text-red-600{% endif %}">
+                  {% if token.change_24h >= 0 %}+{% endif %}{{ '%.2f'|format(token.change_24h or 0) }}%
+                </td>
+                <td>
+                  <div class="flex gap-1">
+                    <a href="{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}" class="btn btn-xs" title="View Details">
+                      📊
+                    </a>
+                    <a href="{{ url_for('web.trading.pool', symbol=token.symbol) }}" class="btn btn-xs" title="Trade">
+                      💱
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th>Token</th>
+              <th>Balance</th>
+              <th>Price</th>
+              <th>Value</th>
+              <th>24h Change</th>
+              <th>Actions</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    {% else %}
+      <div class="card bg-base-200">
+        <div class="card-body text-center">
+          <div class="text-6xl mb-4">🪙</div>
+          <h3 class="text-xl font-bold mb-2">No Holdings Yet</h3>
+          <p class="text-gray-600 mb-6">Start trading to build your portfolio</p>
+          <a href="{{ url_for('web.tokens.tokens_list') }}" class="btn btn-primary">Browse Tokens</a>
         </div>
-      {% endfor %}
-    </div>
+      </div>
+    {% endif %}
   </section>
 {% endblock %}

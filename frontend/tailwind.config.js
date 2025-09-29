@@ -16,11 +16,12 @@ module.exports = {
           green: '#00ff00',
           'dim-green': '#00cc00',
           'dark-green': '#006600',
-          gray: {
-            dark: '#1a1a1a',
-            mid: '#333333'
-          },
-          red: '#ff0000'
+          yellow: '#ffff00',
+          gray: '#666666',
+          'gray-dark': '#1a1a1a',
+          'gray-mid': '#333333',
+          red: '#ff0000',
+          'dim-red': '#cc0000'
         }
       },
       boxShadow: {

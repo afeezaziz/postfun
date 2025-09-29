@@ -51,7 +51,7 @@ def require_auth_web(f):
     def wrapper(*args, **kwargs):
         payload = get_jwt_from_cookie()
         if not payload:
-            return redirect(url_for("web.home"))
+            return redirect(url_for("web.main.home"))
         g.jwt_payload = payload
         return f(*args, **kwargs)
 
@@ -274,14 +274,113 @@ def token_detail(symbol: str):
     except Exception:
         pass
 
+    # Get token holders
+    token_holders = []
+    holders_count = 0
+    try:
+        # Get token balances for this token, ordered by amount descending
+        balances = (
+            TokenBalance.query
+            .join(User, TokenBalance.user_id == User.id)
+            .filter(TokenBalance.token_id == token.id, TokenBalance.amount > 0)
+            .order_by(TokenBalance.amount.desc())
+            .limit(50)
+            .all()
+        )
+        holders_count = TokenBalance.query.filter(TokenBalance.token_id == token.id, TokenBalance.amount > 0).count()
+
+        # Calculate total supply for percentage calculation
+        total_supply = float(info.total_supply or 0) if info else 0
+        if total_supply == 0:
+            # Fallback: sum all balances
+            total_supply = sum(float(balance.amount or 0) for balance in balances)
+
+        # Format holders data
+        for i, balance in enumerate(balances):
+            percentage = (float(balance.amount or 0) / total_supply * 100) if total_supply > 0 else 0
+            token_holders.append({
+                'rank': i + 1,
+                'user': balance.user,
+                'address': balance.user.npub or balance.user.pubkey_hex if balance.user else f"address...{balance.user_id}",
+                'amount': float(balance.amount or 0),
+                'percentage': percentage
+            })
+    except Exception:
+        pass
+
+    # Get recent trades for this token
+    recent_trades = []
+    try:
+        # Find pools that include this token
+        pools = SwapPool.query.filter(
+            (SwapPool.token_a_id == token.id) | (SwapPool.token_b_id == token.id)
+        ).all()
+
+        for pool in pools:
+            # Get recent trades for this pool
+            trades = (
+                SwapTrade.query
+                .join(User, SwapTrade.user_id == User.id)
+                .filter(SwapTrade.pool_id == pool.id)
+                .order_by(SwapTrade.created_at.desc())
+                .limit(20)
+                .all()
+            )
+
+            for trade in trades:
+                # Determine if this is a buy or sell for this token
+                is_buy = False
+                trade_amount = 0
+                trade_price = 0
+
+                if pool.token_a_id == token.id:
+                    # Token A: AtoB = selling token A, BtoA = buying token A
+                    is_buy = trade.side == "BtoA"
+                    trade_amount = float(trade.amount_out if is_buy else trade.amount_in)
+                    # Calculate price
+                    if pool.token_b_id == gusd.id:
+                        trade_price = float(trade.amount_out / trade.amount_in) if trade.amount_in else 0
+                    else:
+                        trade_price = float(trade.amount_in / trade.amount_out) if trade.amount_out else 0
+                else:
+                    # Token B: AtoB = buying token B, BtoA = selling token B
+                    is_buy = trade.side == "AtoB"
+                    trade_amount = float(trade.amount_out if is_buy else trade.amount_in)
+                    # Calculate price
+                    if pool.token_a_id == gusd.id:
+                        trade_price = float(trade.amount_in / trade.amount_out) if trade.amount_out else 0
+                    else:
+                        trade_price = float(trade.amount_out / trade.amount_in) if trade.amount_in else 0
+
+                trade_total = trade_amount * trade_price
+
+                recent_trades.append({
+                    'created_at': trade.created_at,
+                    'type': 'buy' if is_buy else 'sell',
+                    'amount': trade_amount,
+                    'price': trade_price,
+                    'total': trade_total,
+                    'user': trade.user
+                })
+
+        # Sort by time and limit to most recent
+        recent_trades.sort(key=lambda x: x['created_at'], reverse=True)
+        recent_trades = recent_trades[:20]
+    except Exception:
+        pass
+
     return render_template(
         "token_detail.html",
         token=token,
+        info=info,
         watchlisted=watchlisted,
         price=price,
         launcher=launcher,
         is_following=is_following,
         fee_summary=fee_summary,
+        holders_count=holders_count,
+        token_holders=token_holders,
+        recent_trades=recent_trades,
         meta_title=meta_title,
         meta_description=meta_description,
         meta_image=meta_image,
@@ -478,6 +577,33 @@ def explore():
     )
 
 
+import re
+
+def extract_post_id_from_url(url):
+    """Extract Twitter post ID from URL including complex URLs with /photo/1."""
+    if not url:
+        return None
+
+    # Handle various Twitter/X URL formats
+    patterns = [
+        r'https://(twitter\.com|x\.com)/.*/status/(\d+)',  # Basic status URL
+        r'https://(twitter\.com|x\.com)/.*/status/(\d+)/.*',  # Status with additional paths like /photo/1
+    ]
+
+    for pattern in patterns:
+        match = re.match(pattern, url)
+        if match:
+            return match.group(2)
+
+    return None
+
+def generate_token_details_from_post_id(post_id):
+    """Generate token symbol and name from Twitter post ID."""
+    # Use the post ID directly as both symbol and name
+    symbol = post_id
+    name = post_id
+    return symbol, name
+
 # Launchpad page
 @tokens_bp.route("/launchpad", methods=["GET", "POST"])
 @require_auth_web
@@ -485,8 +611,7 @@ def launchpad():
     form = {
         "symbol": "",
         "name": "",
-        "price": "",
-        "market_cap": "",
+        "post_url": "",
     }
     errors = {}
     confirm_preview = False
@@ -494,64 +619,35 @@ def launchpad():
     # Prefill from query param q on GET
     if request.method == "GET":
         q = request.args.get("q", type=str)
-        if q:
-            q = q.strip()
-            sym = None
-            name = None
-            # If URL, derive from last path segment
-            try:
-                parts = urlsplit(q)
-                if parts.scheme and parts.netloc:
-                    # use last non-empty path segment
-                    segs = [s for s in parts.path.split("/") if s]
-                    base = segs[-1] if segs else parts.netloc.split(".")[0]
-                    cand = ''.join([c for c in base if c.isalnum()])
-                    sym = cand[:12].upper() if cand else None
-                    name = base.replace('-', ' ').replace('_', ' ').title()
-            except Exception:
-                pass
-            if not sym:
-                # Treat as name/symbol suggestion
-                base = ''.join([c for c in q if c.isalnum() or c == ' ']).strip()
-                if base:
-                    name = name or base.title()
-                    letters = ''.join([c for c in base if c.isalnum()])
-                    if letters:
-                        sym = letters[:12].upper()
-            if sym:
-                form["symbol"] = sym
-            if name:
-                form["name"] = name
+        post_url = request.args.get("post_url", type=str)
+        if q or post_url:
+            url = (q or post_url or "").strip()
+            if url:
+                post_id = extract_post_id_from_url(url)
+                if post_id:
+                    symbol, name = generate_token_details_from_post_id(post_id)
+                    form["symbol"] = symbol
+                    form["name"] = name
+                    form["post_url"] = url
 
     if request.method == "POST":
+        form["post_url"] = (request.form.get("post_url", "").strip() or "")
         form["symbol"] = (request.form.get("symbol", "").strip() or "").upper()
-        form["name"] = (request.form.get("name", "").strip() or "").title()
-        form["price"] = (request.form.get("price") or "").strip()
-        form["market_cap"] = (request.form.get("market_cap") or "").strip()
+        form["name"] = (request.form.get("name", "").strip() or "")
         confirm_flag = request.form.get("confirm") == "yes"
 
         # Field validations
-        if not form["symbol"] or len(form["symbol"]) > 32:
-            errors["symbol"] = "Symbol is required (max 32)"
+        if not form["post_url"]:
+            errors["post_url"] = "Twitter post URL is required"
+        elif not extract_post_id_from_url(form["post_url"]):
+            errors["post_url"] = "Invalid Twitter post URL format"
+
+        if not form["symbol"]:
+            errors["symbol"] = "Symbol is required"
+        elif not form["symbol"].isdigit() or len(form["symbol"]) < 3:
+            errors["symbol"] = "Symbol must be a valid post ID (digits only, minimum 3 digits)"
         if not form["name"]:
             errors["name"] = "Name is required"
-
-        price_val = None
-        mcap_val = None
-        if form["price"]:
-            try:
-                price_val = Decimal(form["price"])
-                if price_val < 0:
-                    errors["price"] = "Price must be >= 0"
-            except (InvalidOperation, ValueError):
-                errors["price"] = "Invalid price"
-        if form["market_cap"]:
-            try:
-                mcap_val = Decimal(form["market_cap"])
-                if mcap_val < 0:
-                    errors["market_cap"] = "Market cap must be >= 0"
-            except (InvalidOperation, ValueError):
-                errors["market_cap"] = "Invalid market cap"
 
         if errors:
             for msg in errors.values():
@@ -563,34 +659,42 @@ def launchpad():
             confirm_preview = True
             return render_template("launchpad.html", form=form, errors=errors, confirm_preview=confirm_preview), 200
 
-        # Confirmed: create or update token
+        # Confirmed: create token with fixed parameters
         symbol = form["symbol"]
         name = form["name"]
+        post_url = form["post_url"]
+        post_id = extract_post_id_from_url(post_url)
+
         token = Token.query.filter_by(symbol=symbol).first()
-        if token is None:
+        if token is not None:
+            errors["symbol"] = "Token with this symbol already exists"
+            for msg in errors.values():
+                flash(msg, "error")
+            return render_template("launchpad.html", form=form, errors=errors, confirm_preview=False), 400
+
+        try:
+            # Create token with fixed supply
             token = Token(symbol=symbol, name=name)
             db.session.add(token)
-        token.name = name
-        if price_val is not None:
-            token.price = price_val
-        if mcap_val is not None:
-            token.market_cap = mcap_val
-        try:
-            # Ensure TokenInfo exists and stamp launcher
-            # Flush to assign token.id if new
-            db.session.flush()
-            info = TokenInfo.query.filter_by(token_id=token.id).first()
-            payload = g.jwt_payload
-            uid = payload.get("uid") if payload else None
-            if not info:
-                info = TokenInfo(token_id=token.id)
-                db.session.add(info)
-            if isinstance(uid, int) and not info.launch_user_id:
-                info.launch_user_id = uid
-                info.launch_at = datetime.utcnow()
+            db.session.flush()  # Get token ID
+
+            # Create token info with Twitter details
+            info = TokenInfo(
+                token_id=token.id,
+                total_supply=Decimal("1000000000"),  # 1 billion tokens
+                tweet_url=post_url,
+                tweet_author=f"Tweet Author {post_id[:4]}",  # Placeholder
+                tweet_content=f"Tokenized tweet {post_id}",  # Placeholder
+                tweet_created_at=datetime.utcnow(),
+                launch_user_id=g.jwt_payload.get("uid"),
+                launch_at=datetime.utcnow(),
+            )
             db.session.add(info)
+
+            # Commit the token creation
             db.session.commit()
-            # Invalidate caches affected by launches/edits
+
+            # Invalidate caches affected by launches
             try:
                 cache.delete_memoized(tokens_list)
                 cache.delete_memoized(explore)
@@ -602,11 +706,14 @@ def launchpad():
                 cache.delete_memoized(_cached_trending_items)
             except Exception:
                 pass
-            flash("Token saved", "success")
+
+            flash("Token created successfully!", "success")
             return redirect(url_for("web.tokens.token_detail", symbol=symbol, launched=1))
-        except Exception:
+
+        except Exception as e:
             db.session.rollback()
-            flash("Failed to save token", "error")
+            current_app.logger.error(f"Failed to create token: {e}")
+            flash("Failed to create token", "error")
             return render_template("launchpad.html", form=form, errors=errors, confirm_preview=False), 500
 
     return render_template("launchpad.html", form=form, errors=errors, confirm_preview=confirm_preview)
@@ -718,7 +825,7 @@ def watchlist():
     uid = payload.get("uid")
     user = db.session.get(User, uid) if isinstance(uid, int) else None
     if not user:
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
     q = request.args.get("q", type=str)
     sort = request.args.get("sort", default="market_cap", type=str)
     order = request.args.get("order", default="desc", type=str)
@@ -777,7 +884,7 @@ def watchlist_add(symbol: str):
     uid = payload.get("uid")
     user = db.session.get(User, uid) if isinstance(uid, int) else None
     if not user:
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
     token = Token.query.filter_by(symbol=symbol).first()
     if not token:
         abort(404)
@@ -801,7 +908,7 @@ def watchlist_remove(symbol: str):
     uid = payload.get("uid")
     user = db.session.get(User, uid) if isinstance(uid, int) else None
     if not user:
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
     token = Token.query.filter_by(symbol=symbol).first()
     if not token:
         abort(404)
@@ -826,7 +933,7 @@ def alerts():
     uid = payload.get("uid")
     user = db.session.get(User, uid) if isinstance(uid, int) else None
     if not user:
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
     rules = (
         AlertRule.query.filter_by(user_id=user.id)
         .join(Token, AlertRule.token_id == Token.id)
@@ -870,7 +977,7 @@ def alerts_create():
     uid = payload.get("uid")
     user = db.session.get(User, uid) if isinstance(uid, int) else None
     if not user:
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
     symbol = (request.form.get("symbol") or "").strip()
     condition = (request.form.get("condition") or "").strip()
     threshold_s = (request.form.get("threshold") or "").strip()
@@ -908,7 +1015,7 @@ def alerts_delete(rule_id: int):
     uid = payload.get("uid")
     user = db.session.get(User, uid) if isinstance(uid, int) else None
     if not user:
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
     rule = AlertRule.query.filter_by(id=rule_id, user_id=user.id).first()
     if not rule:
         flash("Alert not found", "error")
@@ -1640,10 +1747,11 @@ def _mock_swaps(token: Token, n: int = 10):
         amount = ((seed + i * 7) % 500) / 10 + 1
         price = float(token.price or 1.0) * (1 + (((seed + i) % 9) - 4) * 0.005)
         ts = now - timedelta(minutes=i * 7)
-        swaps.append({
+        swap_data = {
             "side": side,
             "amount": round(amount, 4),
             "price": round(price, 6),
             "time": ts.isoformat() + "Z",
-        })
+        }
+        swaps.append(swap_data)
     return swaps

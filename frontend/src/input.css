@@ -16,38 +16,240 @@
 
 @layer components {
   .terminal-button {
-    @apply bg-terminal-black border-2 border-terminal-green text-terminal-green font-terminal px-2 py-1 shadow-retro cursor-pointer;
+    @apply bg-terminal-black border-2 border-terminal-green text-terminal-green font-terminal px-4 py-2 shadow-retro cursor-pointer transition-all duration-200 ease-in-out;
   }
 
   .terminal-button:hover {
-    @apply bg-[#001a00];
+    @apply bg-[#001a00] border-terminal-yellow text-terminal-yellow shadow-[4px_4px_0_0_#000000];
   }
 
   .terminal-button:active {
-    @apply shadow-retro-inverted bg-[#003300];
+    @apply shadow-retro-inverted bg-[#003300] translate-x-[1px] translate-y-[1px];
+  }
+
+  .terminal-button:disabled {
+    @apply opacity-50 cursor-not-allowed border-terminal-gray text-terminal-gray;
   }
 
   .terminal-input {
-    @apply bg-terminal-black border border-terminal-green text-terminal-green font-terminal px-2 py-1 shadow-[inset_2px_2px_0_0_#000000,_inset_-2px_-2px_0_0_#006600];
+    @apply bg-terminal-black border-2 border-terminal-green text-terminal-green font-terminal px-3 py-2 shadow-[inset_2px_2px_0_0_#000000,_inset_-2px_-2px_0_0_#006600] transition-all duration-200 ease-in-out;
   }
 
   .terminal-input:focus {
-    @apply outline-none bg-[#001a00];
+    @apply outline-none bg-[#001a00] border-terminal-yellow shadow-[inset_2px_2px_0_0_#000000,_inset_-2px_-2px_0_0_#006600];
+  }
+
+  .terminal-input::placeholder {
+    @apply text-terminal-gray opacity-70;
   }
 
   .terminal-card {
-    @apply bg-terminal-black border border-terminal-green p-3 shadow-[inset_2px_2px_0_0_#000000,_inset_-2px_-2px_0_0_#006600];
+    @apply bg-terminal-black border-2 border-terminal-green p-4 shadow-[inset_2px_2px_0_0_#000000,_inset_-2px_-2px_0_0_#006600] transition-all duration-200 ease-in-out;
+  }
+
+  .terminal-card:hover {
+    @apply border-terminal-yellow shadow-[inset_2px_2px_0_0_#000000,_inset_-2px_-2px_0_0_#006600];
   }
 
   .terminal-nav-link {
-    @apply text-terminal-green no-underline mx-2;
+    @apply text-terminal-green no-underline mx-2 transition-all duration-200 ease-in-out;
   }
 
   .terminal-nav-link:hover {
-    @apply underline;
+    @apply underline text-terminal-yellow;
   }
 
   .terminal-badge {
-    @apply inline-flex items-center px-1 py-0.5 text-xs border border-terminal-green text-terminal-green bg-terminal-black;
+    @apply inline-flex items-center px-2 py-1 text-xs border border-terminal-green text-terminal-green bg-terminal-black transition-all duration-200 ease-in-out;
+  }
+
+  .terminal-badge:hover {
+    @apply border-terminal-yellow text-terminal-yellow;
+  }
+
+  /* Enhanced badge colors for different states */
+  .terminal-badge-green {
+    @apply border-terminal-green text-terminal-green bg-terminal-black/20;
+  }
+
+  .terminal-badge-red {
+    @apply border-terminal-red text-terminal-red bg-terminal-black/20;
+  }
+
+  .terminal-badge-dim {
+    @apply border-terminal-dim-green text-terminal-dim-green bg-terminal-black/20;
+  }
+
+  /* Enhanced badge colors */
+  .badge-pending {
+    @apply border-terminal-yellow text-terminal-yellow bg-terminal-black;
+  }
+
+  .badge-paid {
+    @apply border-terminal-green text-terminal-green bg-terminal-black;
+  }
+
+  .badge-expired {
+    @apply border-terminal-gray text-terminal-gray bg-terminal-black;
+  }
+
+  .badge-cancelled {
+    @apply border-terminal-red text-terminal-red bg-terminal-black;
+  }
+
+  .badge-confirmed {
+    @apply border-terminal-green text-terminal-green bg-terminal-black;
+  }
+
+  .badge-failed {
+    @apply border-terminal-red text-terminal-red bg-terminal-black;
+  }
+
+  /* Animations */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  /* Notification styles */
+  .notification {
+    @apply fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 transition-all duration-300 ease-in-out;
+  }
+
+  .notification-success {
+    @apply bg-terminal-green text-terminal-black border-2 border-terminal-green;
+  }
+
+  .notification-error {
+    @apply bg-terminal-red text-terminal-black border-2 border-terminal-red;
+  }
+
+  .notification-info {
+    @apply bg-terminal-yellow text-terminal-black border-2 border-terminal-yellow;
+  }
+
+  /* Loading states */
+  .loading {
+    @apply relative overflow-hidden;
+  }
+
+  .loading::after {
+    content: '';
+    @apply absolute top-0 left-0 w-full h-full bg-terminal-green opacity-20;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* Enhanced table and progress bar styles */
+  .progress-bar {
+    @apply w-full bg-terminal-black/50 rounded-full h-1.5;
+  }
+
+  .progress-bar-fill {
+    @apply bg-terminal-green h-1.5 rounded-full transition-all duration-300 ease-in-out;
+  }
+
+  /* Table hover effects */
+  .table-row-hover {
+    @apply hover:bg-terminal-black/30 transition-colors duration-150;
+  }
+
+  /* Avatar styles */
+  .avatar {
+    @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold;
+  }
+
+  .avatar-user {
+    @apply bg-terminal-green/20 text-terminal-green;
+  }
+
+  .avatar-external {
+    @apply bg-terminal-dim-green/20 text-terminal-dim-green;
+  }
+
+  /* Button variations */
+  .terminal-button-buy {
+    @apply bg-terminal-green text-terminal-black hover:bg-terminal-dim-green;
+  }
+
+  .terminal-button-sell {
+    @apply bg-terminal-red text-terminal-black hover:bg-terminal-dim-red;
+  }
+
+  /* Form field enhancements */
+  .terminal-field {
+    @apply relative;
+  }
+
+  .terminal-suffix {
+    @apply absolute right-3 top-1/2 transform -translate-y-1/2 text-terminal-dim-green pointer-events-none;
+  }
+
+  /* Quick trade specific styles */
+  .quick-trade-arrow {
+    @apply text-terminal-green hover:text-terminal-dim-green p-2 transition-colors duration-150;
+  }
+
+  .trade-type-tab {
+    @apply flex-1 py-2 px-4 text-center font-medium transition-colors duration-150;
+  }
+
+  .trade-type-active {
+    @apply bg-terminal-green text-terminal-black;
+  }
+
+  .trade-type-inactive {
+    @apply text-terminal-dim-green hover:text-terminal-green;
+  }
+
+  /* Balance display styles */
+  .balance-display {
+    @apply text-xs text-terminal-dim-green mt-1;
+  }
+
+  .balance-amount {
+    @apply text-terminal-green;
+  }
+
+  /* Enhanced link styles */
+  .terminal-link {
+    @apply text-terminal-green hover:text-terminal-dim-green transition-colors duration-150;
+  }
+
+  /* Mobile responsive fixes */
+  @media (max-width: 640px) {
+    .mobile-stack {
+      @apply flex-col gap-2;
+    }
+
+    .mobile-full-width {
+      @apply w-full;
+    }
   }
 }

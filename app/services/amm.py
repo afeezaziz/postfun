@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..extensions import db
 from ..models import SwapPool, Token, TokenBalance, SwapTrade, BurnEvent
+from .wallet import WalletService
 
 # Increase precision for AMM math
 getcontext().prec = 40
@@ -112,16 +113,33 @@ def quote_swap(pool: SwapPool, side: str, amount_in: Decimal) -> Quote:
 
 
 def _get_or_create_balance(session: Session, user_id: int, token_id: int) -> TokenBalance:
+    # Get token to check if it's BTC
+    token = session.get(Token, token_id)
+    is_btc = token and token.symbol == 'BTC'
+
     row = (
         session.query(TokenBalance)
         .filter_by(user_id=user_id, token_id=token_id)
         .with_for_update()
         .first()
     )
+
     if not row:
-        row = TokenBalance(user_id=user_id, token_id=token_id, amount=Decimal("0"))
+        if is_btc:
+            # For BTC, initialize with current sats balance
+            btc_amount = WalletService.get_user_btc_token_balance(user_id)
+            row = TokenBalance(user_id=user_id, token_id=token_id, amount=btc_amount)
+        else:
+            row = TokenBalance(user_id=user_id, token_id=token_id, amount=Decimal("0"))
         session.add(row)
         session.flush()
+    elif is_btc:
+        # For existing BTC balances, always sync with current sats balance
+        btc_amount = WalletService.get_user_btc_token_balance(user_id)
+        if abs(_dec(row.amount) - btc_amount) > Decimal('0.00000001'):
+            row.amount = btc_amount
+            session.flush()
+
     return row
 
 
@@ -193,13 +211,31 @@ def execute_swap(session: Session, pool_id: int, user_id: int, side: str, amount
     if side == "AtoB":
         bal_in = _get_or_create_balance(session, user_id, token_a_id)
         bal_out = _get_or_create_balance(session, user_id, token_b_id)
-        if _dec(bal_in.amount) < amount_in:
+
+        # Special balance check for BTC
+        token_a = session.get(Token, token_a_id)
+        if token_a and token_a.symbol == 'BTC':
+            # Convert BTC amount to sats for checking
+            amount_sats_needed = int(amount_in * Decimal(100_000_000))
+            if not WalletService.can_afford_sats(user_id, amount_sats_needed):
+                raise ValueError("insufficient_balance")
+        elif _dec(bal_in.amount) < amount_in:
             raise ValueError("insufficient_balance")
+
         # Update user balances
-        bal_in.amount = _dec(bal_in.amount) - amount_in
-        bal_out.amount = _dec(bal_out.amount) + q.amount_out
-        session.add(bal_in)
-        session.add(bal_out)
+        if token_a and token_a.symbol == 'BTC':
+            # For BTC, we don't update TokenBalance here - it's managed by WalletService
+            pass
+        else:
+            bal_in.amount = _dec(bal_in.amount) - amount_in
+            session.add(bal_in)
+
+        if token_b and token_b.symbol == 'BTC':
+            # For BTC, we don't update TokenBalance here - it's managed by WalletService
+            pass
+        else:
+            bal_out.amount = _dec(bal_out.amount) + q.amount_out
+            session.add(bal_out)
         # Update pool reserves (virtual)
         pool.reserve_a = _dec(pool.reserve_a) + q.effective_in
         pool.reserve_b = _dec(pool.reserve_b) - q.amount_out
@@ -209,14 +245,37 @@ def execute_swap(session: Session, pool_id: int, user_id: int, side: str, amount
         pool.cumulative_volume_a = _dec(pool.cumulative_volume_a or 0) + amount_in
         pool.cumulative_volume_b = _dec(pool.cumulative_volume_b or 0) + q.amount_out
     elif side == "BtoA":
-        bal_in = _get_or_create_balance(session, user_id, token_b_id)
-        bal_out = _get_or_create_balance(session, user_id, token_a_id)
-        if _dec(bal_in.amount) < amount_in:
+        bal_in = _get_or_create_balance(
+            session, user_id, token_b_id
+        )
+        bal_out = _get_or_create_balance(
+            session, user_id, token_a_id
+        )
+
+        # Special balance check for BTC
+        token_b = session.get(Token, token_b_id)
+        if token_b and token_b.symbol == 'BTC':
+            # Convert BTC amount to sats for checking
+            amount_sats_needed = int(amount_in * Decimal(100_000_000))
+            if not WalletService.can_afford_sats(user_id, amount_sats_needed):
+                raise ValueError("insufficient_balance")
+        elif _dec(bal_in.amount) < amount_in:
             raise ValueError("insufficient_balance")
-        bal_in.amount = _dec(bal_in.amount) - amount_in
-        bal_out.amount = _dec(bal_out.amount) + q.amount_out
-        session.add(bal_in)
-        session.add(bal_out)
+
+        # Update user balances
+        if token_b and token_b.symbol == 'BTC':
+            # For BTC, we don't update TokenBalance here - it's managed by WalletService
+            pass
+        else:
+            bal_in.amount = _dec(bal_in.amount) - amount_in
+            session.add(bal_in)
+
+        if token_a and token_a.symbol == 'BTC':
+            # For BTC, we don't update TokenBalance here - it's managed by WalletService
+            pass
+        else:
+            bal_out.amount = _dec(bal_out.amount) + q.amount_out
+            session.add(bal_out)
         pool.reserve_b = _dec(pool.reserve_b) + q.effective_in
         pool.reserve_a = _dec(pool.reserve_a) - q.amount_out
         # Accumulate fees taken from token B

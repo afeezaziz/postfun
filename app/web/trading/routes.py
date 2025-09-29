@@ -45,7 +45,7 @@ def require_auth_web(f):
     def wrapper(*args, **kwargs):
         payload = get_jwt_from_cookie()
         if not payload:
-            return redirect(url_for("web.home"))
+            return redirect(url_for("web.main.home"))
         g.jwt_payload = payload
         return f(*args, **kwargs)
 
@@ -259,7 +259,7 @@ def pool_trade(symbol: str):
     uid = payload.get("uid") if payload else None
     if not isinstance(uid, int):
         flash("Not authenticated", "error")
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
 
     try:
         # Optional slippage/min-out constraints from form
@@ -346,9 +346,14 @@ def _fee_summary_for_pool_cached(pool_id: int):
     if not pool:
         return None
     rule = FeeDistributionRule.query.filter_by(pool_id=pool.id).first()
-    bps_c = int(rule.bps_creator if rule else 5000)
-    bps_m = int(rule.bps_minter if rule else 3000)
-    bps_t = int(rule.bps_treasury if rule else 2000)
+    if rule:
+        bps_c = int(rule.bps_creator)
+        bps_m = int(rule.bps_minter)
+        bps_t = int(rule.bps_treasury)
+    else:
+        bps_c = 5000
+        bps_m = 3000
+        bps_t = 2000
     fa = _D(pool.fee_accum_a or 0)
     fb = _D(pool.fee_accum_b or 0)
     def _allocs(bps: int):
@@ -391,9 +396,15 @@ def _cached_trending_items():
         if not tok:
             continue
         if p.token_b_id == gusd.id:
-            price = (p.reserve_b / p.reserve_a) if p.reserve_a and p.reserve_b else None
+            if p.reserve_a and p.reserve_b:
+                price = p.reserve_b / p.reserve_a
+            else:
+                price = None
         else:
-            price = (p.reserve_a / p.reserve_b) if p.reserve_a and p.reserve_b else None
+            if p.reserve_a and p.reserve_b:
+                price = p.reserve_a / p.reserve_b
+            else:
+                price = None
         trending.append({
             "symbol": tok.symbol,
             "name": tok.name,
@@ -452,7 +463,8 @@ def _cached_stats():
         trades_24h = SwapTrade.query.filter(SwapTrade.created_at >= since_24h).count()
     from ...models import WatchlistItem
     watchlists_count = WatchlistItem.query.count()
-    return {
+    # Build stats dictionary
+    stats_data = {
         "tokens": int(tokens_count or 0),
         "pools": int(pools_count or 0),
         "creators": int(creators_count or 0),
@@ -460,3 +472,4 @@ def _cached_stats():
         "volume_24h": float(volume_24h_gusd or 0.0),
         "watchlists": int(watchlists_count or 0),
     }
+    return stats_data

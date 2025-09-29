@@ -56,7 +56,7 @@ def require_auth_web(f):
     def wrapper(*args, **kwargs):
         payload = get_jwt_from_cookie()
         if not payload:
-            return redirect(url_for("web.home"))
+            return redirect(url_for("web.main.home"))
         g.jwt_payload = payload
         return f(*args, **kwargs)
 
@@ -108,7 +108,7 @@ def user_profile():
     return render_template("profile.html", user=user)
 
 
-@users_bp.route("/users/<path:identifier>")
+@users_bp.route("/<path:identifier>")
 def user_profile_by_identifier(identifier: str):
     """Route to find user by npub or @twitter_username"""
     user = None
@@ -277,7 +277,7 @@ def creator_follow(user_id: int):
     uid = payload.get("uid") if payload else None
     me = db.session.get(User, uid) if isinstance(uid, int) else None
     if not me:
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
     if me.id == user_id:
         flash("You cannot follow yourself", "error")
         return redirect(url_for("web.users.creator_profile", user_id=user_id))
@@ -300,7 +300,7 @@ def creator_unfollow(user_id: int):
     uid = payload.get("uid") if payload else None
     me = db.session.get(User, uid) if isinstance(uid, int) else None
     if not me:
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
     row = CreatorFollow.query.filter_by(follower_user_id=me.id, creator_user_id=user_id).first()
     if row:
         try:
@@ -321,16 +321,25 @@ def wallet():
     uid = payload.get("uid")
     user = db.session.get(User, uid) if isinstance(uid, int) else None
     if not user:
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
 
-    # Get user's token balances
+    # Use WalletService for integrated balance management
+    from app.services.wallet import WalletService
+    wallet_summary = WalletService.get_wallet_summary(user.id)
+
+    # Get user's token balances (excluding BTC which is handled by WalletService)
+    btc_token = WalletService.get_btc_token()
     balances = (
         TokenBalance.query
         .join(Token, TokenBalance.token_id == Token.id)
         .filter(TokenBalance.user_id == user.id, TokenBalance.amount > 0)
-        .order_by(TokenBalance.amount.desc())
-        .all()
     )
+
+    # Exclude BTC token from regular balances since it's managed by WalletService
+    if btc_token:
+        balances = balances.filter(TokenBalance.token_id != btc_token.id)
+
+    balances = balances.order_by(TokenBalance.amount.desc()).all()
 
     # Calculate total balance and individual values
     total_balance = 0.0
@@ -340,26 +349,22 @@ def wallet():
         balance.value = value
         total_balance += value
 
+    # Add BTC balance to total
+    if btc_token:
+        btc_price = _amm_price_for_token(btc_token) or float(btc_token.price or 0)
+        btc_value = wallet_summary['btc_balance'] * btc_price
+        total_balance += btc_value
+
     # Get price map for tokens
     price_by_symbol = {balance.token.symbol: (_amm_price_for_token(balance.token) or float(balance.token.price or 0)) for balance in balances}
 
-    # Get lightning invoices
-    lightning_invoices = (
-        LightningInvoice.query
-        .filter_by(user_id=user.id)
-        .order_by(LightningInvoice.created_at.desc())
-        .limit(10)
-        .all()
-    )
+    # Add BTC price to map
+    if btc_token:
+        price_by_symbol['BTC'] = _amm_price_for_token(btc_token) or float(btc_token.price or 0)
 
-    # Get lightning withdrawals
-    lightning_withdrawals = (
-        LightningWithdrawal.query
-        .filter_by(user_id=user.id)
-        .order_by(LightningWithdrawal.created_at.desc())
-        .limit(10)
-        .all()
-    )
+    # Get lightning invoices from WalletService
+    lightning_invoices = wallet_summary['recent_invoices']
+    lightning_withdrawals = wallet_summary['recent_withdrawals']
 
     # Get recent activity (mock data for now)
     recent_activity = []
@@ -373,6 +378,7 @@ def wallet():
         recent_activity=recent_activity,
         lightning_invoices=lightning_invoices,
         lightning_withdrawals=lightning_withdrawals,
+        wallet_summary=wallet_summary,
         meta_title="Wallet — Postfun",
         meta_description="Your wallet balances and activity on Postfun.",
         meta_url=url_for("web.users.wallet", _external=True),
@@ -600,7 +606,7 @@ def twitter_auth():
     user = db.session.get(User, uid) if isinstance(uid, int) else None
     if not user:
         flash("You must be logged in to connect Twitter", "error")
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
 
     # Check if user already has Twitter connected
     if user.twitter_connection:
@@ -648,7 +654,7 @@ def twitter_callback():
     user = db.session.get(User, uid) if isinstance(uid, int) else None
     if not user:
         flash("Authentication required", "error")
-        return redirect(url_for("web.home"))
+        return redirect(url_for("web.main.home"))
 
     # Verify state matches
     state = session.get('twitter_oauth_state')

@@ -659,6 +659,7 @@ async function pfConnectNostrWallet() {
     });
     const out = await vRes.json();
     if (out.token) {
+      localStorage.setItem('postfun_jwt', out.token);
       window.location.reload();
     } else {
       alert('Login failed: ' + JSON.stringify(out));
@@ -688,6 +689,10 @@ async function pfConnectOKXWallet() {
       alert('OKX wallet Nostr interface not available. Please ensure Nostr is enabled in OKX wallet settings.');
       return;
     }
+
+    // Check if OKX wallet has the right interface
+    console.log('OKX - Nostr interface type:', typeof okxNostr);
+    console.log('OKX - Available Nostr methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(okxNostr)));
 
     const csrf = pfGetCookie('csrf_token');
     const chRes = await fetch('/auth/challenge', {
@@ -720,14 +725,31 @@ async function pfConnectOKXWallet() {
       {
         name: 'Minimal event',
         event: { kind: 1, created_at: Math.floor(Date.now() / 1000), content, tags: [] }
+      },
+      {
+        name: 'OKX specific approach',
+        event: { kind: 1, created_at: Math.floor(Date.now() / 1000), content, tags: [], pubkey }
       }
     ];
 
     for (const attempt of signingAttempts) {
       try {
         console.log(`OKX - Attempting ${attempt.name}:`, attempt.event);
-        const signed = await okxNostr.signEvent(attempt.event);
-        console.log(`OKX - Signed event (${attempt.name}):`, signed);
+
+        // Add timeout for signing
+        let signed;
+        try {
+          signed = await Promise.race([
+            okxNostr.signEvent(attempt.event),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Signing timeout')), 10000)
+            )
+          ]);
+          console.log(`OKX - Signed event (${attempt.name}):`, signed);
+        } catch (signError) {
+          console.error(`OKX - Signing failed for ${attempt.name}:`, signError);
+          throw signError;
+        }
 
         // Validate the signed event structure
         if (!signed || typeof signed !== 'object') {
@@ -751,6 +773,7 @@ async function pfConnectOKXWallet() {
 
         if (out.token) {
           console.log(`OKX - Success with ${attempt.name}!`);
+          localStorage.setItem('postfun_jwt', out.token);
           window.location.reload();
           return;
         } else if (out.error !== 'invalid_signature_or_payload') {
@@ -765,7 +788,21 @@ async function pfConnectOKXWallet() {
     }
 
     // If all attempts failed, provide a helpful error message
-    alert('OKX wallet authentication failed. This might be due to compatibility issues with OKX wallet\'s Nostr implementation. Please try using a standard Nostr extension like Alby or nos2x instead.');
+    const errorMessage = `OKX wallet authentication failed.
+
+This could be due to:
+1. OKX wallet's Nostr implementation compatibility issues
+2. Nostr not being properly enabled in OKX wallet settings
+3. Network connectivity issues
+
+Troubleshooting steps:
+1. Make sure Nostr is enabled in OKX wallet settings
+2. Try refreshing the page and reconnecting
+3. Consider using a standard Nostr extension like Alby or nos2x instead
+
+Console logs may have more details about the specific error.`;
+
+    alert(errorMessage);
 
   } catch (e) {
     console.error('OKX wallet error:', e);

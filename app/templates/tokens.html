@@ -3,64 +3,102 @@
 {% block content %}
   <section class="card">
     <h1>Tokens</h1>
-    <form method="GET" action="{{ url_for('web.tokens.tokens_list') }}" class="pf-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end;">
-      <div>
-        <label>Search</label>
-        <input class="retro-input" type="text" name="q" value="{{ q }}" placeholder="symbol or name" />
+
+    <!-- Summary Section -->
+    <div class="stats shadow">
+      <div class="stat place-items-center">
+        <div class="stat-title">Total Tokens</div>
+        <div class="stat-value">{{ total }}</div>
+        <div class="stat-desc">All tokens</div>
       </div>
-      <div>
-        <label>Sort</label>
-        <select class="retro-input" name="sort">
-          <option value="market_cap" {% if sort == 'market_cap' %}selected{% endif %}>Market Cap</option>
-          <option value="price" {% if sort == 'price' %}selected{% endif %}>Price</option>
-          <option value="change_24h" {% if sort == 'change_24h' %}selected{% endif %}>24h Change</option>
-          <option value="symbol" {% if sort == 'symbol' %}selected{% endif %}>Symbol</option>
-          <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
-        </select>
+      <div class="stat place-items-center">
+        <div class="stat-title">Showing</div>
+        <div class="stat-value">{{ tokens|length }}</div>
+        <div class="stat-desc">Current page</div>
       </div>
-      <div>
-        <label>Order</label>
-        <select class="retro-input" name="order">
-          <option value="desc" {% if order == 'desc' %}selected{% endif %}>Desc</option>
-          <option value="asc" {% if order == 'asc' %}selected{% endif %}>Asc</option>
-        </select>
+      <div class="stat place-items-center">
+        <div class="stat-title">Total Pages</div>
+        <div class="stat-value">{{ pages }}</div>
+        <div class="stat-desc">Available</div>
       </div>
-      <div>
-        <label>Per Page</label>
-        <select class="retro-input" name="per">
-          {% for n in [12,24,48] %}
-            <option value="{{ n }}" {% if per == n %}selected{% endif %}>{{ n }}</option>
+      <div class="stat place-items-center">
+        <div class="stat-title">Current Page</div>
+        <div class="stat-value">{{ page }}</div>
+        <div class="stat-desc">of {{ pages }}</div>
+      </div>
+    </div>
+
+    
+    <!-- Data Table -->
+    <div class="overflow-x-auto">
+      <div class="flex justify-between items-center mb-4 px-4 py-2 bg-base-200 rounded-lg">
+        <span class="text-sm">Showing {{ tokens|length }} of {{ total }} tokens</span>
+        <span class="text-sm">Page {{ page }} of {{ pages }}</span>
+      </div>
+
+      <table class="table table-xs">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Price</th>
+            <th>Market Cap</th>
+            <th>24h Change</th>
+            <th>Chart</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set start_index = ((page - 1) * per) + 1 %}
+          {% for token in tokens %}
+            <tr>
+              <th>{{ start_index + loop.index0 }}</th>
+              <td><span class="badge">{{ token.symbol }}</span></td>
+              <td class="pf-token-name">{{ token.name }}</td>
+              <td class="pf-price">${{ '%.4f'|format((price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0)) }}</td>
+              <td class="pf-market-cap">${{ '%.2f'|format(token.market_cap or 0) }}</td>
+              <td class="pf-change {% if token.change_24h and token.change_24h > 0 %}pf-positive{% elif token.change_24h and token.change_24h < 0 %}pf-negative{% endif %}">
+                {{ '%.2f'|format(token.change_24h or 0) }}%
+              </td>
+              <td>
+                <div class="pf-spark pf-spark-small" data-symbol="{{ token.symbol }}" data-price="{{ (price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0) }}"></div>
+              </td>
+              <td>
+                <div class="pf-action-buttons">
+                  <a class="retro-button retro-button-small" href="{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}" title="View Details">
+                    Details
+                  </a>
+                  <a class="retro-button retro-button-small" href="{{ url_for('web.trading.pool', symbol=token.symbol) }}" title="View Pool">
+                    Pool
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="8" class="pf-no-data">
+                <div class="pf-no-data-content">
+                  <div>No tokens found</div>
+                  <div class="pf-no-data-subtitle">Try adjusting your search criteria</div>
+                </div>
+              </td>
+            </tr>
           {% endfor %}
-        </select>
-      </div>
-      <div>
-        <button class="retro-button" type="submit">Apply</button>
-      </div>
-      <div style="align-self:center;">
-        <a class="retro-button" href="{{ url_for('web.tokens.export_tokens_csv') }}">Export CSV</a>
-      </div>
-    </form>
-    <div class="pf-grid">
-      {% for token in tokens %}
-        <div class="card pf-token-card">
-          <div class="pf-token-header">
-            <span class="badge">{{ token.symbol }}</span>
-            <span>{{ token.name }}</span>
-          </div>
-          <div class="pf-token-body">
-            <div>Price: <span class="pf-green">{{ '%.4f'|format((price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0)) }}</span></div>
-            <div>Market Cap: <span class="pf-green">{{ '%.2f'|format(token.market_cap or 0) }}</span></div>
-            <div>24h: <span class="pf-green">{{ '%.2f'|format(token.change_24h or 0) }}%</span></div>
-          </div>
-          <div class="pf-spark" data-symbol="{{ token.symbol }}" data-price="{{ (price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0) }}"></div>
-          <div class="pf-card-actions">
-            <a class="retro-button" href="{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}">Details</a>
-            <a class="retro-button" href="{{ url_for('web.trading.pool', symbol=token.symbol) }}">Pool</a>
-          </div>
-        </div>
-      {% else %}
-        <div>No tokens yet.</div>
-      {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th></th>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Price</th>
+            <th>Market Cap</th>
+            <th>24h Change</th>
+            <th>Chart</th>
+            <th>Actions</th>
+          </tr>
+        </tfoot>
+      </table>
     </div>
     <div class="pf-pagination">
       <div>Page {{ page }} of {{ pages }} ({{ total }} results)</div>

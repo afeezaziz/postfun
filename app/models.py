@@ -165,6 +165,11 @@ class TokenInfo(db.Model):
     moderation_notes = db.Column(db.Text, nullable=True)
     # Comma-separated categories/tags, e.g. "meme,ai,gaming"
     categories = db.Column(db.String(255), nullable=True)
+    # Tweet details for tokens based on tweets
+    tweet_url = db.Column(db.String(512), nullable=True)
+    tweet_content = db.Column(db.Text, nullable=True)
+    tweet_author = db.Column(db.String(255), nullable=True)
+    tweet_created_at = db.Column(db.DateTime, nullable=True)
 
     token = db.relationship("Token")
     launcher = db.relationship("User")
@@ -188,6 +193,10 @@ class TokenInfo(db.Model):
             "launch_at": self.launch_at.isoformat() + "Z" if self.launch_at else None,
             "moderation_status": self.moderation_status,
             "categories": self.categories,
+            "tweet_url": self.tweet_url,
+            "tweet_content": self.tweet_content,
+            "tweet_author": self.tweet_author,
+            "tweet_created_at": self.tweet_created_at.isoformat() + "Z" if self.tweet_created_at else None,
         }
 
 

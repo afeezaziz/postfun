@@ -9,7 +9,7 @@ from flask import render_template, request, g, redirect, url_for, abort, flash, 
 from urllib.parse import urlsplit
 
 from ...utils.jwt_utils import verify_jwt
-from ...extensions import db
+from ...extensions import db, csrf
 from ...models import (
     User,
     Token,
@@ -40,15 +40,20 @@ def require_auth_web(f):
     def wrapper(*args, **kwargs):
         payload = get_jwt_from_cookie()
         if not payload:
-            return redirect(url_for("web.home"))
+            return redirect(url_for("web.main.home"))
         g.jwt_payload = payload
         return f(*args, **kwargs)
 
     return wrapper
 
+@api_bp.route("/123")
+def one23():
+    return 123
+
+
 
 # API authentication check
-@api_bp.route("/api/auth/check")
+@api_bp.route("/auth/check")
 def api_auth_check():
     import sys
     print("[DEBUG] Auth check endpoint called", file=sys.stderr)
@@ -62,8 +67,9 @@ def api_auth_check():
 
 
 # Lightning API endpoints
-@api_bp.route("/api/lightning/invoice", methods=["POST"])
+@api_bp.route("/lightning/invoice", methods=["POST"])
 @require_auth_web
+@csrf.exempt
 def api_lightning_invoice():
     """Create a lightning invoice for receiving payments."""
     payload = g.jwt_payload
@@ -117,8 +123,9 @@ def api_lightning_invoice():
         return {"error": str(e)}, 500
 
 
-@api_bp.route("/api/lightning/pay", methods=["POST"])
+@api_bp.route("/lightning/pay", methods=["POST"])
 @require_auth_web
+@csrf.exempt
 def api_lightning_pay():
     """Pay a lightning invoice."""
     payload = g.jwt_payload
@@ -170,8 +177,9 @@ def api_lightning_pay():
         return {"error": str(e)}, 500
 
 
-@api_bp.route("/api/lightning/invoices", methods=["GET"])
+@api_bp.route("/lightning/invoices", methods=["GET"])
 @require_auth_web
+@csrf.exempt
 def api_lightning_invoices():
     """Get user's lightning invoices."""
     payload = g.jwt_payload
@@ -196,8 +204,9 @@ def api_lightning_invoices():
         return {"error": str(e)}, 500
 
 
-@api_bp.route("/api/lightning/withdrawals", methods=["GET"])
+@api_bp.route("/lightning/withdrawals", methods=["GET"])
 @require_auth_web
+@csrf.exempt
 def api_lightning_withdrawals():
     """Get user's lightning withdrawals."""
     payload = g.jwt_payload
@@ -270,7 +279,7 @@ Sitemap: {sitemap}
 def sitemap_xml():
     # Basic sitemap
     urls = [
-        url_for("web.home", _external=True),
+        url_for("web.main.home", _external=True),
         url_for("web.tokens.tokens_list", _external=True),
         url_for("web.tokens.explore", _external=True),
         url_for("web.tokens.pro", _external=True),

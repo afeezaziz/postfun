@@ -33,8 +33,8 @@
   <!-- Main Launchpad Form -->
   <section class="terminal-card bg-terminal-black border-2 border-terminal-green p-6 rounded-lg shadow-lg mb-8">
     <div class="text-center mb-8">
-      <h2 class="text-2xl font-bold text-terminal-green font-terminal mb-3">Create Your Token</h2>
-      <p class="text-terminal-dim-green">Paste an X post URL to get started, or create a custom token</p>
+      <h2 class="text-2xl font-bold text-terminal-green font-terminal mb-3">Tokenize X Post</h2>
+      <p class="text-terminal-dim-green">Paste an X post URL to create a token with 1B supply paired with 19M sats</p>
     </div>
 
     <!-- URL Input Section -->
@@ -43,14 +43,16 @@
         <div class="flex flex-col sm:flex-row gap-4 mb-4">
           <div class="flex-1">
             <label class="block text-terminal-green text-sm font-bold mb-2">
-              🔗 X Post URL (optional)
+              🔗 X Post URL <span class="text-terminal-red">*</span>
             </label>
             <input
               type="url"
               id="postUrl"
+              name="post_url"
               class="terminal-input input-bordered w-full"
               placeholder="https://x.com/username/status/123456789"
               value="{{ form.post_url or '' }}"
+              required
             />
           </div>
           <div class="flex items-end">
@@ -89,112 +91,62 @@
     <form method="POST" action="{{ url_for('web.tokens.launchpad') }}" class="max-w-4xl mx-auto">
       <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token') }}" />
       <input type="hidden" id="hiddenPostUrl" name="post_url" value="{{ form.post_url or '' }}" />
+      <input type="hidden" id="hiddenSymbol" name="symbol" value="{{ form.symbol or '' }}" />
+      <input type="hidden" id="hiddenName" name="name" value="{{ form.name or '' }}" />
 
-      <!-- Form Grid -->
+      <!-- Token Info Display (Auto-generated) -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <!-- Token Symbol -->
         <div>
           <label class="block text-terminal-green font-bold mb-2">
-            Token Symbol <span class="text-terminal-red">*</span>
+            Token Symbol
           </label>
-          <input
-            type="text"
-            name="symbol"
-            maxlength="10"
-            value="{{ form.symbol or '' }}"
-            placeholder="e.g. MEME"
-            required
-            class="terminal-input input-bordered w-full"
-            onkeyup="this.value = this.value.toUpperCase()"
-          />
-          {% if errors.symbol %}
-            <div class="text-terminal-red text-sm mt-1">{{ errors.symbol }}</div>
-          {% endif %}
-          <div class="text-terminal-dim-green text-xs mt-1">3-10 characters, uppercase letters only</div>
+          <div id="symbolDisplay" class="terminal-input input-bordered w-full bg-terminal-dim-green/10">
+            {{ form.symbol or 'TBD' }}
+          </div>
+          <div class="text-terminal-dim-green text-xs mt-1">Auto-generated from post ID</div>
         </div>
 
         <!-- Token Name -->
         <div>
           <label class="block text-terminal-green font-bold mb-2">
-            Token Name <span class="text-terminal-red">*</span>
+            Token Name
           </label>
-          <input
-            type="text"
-            name="name"
-            maxlength="50"
-            value="{{ form.name or '' }}"
-            placeholder="e.g. Meme Coin"
-            required
-            class="terminal-input input-bordered w-full"
-          />
-          {% if errors.name %}
-            <div class="text-terminal-red text-sm mt-1">{{ errors.name }}</div>
-          {% endif %}
-          <div class="text-terminal-dim-green text-xs mt-1">Up to 50 characters</div>
+          <div id="nameDisplay" class="terminal-input input-bordered w-full bg-terminal-dim-green/10">
+            {{ form.name or 'TBD' }}
+          </div>
+          <div class="text-terminal-dim-green text-xs mt-1">Auto-generated from post ID</div>
         </div>
 
-        <!-- Initial Price -->
+        <!-- Token Supply -->
         <div>
           <label class="block text-terminal-green font-bold mb-2">
-            Initial Price (gUSD)
+            Total Supply
           </label>
-          <input
-            type="number"
-            name="price"
-            step="0.000001"
-            min="0.000001"
-            value="{{ form.price or '0.001' }}"
-            placeholder="0.001"
-            class="terminal-input input-bordered w-full"
-          />
-          {% if errors.price %}
-            <div class="text-terminal-red text-sm mt-1">{{ errors.price }}</div>
-          {% endif %}
-          <div class="text-terminal-dim-green text-xs mt-1">Starting price for your token</div>
+          <div class="terminal-input input-bordered w-full bg-terminal-dim-green/10">
+            1,000,000,000
+          </div>
+          <div class="text-terminal-dim-green text-xs mt-1">Fixed supply for all tokens</div>
         </div>
 
-        <!-- Market Cap -->
+        <!-- BTC Pairing -->
         <div>
           <label class="block text-terminal-green font-bold mb-2">
-            Target Market Cap (gUSD)
+            Virtual BTC Liquidity
           </label>
-          <input
-            type="number"
-            name="market_cap"
-            step="1000"
-            min="1000"
-            value="{{ form.market_cap or '100000' }}"
-            placeholder="100000"
-            class="terminal-input input-bordered w-full"
-          />
-          {% if errors.market_cap %}
-            <div class="text-terminal-red text-sm mt-1">{{ errors.market_cap }}</div>
-          {% endif %}
-          <div class="text-terminal-dim-green text-xs mt-1">Target market cap for your token</div>
-        </div>
-
-        <!-- Description -->
-        <div class="md:col-span-2">
-          <label class="block text-terminal-green font-bold mb-2">
-            Description
-          </label>
-          <textarea
-            name="description"
-            maxlength="500"
-            rows="3"
-            placeholder="Describe your token and its purpose..."
-            class="terminal-input input-bordered w-full resize-none"
-          >{{ form.description or '' }}</textarea>
-          <div class="text-terminal-dim-green text-xs mt-1">Optional description for your token</div>
+          <div class="terminal-input input-bordered w-full bg-terminal-dim-green/10">
+            19,000,000 sats
+          </div>
+          <div class="text-terminal-dim-green text-xs mt-1">Fixed virtual liquidity</div>
         </div>
       </div>
 
       <!-- Action Buttons -->
       <div class="flex flex-col sm:flex-row gap-4 justify-center">
-        <button type="submit" class="terminal-button text-lg px-8 py-3">
+        <button type="submit" id="launchButton" class="terminal-button text-lg px-8 py-3" disabled>
           🚀 Launch Token
         </button>
-        <button type="reset" class="terminal-button text-lg px-8 py-3">
+        <button type="reset" class="terminal-button text-lg px-8 py-3" onclick="resetForm()">
           🔄 Reset Form
         </button>
       </div>
@@ -256,57 +208,128 @@
   </section>
 
   <script>
+    function extractPostId(url) {
+      // Extract post ID from X/Twitter URL including complex URLs with /photo/1
+      const patterns = [
+        /https:\/\/(twitter\.com|x\.com)\/.*\/status\/(\d+)/,  // Basic status URL
+        /https:\/\/(twitter\.com|x\.com)\/.*\/status\/(\d+)\/.*/,  // Status with additional paths
+      ];
+
+      for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match) {
+          return match[2];
+        }
+      }
+      return null;
+    }
+
+    function generateTokenName(postId) {
+      // Use post ID as token name
+      return postId;
+    }
+
+    function generateTokenSymbol(postId) {
+      // Use post ID as token symbol
+      return postId;
+    }
+
     function fetchPostPreview() {
       const url = document.getElementById('postUrl').value.trim();
       const previewDiv = document.getElementById('postPreview');
+      const launchButton = document.getElementById('launchButton');
+
+      console.log('URL entered:', url);
 
       if (!url) {
         alert('Please enter an X post URL');
         return;
       }
 
-      // Simple validation for X URLs
-      if (!url.match(/https:\/\/(twitter\.com|x\.com)\/.*\/status\/\d+/)) {
-        alert('Please enter a valid X post URL');
+      // Extract post ID
+      const postId = extractPostId(url);
+      console.log('Extracted post ID:', postId);
+
+      if (!postId) {
+        alert('Could not extract post ID from URL. Please check the URL format.');
         return;
       }
 
       // Show loading state
-      previewDiv.innerHTML = '<div class="text-terminal-dim-green">Fetching post data...</div>';
+      previewDiv.innerHTML = '<div class="text-terminal-dim-green">Processing URL...</div>';
       previewDiv.classList.remove('hidden');
 
-      // Mock API call - in real implementation, this would fetch from backend
+      // Process immediately
       setTimeout(() => {
-        // Mock data
-        const mockData = {
-          author: 'Elon Musk',
-          handle: '@elonmusk',
-          avatar: 'https://picsum.photos/seed/elon/100/100.jpg',
-          content: 'Just bought another Bitcoin! 🚀',
-          date: '2 hours ago',
-          likes: '45.2K',
-          retweets: '8.1K'
-        };
+        try {
+          // Extract username from URL for display
+          const urlMatch = url.match(/https:\/\/(twitter\.com|x\.com)\/([^\/]+)\/status\/\d+/);
+          const username = urlMatch ? urlMatch[2] : 'Unknown User';
+          console.log('Extracted username:', username);
 
-        // Update preview
-        document.getElementById('postAvatar').src = mockData.avatar;
-        document.getElementById('postAuthor').textContent = mockData.author;
-        document.getElementById('postHandle').textContent = mockData.handle;
-        document.getElementById('postContent').textContent = mockData.content;
-        document.getElementById('postDate').textContent = mockData.date;
-        document.getElementById('postLikes').textContent = mockData.likes;
-        document.getElementById('postRetweets').textContent = mockData.retweets;
+          // Generate token details from post ID
+          const tokenName = generateTokenName(postId);
+          const tokenSymbol = generateTokenSymbol(postId);
+          console.log('Token name:', tokenName, 'Token symbol:', tokenSymbol);
 
-        // Update hidden form field
-        document.getElementById('hiddenPostUrl').value = url;
+          // Update preview with post ID information
+          const avatar = document.getElementById('postAvatar');
+          const author = document.getElementById('postAuthor');
+          const handle = document.getElementById('postHandle');
+          const content = document.getElementById('postContent');
+          const date = document.getElementById('postDate');
+          const likes = document.getElementById('postLikes');
+          const retweets = document.getElementById('postRetweets');
 
-        // Auto-fill form fields based on post content
-        const symbol = mockData.content.split(' ').find(word => word.length > 2 && word.length < 6).toUpperCase().replace(/[^A-Z]/g, '');
-        const name = mockData.content.split(' ').slice(0, 3).join(' ') + ' Token';
+          if (avatar) avatar.src = `https://picsum.photos/seed/${username}/100/100.jpg`;
+          if (author) author.textContent = username.charAt(0).toUpperCase() + username.slice(1);
+          if (handle) handle.textContent = `@${username}`;
+          if (content) content.textContent = `Twitter Post ID: ${postId}`;
+          if (date) date.textContent = 'Just now';
+          if (likes) likes.textContent = 'N/A';
+          if (retweets) retweets.textContent = 'N/A';
 
-        document.querySelector('input[name="symbol"]').value = symbol || 'MEME';
-        document.querySelector('input[name="name"]').value = name;
-      }, 1500);
+          // Update hidden form fields
+          const hiddenPostUrl = document.getElementById('hiddenPostUrl');
+          const hiddenSymbol = document.getElementById('hiddenSymbol');
+          const hiddenName = document.getElementById('hiddenName');
+
+          if (hiddenPostUrl) hiddenPostUrl.value = url;
+          if (hiddenSymbol) hiddenSymbol.value = tokenSymbol;
+          if (hiddenName) hiddenName.value = tokenName;
+
+          // Update display fields
+          const symbolDisplay = document.getElementById('symbolDisplay');
+          const nameDisplay = document.getElementById('nameDisplay');
+
+          if (symbolDisplay) symbolDisplay.textContent = tokenSymbol;
+          if (nameDisplay) nameDisplay.textContent = tokenName;
+
+          // Enable launch button
+          if (launchButton) {
+            launchButton.disabled = false;
+            launchButton.classList.remove('opacity-50');
+          }
+
+          console.log('Preview update completed');
+        } catch (error) {
+          console.error('Error in fetchPostPreview:', error);
+          previewDiv.innerHTML = '<div class="text-terminal-red">Error processing URL. Please try again.</div>';
+        }
+      }, 100); // Very short delay
+    }
+
+    function resetForm() {
+      // Reset all form fields and disable launch button
+      document.getElementById('postUrl').value = '';
+      document.getElementById('hiddenPostUrl').value = '';
+      document.getElementById('hiddenSymbol').value = '';
+      document.getElementById('hiddenName').value = '';
+      document.getElementById('symbolDisplay').textContent = 'TBD';
+      document.getElementById('nameDisplay').textContent = 'TBD';
+      document.getElementById('postPreview').classList.add('hidden');
+      document.getElementById('launchButton').disabled = true;
+      document.getElementById('launchButton').classList.add('opacity-50');
     }
 
     // Allow Enter key to trigger fetch
@@ -314,6 +337,21 @@
       if (e.key === 'Enter') {
         e.preventDefault();
         fetchPostPreview();
+      }
+    });
+
+    // Enable launch button on form validation
+    document.getElementById('postUrl').addEventListener('input', function(e) {
+      const url = e.target.value.trim();
+      const launchButton = document.getElementById('launchButton');
+      const postId = extractPostId(url);
+
+      if (postId && document.getElementById('hiddenSymbol').value) {
+        launchButton.disabled = false;
+        launchButton.classList.remove('opacity-50');
+      } else {
+        launchButton.disabled = true;
+        launchButton.classList.add('opacity-50');
       }
     });
   </script>

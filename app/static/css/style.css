@@ -139,3 +139,271 @@ body {
 
 /* Focus styles for keyboard accessibility */
 :focus-visible { outline: 2px dashed var(--green); outline-offset: 2px; }
+
+/* Summary Section - DaisyUI Stats Override */
+.stats {
+  background: var(--black);
+  border: 1px solid var(--green);
+  box-shadow: inset 2px 2px 0 0 #000000, inset -2px -2px 0 0 #006600;
+  margin-bottom: 24px;
+}
+
+.stat-title {
+  color: var(--dim-green);
+  font-size: 14px;
+  font-family: 'VT323', monospace;
+}
+
+.stat-value {
+  color: var(--green);
+  font-size: 28px;
+  font-weight: bold;
+  font-family: 'VT323', monospace;
+}
+
+.stat-desc {
+  color: var(--dim-green);
+  font-size: 12px;
+  font-family: 'VT323', monospace;
+}
+
+/* Filters - DaisyUI Integration */
+.pf-filters {
+  margin-bottom: 24px;
+  background: var(--black);
+  border: 1px solid var(--green);
+  padding: 16px;
+  border-radius: 4px;
+  box-shadow: inset 2px 2px 0 0 #000000, inset -2px -2px 0 0 #006600;
+}
+
+/* DaisyUI Input and Select Overrides */
+.input, .select {
+  background: var(--black);
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-family: 'VT323', monospace;
+}
+
+.input:focus, .select:focus {
+  border-color: var(--green);
+  outline: 1px solid var(--green);
+  box-shadow: 0 0 0 1px var(--green);
+}
+
+.input::placeholder {
+  color: var(--dim-green);
+  opacity: 0.7;
+}
+
+/* DaisyUI Button Overrides */
+.btn {
+  background: var(--black);
+  border: 2px solid var(--green);
+  color: var(--green);
+  font-family: 'VT323', monospace;
+  text-transform: uppercase;
+  box-shadow: inset -2px -2px 0 0 #006600, inset 2px 2px 0 0 #00ff00;
+}
+
+.btn:hover {
+  background: #001a00;
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.btn:active {
+  box-shadow: inset 2px 2px 0 0 #006600, inset -2px -2px 0 0 #00ff00;
+  background: #003300;
+}
+
+.btn-primary {
+  background: var(--gray-dark);
+  border-color: var(--green);
+}
+
+.btn-outline {
+  background: var(--black);
+  border-color: var(--dim-green);
+  color: var(--dim-green);
+}
+
+.btn-success {
+  background: var(--dark-green);
+  border-color: var(--green);
+}
+
+/* Join Group for Search Input */
+.join .input:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.join .btn:last-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* Active Filters */
+.bg-base-200 {
+  background: var(--gray-dark) !important;
+  border: 1px solid var(--dim-green);
+}
+
+.badge {
+  background: var(--black);
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-family: 'VT323', monospace;
+  font-size: 12px;
+}
+
+.badge-primary {
+  border-color: #00ccff;
+  color: #00ccff;
+}
+
+.badge-secondary {
+  border-color: #ff00ff;
+  color: #ff00ff;
+}
+
+.badge-accent {
+  border-color: #ffff00;
+  color: #ffff00;
+}
+
+/* Data Table - DaisyUI Integration */
+.overflow-x-auto { margin-bottom: 20px; }
+.pf-table-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: var(--gray-dark); border: 1px solid var(--dim-green); border-radius: 4px; font-size: 14px; }
+
+/* Custom DaisyUI table styling with retro theme */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--green);
+  font-family: 'VT323', monospace;
+}
+
+.table th, .table td {
+  border: 1px solid var(--green);
+  padding: 8px;
+  text-align: left;
+}
+
+.table th {
+  background: var(--gray-dark);
+  color: var(--green);
+  font-weight: bold;
+  position: relative;
+}
+
+.table th.pf-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.table th.pf-sortable:hover {
+  background: var(--gray-mid);
+}
+
+.table td {
+  background: var(--black);
+  color: var(--green);
+}
+
+.table tr:nth-child(even) td {
+  background: var(--gray-mid);
+}
+
+.table tr:hover td {
+  background: #001a00;
+}
+
+.table tfoot th {
+  background: var(--gray-dark);
+  color: var(--dim-green);
+  font-weight: bold;
+  border-top: 2px solid var(--green);
+}
+
+/* Sort indicators */
+.pf-sort-indicator {
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+.pf-sort-asc {
+  transform: rotate(180deg);
+  display: inline-block;
+}
+
+.pf-sort-desc {
+  transform: rotate(0deg);
+  display: inline-block;
+}
+
+/* Table cell styling */
+.pf-token-name {
+  font-weight: bold;
+}
+
+.pf-price {
+  font-family: 'VT323', monospace;
+  font-weight: bold;
+}
+
+.pf-market-cap {
+  font-family: 'VT323', monospace;
+}
+
+.pf-change {
+  font-weight: bold;
+  font-family: 'VT323', monospace;
+}
+
+.pf-positive {
+  color: #00ff00;
+}
+
+.pf-negative {
+  color: #ff4444;
+}
+
+/* Index column styling */
+.table th:first-child,
+.table td:first-child {
+  width: 40px;
+  text-align: center;
+  font-weight: bold;
+}
+
+/* No data state */
+.pf-no-data {
+  text-align: center;
+  color: var(--dim-green);
+}
+
+.pf-no-data-content {
+  padding: 40px 20px;
+}
+
+.pf-no-data-subtitle {
+  font-size: 14px;
+  margin-top: 8px;
+  opacity: 0.8;
+}
+
+/* Badge styling in table */
+.badge {
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+/* Action Buttons */
+.pf-action-buttons { display: flex; gap: 4px; }
+.retro-button-small { padding: 2px 6px; font-size: 12px; }
+
+/* Small Sparklines */
+.pf-spark-small { height: 30px; }
+.pf-spark-small .pf-spark-svg { height: 30px; }
