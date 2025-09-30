@@ -1,0 +1,526 @@
+{% extends 'base.html' %}
+{% block title %}Reward Center - Postfun{% endblock %}
+{% block content %}
+
+<!-- User Stats Overview -->
+<section class="mb-8">
+  <div class="text-center mb-8">
+    <h1 class="text-4xl md:text-5xl font-bold text-terminal-green mb-4 flex items-center justify-center gap-3">
+      <span class="text-yellow-500 animate-pulse">🏆</span>
+      Reward Center
+      <span class="text-purple-500">⭐</span>
+    </h1>
+    <p class="text-lg text-terminal-dim-green max-w-2xl mx-auto">Earn achievements, climb leaderboards, and unlock exclusive rewards</p>
+  </div>
+
+  <!-- User Level and Progress -->
+  <div class="terminal-card relative overflow-hidden border-2 border-terminal-yellow mb-8">
+    <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-yellow opacity-10 rounded-full blur-2xl animate-pulse"></div>
+    <div class="p-6 relative z-10">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <!-- User Level -->
+        <div class="flex items-center gap-4">
+          <div class="relative">
+            <div class="w-20 h-20 rounded-full bg-gradient-to-br from-terminal-yellow to-terminal-orange p-1">
+              <div class="w-full h-full rounded-full bg-terminal-black flex items-center justify-center">
+                <span class="text-2xl font-bold text-terminal-yellow">{{ user_level|default(1) }}</span>
+              </div>
+            </div>
+            <div class="absolute -top-1 -right-1 w-8 h-8 bg-terminal-yellow rounded-full flex items-center justify-center text-terminal-black text-xs font-bold animate-bounce">
+              ⭐
+            </div>
+          </div>
+          <div>
+            <h3 class="text-xl font-bold text-terminal-yellow mb-1">Level {{ user_level|default(1) }} - {{ user_rank|default('Rookie') }}</h3>
+            <p class="text-terminal-dim-green text-sm">{{ user_xp|default(0) }} / {{ next_level_xp|default(1000) }} XP</p>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="flex-1 max-w-md">
+          <div class="bg-terminal-black/50 rounded-full h-4 overflow-hidden border border-terminal-yellow/30">
+            <div class="bg-gradient-to-r from-terminal-yellow to-terminal-orange h-full rounded-full transition-all duration-500" style="width: {{ (user_xp|default(0) / next_level_xp|default(1000) * 100)|round(0) }}%"></div>
+          </div>
+          <div class="flex justify-between text-xs text-terminal-dim-green mt-2">
+            <span>{{ (user_xp|default(0) / next_level_xp|default(1000) * 100)|round(0) }}% Complete</span>
+            <span>{{ next_level_xp|default(1000) - user_xp|default(0) }} XP to Level {{ user_level|default(1) + 1 }}</span>
+          </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="text-center">
+            <div class="text-2xl font-bold text-terminal-yellow">{{ total_achievements|default(0) }}</div>
+            <div class="text-xs text-terminal-dim-green">Achievements</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-terminal-purple">{{ reward_points|default(0) }}</div>
+            <div class="text-xs text-terminal-dim-green">Reward Points</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Daily/Weekly Challenges -->
+<section class="mb-8">
+  <div class="text-center mb-6">
+    <h2 class="text-3xl font-bold text-terminal-green mb-2 flex items-center justify-center gap-2">
+      <span class="text-blue-500 animate-pulse">🎯</span>
+      Active Challenges
+      <span class="text-red-500">🔥</span>
+    </h2>
+    <p class="text-terminal-dim-green">Complete challenges to earn bonus XP and rewards</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <!-- Daily Challenge -->
+    <div class="terminal-card relative overflow-hidden group cursor-pointer">
+      <div class="absolute top-0 right-0 w-24 h-24 bg-blue-500 opacity-10 rounded-full blur-xl animate-pulse"></div>
+      <div class="p-6 relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="terminal-badge terminal-badge-blue animate-pulse">📅 DAILY</div>
+          <div class="text-terminal-blue font-bold text-sm">+50 XP</div>
+        </div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Token Trader</h3>
+        <p class="text-terminal-dim-green text-sm mb-4">Complete 5 token trades today</p>
+        <div class="bg-terminal-black/30 rounded-full h-3 overflow-hidden mb-2">
+          <div class="bg-terminal-blue h-full rounded-full transition-all duration-500" style="width: {{ (daily_trades|default(0) / 5 * 100)|round(0) }}%"></div>
+        </div>
+        <div class="flex justify-between text-xs text-terminal-dim-green">
+          <span>{{ daily_trades|default(0) }}/5 trades</span>
+          <span>{{ (5 - daily_trades|default(0)) * 10 }} min remaining</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Weekly Challenge -->
+    <div class="terminal-card relative overflow-hidden group cursor-pointer">
+      <div class="absolute top-0 right-0 w-24 h-24 bg-purple-500 opacity-10 rounded-full blur-xl animate-pulse"></div>
+      <div class="p-6 relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="terminal-badge terminal-badge-purple animate-pulse">📆 WEEKLY</div>
+          <div class="text-terminal-purple font-bold text-sm">+200 XP</div>
+        </div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Social Butterfly</h3>
+        <p class="text-terminal-dim-green text-sm mb-4">Gain 100 new followers this week</p>
+        <div class="bg-terminal-black/30 rounded-full h-3 overflow-hidden mb-2">
+          <div class="bg-terminal-purple h-full rounded-full transition-all duration-500" style="width: {{ (weekly_followers|default(0) / 100 * 100)|round(0) }}%"></div>
+        </div>
+        <div class="flex justify-between text-xs text-terminal-dim-green">
+          <span>{{ weekly_followers|default(0) }}/100 followers</span>
+          <span>{{ (100 - weekly_followers|default(0)) * 2 }} to go</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Special Challenge -->
+    <div class="terminal-card relative overflow-hidden group cursor-pointer">
+      <div class="absolute top-0 right-0 w-24 h-24 bg-yellow-500 opacity-10 rounded-full blur-xl animate-pulse"></div>
+      <div class="p-6 relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="terminal-badge terminal-badge-yellow animate-pulse">⭐ SPECIAL</div>
+          <div class="text-terminal-yellow font-bold text-sm">+500 XP</div>
+        </div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Creator Elite</h3>
+        <p class="text-terminal-dim-green text-sm mb-4">Launch 3 successful tokens</p>
+        <div class="bg-terminal-black/30 rounded-full h-3 overflow-hidden mb-2">
+          <div class="bg-terminal-yellow h-full rounded-full transition-all duration-500" style="width: {{ (launched_tokens|default(0) / 3 * 100)|round(0) }}%"></div>
+        </div>
+        <div class="flex justify-between text-xs text-terminal-dim-green">
+          <span>{{ launched_tokens|default(0) }}/3 tokens</span>
+          <span>Rare Achievement</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Achievements Gallery -->
+<section class="mb-8">
+  <div class="text-center mb-6">
+    <h2 class="text-3xl font-bold text-terminal-green mb-2 flex items-center justify-center gap-2">
+      <span class="text-yellow-500 animate-bounce">🏆</span>
+      Achievement Gallery
+      <span class="text-green-500">✨</span>
+    </h2>
+    <p class="text-terminal-dim-green">Unlock achievements as you progress through your creator journey</p>
+  </div>
+
+  <!-- Achievement Categories -->
+  <div class="flex flex-wrap justify-center gap-4 mb-6">
+    <button class="terminal-badge terminal-badge-green active" onclick="filterAchievements('all')">All</button>
+    <button class="terminal-badge terminal-badge-blue" onclick="filterAchievements('trading')">Trading</button>
+    <button class="terminal-badge terminal-badge-purple" onclick="filterAchievements('social')">Social</button>
+    <button class="terminal-badge terminal-badge-yellow" onclick="filterAchievements('creator')">Creator</button>
+    <button class="terminal-badge terminal-badge-red" onclick="filterAchievements('special')">Special</button>
+  </div>
+
+  <!-- Achievements Grid -->
+  <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+    <!-- Trading Achievements -->
+    <div class="achievement-card terminal-card relative overflow-hidden group cursor-pointer transform hover:scale-105 transition-all duration-300" data-category="trading">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-blue/5 via-terminal-black/50 to-terminal-blue/5"></div>
+      <div class="p-4 relative z-10 text-center">
+        <div class="text-3xl mb-2 {{ 'text-terminal-blue' if first_trade_earned else 'text-terminal-dim-green grayscale' }}">💹</div>
+        <h4 class="text-xs font-bold text-terminal-green mb-1">First Trade</h4>
+        <p class="text-2xs text-terminal-dim-green">Complete your first trade</p>
+        {% if first_trade_earned %}
+        <div class="terminal-badge terminal-badge-green text-xs mt-2">✓ Earned</div>
+        {% else %}
+        <div class="terminal-badge terminal-badge-dim text-xs mt-2">Locked</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="achievement-card terminal-card relative overflow-hidden group cursor-pointer transform hover:scale-105 transition-all duration-300" data-category="trading">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-green/5 via-terminal-black/50 to-terminal-green/5"></div>
+      <div class="p-4 relative z-10 text-center">
+        <div class="text-3xl mb-2 {{ 'text-terminal-green' if power_trader_earned else 'text-terminal-dim-green grayscale' }}">🚀</div>
+        <h4 class="text-xs font-bold text-terminal-green mb-1">Power Trader</h4>
+        <p class="text-2xs text-terminal-dim-green">100 total trades</p>
+        {% if power_trader_earned %}
+        <div class="terminal-badge terminal-badge-green text-xs mt-2">✓ Earned</div>
+        {% else %}
+        <div class="terminal-badge terminal-badge-dim text-xs mt-2">Locked</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Social Achievements -->
+    <div class="achievement-card terminal-card relative overflow-hidden group cursor-pointer transform hover:scale-105 transition-all duration-300" data-category="social">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-purple/5 via-terminal-black/50 to-terminal-purple/5"></div>
+      <div class="p-4 relative z-10 text-center">
+        <div class="text-3xl mb-2 {{ 'text-terminal-purple' if social_butterfly_earned else 'text-terminal-dim-green grayscale' }}">🦋</div>
+        <h4 class="text-xs font-bold text-terminal-green mb-1">Social Butterfly</h4>
+        <p class="text-2xs text-terminal-dim-green">1000 followers</p>
+        {% if social_butterfly_earned %}
+        <div class="terminal-badge terminal-badge-green text-xs mt-2">✓ Earned</div>
+        {% else %}
+        <div class="terminal-badge terminal-badge-dim text-xs mt-2">Locked</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Creator Achievements -->
+    <div class="achievement-card terminal-card relative overflow-hidden group cursor-pointer transform hover:scale-105 transition-all duration-300" data-category="creator">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-yellow/5 via-terminal-black/50 to-terminal-yellow/5"></div>
+      <div class="p-4 relative z-10 text-center">
+        <div class="text-3xl mb-2 {{ 'text-terminal-yellow' if token_creator_earned else 'text-terminal-dim-green grayscale' }}">🎨</div>
+        <h4 class="text-xs font-bold text-terminal-green mb-1">Token Creator</h4>
+        <p class="text-2xs text-terminal-dim-green">Launch your first token</p>
+        {% if token_creator_earned %}
+        <div class="terminal-badge terminal-badge-green text-xs mt-2">✓ Earned</div>
+        {% else %}
+        <div class="terminal-badge terminal-badge-dim text-xs mt-2">Locked</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Special Achievements -->
+    <div class="achievement-card terminal-card relative overflow-hidden group cursor-pointer transform hover:scale-105 transition-all duration-300" data-category="special">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-red/5 via-terminal-black/50 to-terminal-red/5"></div>
+      <div class="p-4 relative z-10 text-center">
+        <div class="text-3xl mb-2 {{ 'text-terminal-red' if early_adopter_earned else 'text-terminal-dim-green grayscale' }}">⭐</div>
+        <h4 class="text-xs font-bold text-terminal-green mb-1">Early Adopter</h4>
+        <p class="text-2xs text-terminal-dim-green">Joined in first month</p>
+        {% if early_adopter_earned %}
+        <div class="terminal-badge terminal-badge-green text-xs mt-2">✓ Earned</div>
+        {% else %}
+        <div class="terminal-badge terminal-badge-dim text-xs mt-2">Locked</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Leaderboards -->
+<section class="mb-8">
+  <div class="text-center mb-6">
+    <h2 class="text-3xl font-bold text-terminal-green mb-2 flex items-center justify-center gap-2">
+      <span class="text-yellow-500 animate-pulse">👑</span>
+      Global Leaderboards
+      <span class="text-orange-500">🏆</span>
+    </h2>
+    <p class="text-terminal-dim-green">Compete with the best creators on the platform</p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- XP Leaderboard -->
+    <div class="terminal-card relative overflow-hidden border-2 border-terminal-yellow">
+      <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-yellow opacity-10 rounded-full blur-2xl animate-pulse"></div>
+      <div class="p-6 relative z-10">
+        <h3 class="text-xl font-bold text-terminal-yellow mb-4 flex items-center gap-2">
+          <span class="animate-bounce">⭐</span>
+          XP Champions
+        </h3>
+        <div class="space-y-3">
+          {% if xp_leaderboard is defined and xp_leaderboard %}
+            {% for user in xp_leaderboard[:5] %}
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-terminal-black/30 hover:bg-terminal-black/50 transition-colors">
+              <div class="text-lg font-bold text-terminal-yellow w-8">
+                {% if loop.index0 == 0 %}🥇
+                {% elif loop.index0 == 1 %}🥈
+                {% elif loop.index0 == 2 %}🥉
+                {% else %}#{{ loop.index0 + 1 }}
+                {% endif %}
+              </div>
+              <div class="w-8 h-8 rounded-full border border-terminal-yellow/30 flex items-center justify-center text-terminal-yellow font-bold text-xs">
+                {{ (user.display_name or user.npub or 'U')[:1]|upper }}
+              </div>
+              <div class="flex-1">
+                <div class="font-bold text-terminal-green text-sm">{{ user.display_name or 'Anonymous' }}</div>
+                <div class="text-xs text-terminal-dim-green">Level {{ user.level|default(1) }}</div>
+              </div>
+              <div class="text-right">
+                <div class="font-bold text-terminal-yellow">{{ user.total_xp|default(0) }}</div>
+                <div class="text-xs text-terminal-dim-green">XP</div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="text-center py-8 text-terminal-dim-green">
+              <div class="text-3xl mb-2">🏆</div>
+              <div class="text-sm">Leaderboard resets soon...</div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Achievement Leaderboard -->
+    <div class="terminal-card relative overflow-hidden border-2 border-terminal-purple">
+      <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-purple opacity-10 rounded-full blur-2xl animate-pulse"></div>
+      <div class="p-6 relative z-10">
+        <h3 class="text-xl font-bold text-terminal-purple mb-4 flex items-center gap-2">
+          <span class="animate-bounce">🏆</span>
+          Achievement Hunters
+        </h3>
+        <div class="space-y-3">
+          {% if achievement_leaderboard is defined and achievement_leaderboard %}
+            {% for user in achievement_leaderboard[:5] %}
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-terminal-black/30 hover:bg-terminal-black/50 transition-colors">
+              <div class="text-lg font-bold text-terminal-purple w-8">
+                {% if loop.index0 == 0 %}🥇
+                {% elif loop.index0 == 1 %}🥈
+                {% elif loop.index0 == 2 %}🥉
+                {% else %}#{{ loop.index0 + 1 }}
+                {% endif %}
+              </div>
+              <div class="w-8 h-8 rounded-full border border-terminal-purple/30 flex items-center justify-center text-terminal-purple font-bold text-xs">
+                {{ (user.display_name or user.npub or 'U')[:1]|upper }}
+              </div>
+              <div class="flex-1">
+                <div class="font-bold text-terminal-green text-sm">{{ user.display_name or 'Anonymous' }}</div>
+                <div class="text-xs text-terminal-dim-green">{{ user.achievement_count|default(0) }} achievements</div>
+              </div>
+              <div class="text-right">
+                <div class="font-bold text-terminal-purple">{{ user.achievement_count|default(0) }}</div>
+                <div class="text-xs text-terminal-dim-green">Total</div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="text-center py-8 text-terminal-dim-green">
+              <div class="text-3xl mb-2">🎯</div>
+              <div class="text-sm">Achievement hunters loading...</div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Reward Shop -->
+<section class="mb-8">
+  <div class="text-center mb-6">
+    <h2 class="text-3xl font-bold text-terminal-green mb-2 flex items-center justify-center gap-2">
+      <span class="text-yellow-500 animate-pulse">🛍️</span>
+      Reward Shop
+      <span class="text-green-500">💎</span>
+    </h2>
+    <p class="text-terminal-dim-green">Spend your reward points on exclusive perks and features</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <!-- Premium Features -->
+    <div class="terminal-card relative overflow-hidden group cursor-pointer">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-blue/5 via-terminal-black/50 to-terminal-blue/5"></div>
+      <div class="p-6 relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="terminal-badge terminal-badge-blue">💎 PREMIUM</div>
+          <div class="text-terminal-blue font-bold text-lg">500 pts</div>
+        </div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Verified Badge</h3>
+        <p class="text-terminal-dim-green text-sm mb-4">Get a verified checkmark on your profile</p>
+        <div class="flex items-center gap-2 text-xs text-terminal-dim-green mb-4">
+          <span class="text-green-500">✓</span>
+          <span>Permanent unlock</span>
+        </div>
+        <button class="w-full py-2 bg-terminal-blue text-terminal-white font-bold rounded-lg hover:bg-terminal-blue/80 transition-colors">
+          Purchase
+        </button>
+      </div>
+    </div>
+
+    <!-- Customization -->
+    <div class="terminal-card relative overflow-hidden group cursor-pointer">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-purple/5 via-terminal-black/50 to-terminal-purple/5"></div>
+      <div class="p-6 relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="terminal-badge terminal-badge-purple">🎨 STYLE</div>
+          <div class="text-terminal-purple font-bold text-lg">300 pts</div>
+        </div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">Profile Themes</h3>
+        <p class="text-terminal-dim-green text-sm mb-4">Unlock custom profile themes</p>
+        <div class="flex items-center gap-2 text-xs text-terminal-dim-green mb-4">
+          <span class="text-green-500">✓</span>
+          <span>5 exclusive themes</span>
+        </div>
+        <button class="w-full py-2 bg-terminal-purple text-terminal-white font-bold rounded-lg hover:bg-terminal-purple/80 transition-colors">
+          Purchase
+        </button>
+      </div>
+    </div>
+
+    <!-- Boosts -->
+    <div class="terminal-card relative overflow-hidden group cursor-pointer">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-yellow/5 via-terminal-black/50 to-terminal-yellow/5"></div>
+      <div class="p-6 relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="terminal-badge terminal-badge-yellow">🚀 BOOST</div>
+          <div class="text-terminal-yellow font-bold text-lg">200 pts</div>
+        </div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">XP Boost</h3>
+        <p class="text-terminal-dim-green text-sm mb-4">2x XP for 7 days</p>
+        <div class="flex items-center gap-2 text-xs text-terminal-dim-green mb-4">
+          <span class="text-green-500">✓</span>
+          <span>Limited time offer</span>
+        </div>
+        <button class="w-full py-2 bg-terminal-yellow text-terminal-white font-bold rounded-lg hover:bg-terminal-yellow/80 transition-colors">
+          Purchase
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Recent Activity -->
+<section class="mb-8">
+  <div class="text-center mb-6">
+    <h2 class="text-3xl font-bold text-terminal-green mb-2 flex items-center justify-center gap-2">
+      <span class="text-blue-500 animate-pulse">📋</span>
+      Recent Activity
+      <span class="text-green-500">⚡</span>
+    </h2>
+    <p class="text-terminal-dim-green">Track your latest achievements and progress</p>
+  </div>
+
+  <div class="terminal-card relative overflow-hidden">
+    <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-green opacity-5 rounded-full blur-2xl"></div>
+    <div class="p-6 relative z-10">
+      {% if recent_activities is defined and recent_activities %}
+        <div class="space-y-3">
+          {% for activity in recent_activities[:10] %}
+          <div class="flex items-center gap-3 p-3 rounded-lg bg-terminal-black/30 hover:bg-terminal-black/50 transition-colors">
+            <div class="text-2xl">{{ activity.icon }}</div>
+            <div class="flex-1">
+              <div class="font-bold text-terminal-green text-sm">{{ activity.title }}</div>
+              <div class="text-xs text-terminal-dim-green">{{ activity.description }}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-terminal-yellow">+{{ activity.xp|default(0) }} XP</div>
+              <div class="text-2xs text-terminal-dim-green">{{ activity.time_ago }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-center py-8 text-terminal-dim-green">
+          <div class="text-3xl mb-2">🎯</div>
+          <div class="text-sm">Complete challenges to see your activity here</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Achievement filter functionality
+  window.filterAchievements = function(category) {
+    const cards = document.querySelectorAll('.achievement-card');
+    const buttons = document.querySelectorAll('button[onclick^="filterAchievements"]');
+
+    // Update active button
+    buttons.forEach(btn => {
+      btn.classList.remove('terminal-badge-green', 'active');
+      btn.classList.add('terminal-badge-blue');
+    });
+    event.target.classList.remove('terminal-badge-blue');
+    event.target.classList.add('terminal-badge-green', 'active');
+
+    // Filter cards
+    cards.forEach(card => {
+      if (category === 'all' || card.dataset.category === category) {
+        card.style.display = 'block';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+  };
+
+  // Add animations for cards
+  const cards = document.querySelectorAll('.terminal-card');
+  cards.forEach((card, index) => {
+    card.style.animationDelay = `${index * 0.1}s`;
+    card.classList.add('animate-fade-in-up');
+  });
+
+  // Add hover effects for achievement cards
+  const achievementCards = document.querySelectorAll('.achievement-card');
+  achievementCards.forEach(card => {
+    card.addEventListener('mouseenter', function() {
+      this.style.transform = 'translateY(-4px) scale(1.05)';
+    });
+
+    card.addEventListener('mouseleave', function() {
+      this.style.transform = '';
+    });
+  });
+
+  // Add CSS animations
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes fade-in-up {
+      0% {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-fade-in-up {
+      animation: fade-in-up 0.8s ease-out forwards;
+      opacity: 0;
+    }
+
+    .grayscale {
+      filter: grayscale(100%);
+      opacity: 0.5;
+    }
+
+    .achievement-card:hover .grayscale {
+      filter: grayscale(0%);
+      opacity: 1;
+    }
+  `;
+  document.head.appendChild(style);
+});
+</script>
+{% endblock %}

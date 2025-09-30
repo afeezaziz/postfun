@@ -1,0 +1,731 @@
+{% extends 'base.html' %}
+{% block title %}Tournament Arena - Postfun{% endblock %}
+{% block content %}
+
+<!-- Hero Section - Tournament Arena -->
+<section class="mb-8">
+  <div class="text-center mb-8">
+    <h1 class="text-4xl md:text-5xl font-bold text-terminal-green mb-4 flex items-center justify-center gap-3">
+      <span class="text-red-500 animate-pulse">⚔️</span>
+      Tournament Arena
+      <span class="text-yellow-500">🏆</span>
+    </h1>
+    <p class="text-lg text-terminal-dim-green max-w-2xl mx-auto">Compete in epic battles, climb the ranks, and win legendary prizes</p>
+  </div>
+
+  <!-- Current Tournament Banner -->
+  <div class="terminal-card relative overflow-hidden border-2 border-terminal-red mb-8">
+    <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-red opacity-10 rounded-full blur-2xl animate-pulse"></div>
+    <div class="p-6 relative z-10">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <!-- Tournament Info -->
+        <div class="flex items-center gap-4">
+          <div class="relative">
+            <div class="w-16 h-16 rounded-full bg-gradient-to-br from-terminal-red to-terminal-orange p-1">
+              <div class="w-full h-full rounded-full bg-terminal-black flex items-center justify-center">
+                <span class="text-xl font-bold text-terminal-red">⚔️</span>
+              </div>
+            </div>
+            <div class="absolute -top-1 -right-1 w-6 h-6 bg-terminal-red rounded-full flex items-center justify-center text-terminal-white text-xs font-bold animate-bounce">
+              LIVE
+            </div>
+          </div>
+          <div>
+            <h3 class="text-xl font-bold text-terminal-red mb-1">{% if current_tournament is defined and current_tournament.name %}{{ current_tournament.name }}{% else %}Creator Clash Championship{% endif %}</h3>
+            <p class="text-terminal-dim-green text-sm">{% if current_tournament is defined and current_tournament.participants %}{{ current_tournament.participants }}{% else %}128{% endif %} battling for ${% if current_tournament is defined and current_tournament.prize_pool %}{{ current_tournament.prize_pool }}{% else %}10,000{% endif %}</p>
+          </div>
+        </div>
+
+        <!-- Tournament Timer -->
+        <div class="text-center">
+          <div class="text-sm text-terminal-dim-green mb-1">Round Ends In</div>
+          <div class="text-2xl font-bold text-terminal-red" id="tournament-timer">
+            {% if tournament_time_left is defined %}{{ tournament_time_left }}{% else %}2d 14h 32m{% endif %}
+          </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="text-center">
+            <div class="text-xl font-bold text-terminal-yellow">{% if current_tournament is defined and current_tournament.round %}{{ current_tournament.round }}{% else %}3{% endif %}/8</div>
+            <div class="text-xs text-terminal-dim-green">Current Round</div>
+          </div>
+          <div class="text-center">
+            <div class="text-xl font-bold text-terminal-green">{% if current_tournament is defined and current_tournament.active_matches %}{{ current_tournament.active_matches }}{% else %}16{% endif %}</div>
+            <div class="text-xs text-terminal-dim-green">Live Matches</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Live Matches -->
+<section class="mb-8">
+  <div class="text-center mb-6">
+    <h2 class="text-3xl font-bold text-terminal-green mb-2 flex items-center justify-center gap-2">
+      <span class="text-red-500 animate-pulse">🔴</span>
+      Live Matches
+      <span class="text-green-500">⚡</span>
+    </h2>
+    <p class="text-terminal-dim-green">Watch the battles unfold in real-time</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% if live_matches is defined and live_matches %}
+      {% for match in live_matches[:6] %}
+      <div class="terminal-card relative overflow-hidden group cursor-pointer">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-terminal-red opacity-10 rounded-full blur-xl animate-pulse"></div>
+        <div class="p-6 relative z-10">
+          <!-- Match Header -->
+          <div class="flex items-center justify-between mb-4">
+            <div class="terminal-badge terminal-badge-red animate-pulse">🔴 LIVE</div>
+            <div class="text-xs text-terminal-dim-green">Round {{ match.round }}</div>
+          </div>
+
+          <!-- Players -->
+          <div class="space-y-3">
+            <!-- Player 1 -->
+            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30 {% if match.player1_score > match.player2_score %}border border-terminal-green/30{% endif %}">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">
+                  {{ (match.player1_name or 'P1')[:1]|upper }}
+                </div>
+                <div>
+                  <div class="font-bold text-terminal-green text-sm">{{ match.player1_name|default('Contestant 1') }}</div>
+                  <div class="text-xs text-terminal-dim-green">{{ match.player1_score|default(0) }} pts</div>
+                </div>
+              </div>
+              <div class="text-lg font-bold text-terminal-green">{{ match.player1_score|default(0) }}</div>
+            </div>
+
+            <!-- VS Separator -->
+            <div class="text-center">
+              <div class="terminal-badge terminal-badge-yellow text-xs">VS</div>
+            </div>
+
+            <!-- Player 2 -->
+            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30 {% if match.player2_score > match.player1_score %}border border-terminal-green/30{% endif %}">
+              <div class="flex items-center justify-between w-full">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">
+                    {{ (match.player2_name or 'P2')[:1]|upper }}
+                  </div>
+                  <div>
+                    <div class="font-bold text-terminal-green text-sm">{{ match.player2_name|default('Contestant 2') }}</div>
+                    <div class="text-xs text-terminal-dim-green">{{ match.player2_score|default(0) }} pts</div>
+                  </div>
+                </div>
+                <div class="text-lg font-bold text-terminal-green">{{ match.player2_score|default(0) }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Match Progress -->
+          <div class="mt-4">
+            <div class="bg-terminal-black/30 rounded-full h-2 overflow-hidden mb-2">
+              <div class="bg-gradient-to-r from-terminal-red to-terminal-yellow h-full rounded-full transition-all duration-500" style="width: {{ match.progress|default(65) }}%"></div>
+            </div>
+            <div class="flex justify-between text-xs text-terminal-dim-green">
+              <span>{{ match.time_elapsed|default('12:45') }} elapsed</span>
+              <span>{{ match.time_left|default('10:00') }} remaining</span>
+            </div>
+          </div>
+
+          <!-- Watch Button -->
+          <button class="w-full mt-4 py-2 bg-terminal-red text-terminal-white font-bold rounded-lg hover:bg-terminal-red/80 transition-colors">
+            Watch Match
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <!-- Demo Live Matches -->
+      <div class="terminal-card relative overflow-hidden group cursor-pointer">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-terminal-red opacity-10 rounded-full blur-xl animate-pulse"></div>
+        <div class="p-6 relative z-10">
+          <div class="flex items-center justify-between mb-4">
+            <div class="terminal-badge terminal-badge-red animate-pulse">🔴 LIVE</div>
+            <div class="text-xs text-terminal-dim-green">Round 3</div>
+          </div>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30 border border-terminal-green/30">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">A</div>
+                <div>
+                  <div class="font-bold text-terminal-green text-sm">AlphaTrader</div>
+                  <div class="text-xs text-terminal-dim-green">2,450 pts</div>
+                </div>
+              </div>
+              <div class="text-lg font-bold text-terminal-green">2,450</div>
+            </div>
+            <div class="text-center">
+              <div class="terminal-badge terminal-badge-yellow text-xs">VS</div>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30">
+              <div class="flex items-center justify-between w-full">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">B</div>
+                  <div>
+                    <div class="font-bold text-terminal-green text-sm">BetaCreator</div>
+                    <div class="text-xs text-terminal-dim-green">2,380 pts</div>
+                  </div>
+                </div>
+                <div class="text-lg font-bold text-terminal-green">2,380</div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <div class="bg-terminal-black/30 rounded-full h-2 overflow-hidden mb-2">
+              <div class="bg-gradient-to-r from-terminal-red to-terminal-yellow h-full rounded-full transition-all duration-500" style="width: 65%"></div>
+            </div>
+            <div class="flex justify-between text-xs text-terminal-dim-green">
+              <span>12:45 elapsed</span>
+              <span>10:00 remaining</span>
+            </div>
+          </div>
+          <button class="w-full mt-4 py-2 bg-terminal-red text-terminal-white font-bold rounded-lg hover:bg-terminal-red/80 transition-colors">
+            Watch Match
+          </button>
+        </div>
+      </div>
+
+      <div class="terminal-card relative overflow-hidden group cursor-pointer">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-terminal-red opacity-10 rounded-full blur-xl animate-pulse"></div>
+        <div class="p-6 relative z-10">
+          <div class="flex items-center justify-between mb-4">
+            <div class="terminal-badge terminal-badge-red animate-pulse">🔴 LIVE</div>
+            <div class="text-xs text-terminal-dim-green">Round 3</div>
+          </div>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30">
+              <div class="flex items-center justify-between w-full">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">C</div>
+                  <div>
+                    <div class="font-bold text-terminal-green text-sm">CryptoMaster</div>
+                    <div class="text-xs text-terminal-dim-green">1,920 pts</div>
+                  </div>
+                </div>
+                <div class="text-lg font-bold text-terminal-green">1,920</div>
+              </div>
+            </div>
+            <div class="text-center">
+              <div class="terminal-badge terminal-badge-yellow text-xs">VS</div>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30 border border-terminal-green/30">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">D</div>
+                <div>
+                  <div class="font-bold text-terminal-green text-sm">DiamondHands</div>
+                  <div class="text-xs text-terminal-dim-green">2,100 pts</div>
+                </div>
+              </div>
+              <div class="text-lg font-bold text-terminal-green">2,100</div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <div class="bg-terminal-black/30 rounded-full h-2 overflow-hidden mb-2">
+              <div class="bg-gradient-to-r from-terminal-red to-terminal-yellow h-full rounded-full transition-all duration-500" style="width: 45%"></div>
+            </div>
+            <div class="flex justify-between text-xs text-terminal-dim-green">
+              <span>8:30 elapsed</span>
+              <span>15:00 remaining</span>
+            </div>
+          </div>
+          <button class="w-full mt-4 py-2 bg-terminal-red text-terminal-white font-bold rounded-lg hover:bg-terminal-red/80 transition-colors">
+            Watch Match
+          </button>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Tournament Bracket -->
+<section class="mb-8">
+  <div class="text-center mb-6">
+    <h2 class="text-3xl font-bold text-terminal-green mb-2 flex items-center justify-center gap-2">
+      <span class="text-purple-500 animate-pulse">🏆</span>
+      Tournament Bracket
+      <span class="text-blue-500">📊</span>
+    </h2>
+    <p class="text-terminal-dim-green">Follow the path to victory</p>
+  </div>
+
+  <div class="terminal-card relative overflow-hidden">
+    <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-purple opacity-10 rounded-full blur-2xl"></div>
+    <div class="p-6 relative z-10">
+      <!-- Round Labels -->
+      <div class="grid grid-cols-4 gap-8 mb-6">
+        <div class="text-center">
+          <div class="terminal-badge terminal-badge-blue text-sm">Round 1</div>
+          <div class="text-xs text-terminal-dim-green mt-1">128 Players</div>
+        </div>
+        <div class="text-center">
+          <div class="terminal-badge terminal-badge-purple text-sm">Round 2</div>
+          <div class="text-xs text-terminal-dim-green mt-1">64 Players</div>
+        </div>
+        <div class="text-center">
+          <div class="terminal-badge terminal-badge-yellow text-sm">Semi-Finals</div>
+          <div class="text-xs text-terminal-dim-green mt-1">8 Players</div>
+        </div>
+        <div class="text-center">
+          <div class="terminal-badge terminal-badge-red text-sm">Finals</div>
+          <div class="text-xs text-terminal-dim-green mt-1">2 Players</div>
+        </div>
+      </div>
+
+      <!-- Simplified Bracket Visualization -->
+      <div class="space-y-8">
+        <!-- Quarter Finals -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="text-center">
+            <div class="terminal-badge terminal-badge-green text-xs mb-2">Match 1</div>
+            <div class="text-sm text-terminal-green font-bold">AlphaTrader</div>
+            <div class="text-xs text-terminal-dim-green">vs</div>
+            <div class="text-sm text-terminal-green">BetaCreator</div>
+          </div>
+          <div class="text-center">
+            <div class="terminal-badge terminal-badge-green text-xs mb-2">Match 2</div>
+            <div class="text-sm text-terminal-green font-bold">CryptoMaster</div>
+            <div class="text-xs text-terminal-dim-green">vs</div>
+            <div class="text-sm text-terminal-green">DiamondHands</div>
+          </div>
+          <div class="text-center">
+            <div class="terminal-badge terminal-badge-dim text-xs mb-2">Match 3</div>
+            <div class="text-sm text-terminal-dim-green">TBD</div>
+            <div class="text-xs text-terminal-dim-green">vs</div>
+            <div class="text-sm text-terminal-dim-green">TBD</div>
+          </div>
+          <div class="text-center">
+            <div class="terminal-badge terminal-badge-dim text-xs mb-2">Match 4</div>
+            <div class="text-sm text-terminal-dim-green">TBD</div>
+            <div class="text-xs text-terminal-dim-green">vs</div>
+            <div class="text-sm text-terminal-dim-green">TBD</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Prize Pool -->
+<section class="mb-8">
+  <div class="text-center mb-6">
+    <h2 class="text-3xl font-bold text-terminal-green mb-2 flex items-center justify-center gap-2">
+      <span class="text-yellow-500 animate-pulse">💰</span>
+      Prize Pool
+      <span class="text-green-500">🏆</span>
+    </h2>
+    <p class="text-terminal-dim-green">Win amazing rewards and exclusive perks</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- 1st Place -->
+    <div class="terminal-card relative overflow-hidden border-2 border-terminal-yellow">
+      <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-yellow opacity-20 rounded-full blur-2xl animate-pulse"></div>
+      <div class="p-6 relative z-10 text-center">
+        <div class="text-6xl mb-4">🥇</div>
+        <h3 class="text-xl font-bold text-terminal-yellow mb-2">1st Place</h3>
+        <div class="text-3xl font-bold text-terminal-yellow mb-4">${% if current_tournament is defined and current_tournament.first_prize %}{{ current_tournament.first_prize }}{% else %}5,000{% endif %}</div>
+        <div class="space-y-2 text-left">
+          <div class="flex items-center gap-2 text-sm text-terminal-green">
+            <span class="text-yellow-500">✓</span>
+            <span>Champion Badge</span>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-terminal-green">
+            <span class="text-yellow-500">✓</span>
+            <span>Exclusive Profile Theme</span>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-terminal-green">
+            <span class="text-yellow-500">✓</span>
+            <span>5000 Reward Points</span>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-terminal-green">
+            <span class="text-yellow-500">✓</span>
+            <span>Tournament Trophy</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2nd Place -->
+    <div class="terminal-card relative overflow-hidden border-2 border-terminal-gray">
+      <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-gray opacity-20 rounded-full blur-2xl"></div>
+      <div class="p-6 relative z-10 text-center">
+        <div class="text-6xl mb-4">🥈</div>
+        <h3 class="text-xl font-bold text-terminal-gray mb-2">2nd Place</h3>
+        <div class="text-3xl font-bold text-terminal-gray mb-4">${% if current_tournament is defined and current_tournament.second_prize %}{{ current_tournament.second_prize }}{% else %}3,000{% endif %}</div>
+        <div class="space-y-2 text-left">
+          <div class="flex items-center gap-2 text-sm text-terminal-green">
+            <span class="text-gray-500">✓</span>
+            <span>Runner-up Badge</span>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-terminal-green">
+            <span class="text-gray-500">✓</span>
+            <span>3000 Reward Points</span>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-terminal-green">
+            <span class="text-gray-500">✓</span>
+            <span>Special Feature Access</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3rd Place -->
+    <div class="terminal-card relative overflow-hidden border-2 border-terminal-orange">
+      <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-orange opacity-20 rounded-full blur-2xl"></div>
+      <div class="p-6 relative z-10 text-center">
+        <div class="text-6xl mb-4">🥉</div>
+        <h3 class="text-xl font-bold text-terminal-orange mb-2">3rd Place</h3>
+        <div class="text-3xl font-bold text-terminal-orange mb-4">${% if current_tournament is defined and current_tournament.third_prize %}{{ current_tournament.third_prize }}{% else %}2,000{% endif %}</div>
+        <div class="space-y-2 text-left">
+          <div class="flex items-center gap-2 text-sm text-terminal-green">
+            <span class="text-orange-500">✓</span>
+            <span>Bronze Badge</span>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-terminal-green">
+            <span class="text-orange-500">✓</span>
+            <span>2000 Reward Points</span>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-terminal-green">
+            <span class="text-orange-500">✓</span>
+            <span>Tournament Medal</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Upcoming Tournaments -->
+<section class="mb-8">
+  <div class="text-center mb-6">
+    <h2 class="text-3xl font-bold text-terminal-green mb-2 flex items-center justify-center gap-2">
+      <span class="text-blue-500 animate-pulse">📅</span>
+      Upcoming Tournaments
+      <span class="text-purple-500">⚡</span>
+    </h2>
+    <p class="text-terminal-dim-green">Register for future competitions</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <!-- Next Tournament -->
+    <div class="terminal-card relative overflow-hidden group cursor-pointer">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-blue/5 via-terminal-black/50 to-terminal-blue/5"></div>
+      <div class="p-6 relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="terminal-badge terminal-badge-blue">🚀 UPCOMING</div>
+          <div class="text-terminal-blue font-bold text-sm">{% if upcoming_tournament is defined and upcoming_tournament.days_left %}{{ upcoming_tournament.days_left }}{% else %}3{% endif %} days</div>
+        </div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">{% if upcoming_tournament is defined and upcoming_tournament.name %}{{ upcoming_tournament.name }}{% else %}Summer Championship{% endif %}</h3>
+        <p class="text-terminal-dim-green text-sm mb-4">{% if upcoming_tournament is defined and upcoming_tournament.description %}{{ upcoming_tournament.description }}{% else %}The biggest tournament of the season{% endif %}</p>
+
+        <div class="space-y-3 mb-4">
+          <div class="flex justify-between text-sm">
+            <span class="text-terminal-dim-green">Prize Pool:</span>
+            <span class="text-terminal-yellow font-bold">${% if upcoming_tournament is defined and upcoming_tournament.prize_pool %}{{ upcoming_tournament.prize_pool }}{% else %}25,000{% endif %}</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-terminal-dim-green">Start Date:</span>
+            <span class="text-terminal-green">{% if upcoming_tournament is defined and upcoming_tournament.start_date %}{{ upcoming_tournament.start_date }}{% else %}July 15, 2024{% endif %}</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-terminal-dim-green">Registered:</span>
+            <span class="text-terminal-green">{% if upcoming_tournament is defined and upcoming_tournament.registered %}{{ upcoming_tournament.registered }}{% else %}64{% endif %}/256</span>
+          </div>
+        </div>
+
+        <div class="bg-terminal-black/30 rounded-full h-3 overflow-hidden mb-4">
+          <div class="bg-terminal-blue h-full rounded-full transition-all duration-500" style="width: {% if upcoming_tournament is defined and upcoming_tournament.registered %}{{ (upcoming_tournament.registered / 256 * 100)|round(0) }}{% else %}25{% endif %}%"></div>
+        </div>
+
+        <button class="w-full py-2 bg-terminal-blue text-terminal-white font-bold rounded-lg hover:bg-terminal-blue/80 transition-colors">
+          Register Now
+        </button>
+      </div>
+    </div>
+
+    <!-- Registration Open -->
+    <div class="terminal-card relative overflow-hidden group cursor-pointer">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-purple/5 via-terminal-black/50 to-terminal-purple/5"></div>
+      <div class="p-6 relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="terminal-badge terminal-badge-purple animate-pulse">📝 OPEN</div>
+          <div class="text-terminal-purple font-bold text-sm">{% if next_tournament is defined and next_tournament.days_left %}{{ next_tournament.days_left }}{% else %}10{% endif %} days</div>
+        </div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">{% if next_tournament is defined and next_tournament.name %}{{ next_tournament.name }}{% else %}Creator Legends Cup{% endif %}</h3>
+        <p class="text-terminal-dim-green text-sm mb-4">{% if next_tournament is defined and next_tournament.description %}{{ next_tournament.description }}{% else %}Exclusive tournament for top creators{% endif %}</p>
+
+        <div class="space-y-3 mb-4">
+          <div class="flex justify-between text-sm">
+            <span class="text-terminal-dim-green">Prize Pool:</span>
+            <span class="text-terminal-yellow font-bold">${% if next_tournament is defined and next_tournament.prize_pool %}{{ next_tournament.prize_pool }}{% else %}50,000{% endif %}</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-terminal-dim-green">Requirements:</span>
+            <span class="text-terminal-green">Level 10+</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-terminal-dim-green">Format:</span>
+            <span class="text-terminal-green">Invitational</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 text-xs text-terminal-dim-green mb-4">
+          <span class="text-purple-500">✓</span>
+          <span>Elite tournament with special rules</span>
+        </div>
+
+        <button class="w-full py-2 bg-terminal-purple text-terminal-white font-bold rounded-lg hover:bg-terminal-purple/80 transition-colors">
+          Check Eligibility
+        </button>
+      </div>
+    </div>
+
+    <!-- Monthly Tournament -->
+    <div class="terminal-card relative overflow-hidden group cursor-pointer">
+      <div class="absolute inset-0 bg-gradient-to-br from-terminal-green/5 via-terminal-black/50 to-terminal-green/5"></div>
+      <div class="p-6 relative z-10">
+        <div class="flex items-center justify-between mb-4">
+          <div class="terminal-badge terminal-badge-green">📆 MONTHLY</div>
+          <div class="text-terminal-green font-bold text-sm">{% if monthly_tournament is defined and monthly_tournament.days_left %}{{ monthly_tournament.days_left }}{% else %}25{% endif %} days</div>
+        </div>
+        <h3 class="text-lg font-bold text-terminal-green mb-2">{% if monthly_tournament is defined and monthly_tournament.name %}{{ monthly_tournament.name }}{% else %}Monthly Masters{% endif %}</h3>
+        <p class="text-terminal-dim-green text-sm mb-4">{% if monthly_tournament is defined and monthly_tournament.description %}{{ monthly_tournament.description }}{% else %}Regular monthly competition{% endif %}</p>
+
+        <div class="space-y-3 mb-4">
+          <div class="flex justify-between text-sm">
+            <span class="text-terminal-dim-green">Prize Pool:</span>
+            <span class="text-terminal-yellow font-bold">${% if monthly_tournament is defined and monthly_tournament.prize_pool %}{{ monthly_tournament.prize_pool }}{% else %}10,000{% endif %}</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-terminal-dim-green">Start Date:</span>
+            <span class="text-terminal-green">{% if monthly_tournament is defined and monthly_tournament.start_date %}{{ monthly_tournament.start_date }}{% else %}August 1, 2024{% endif %}</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-terminal-dim-green">Max Players:</span>
+            <span class="text-terminal-green">512</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 text-xs text-terminal-dim-green mb-4">
+          <span class="text-green-500">✓</span>
+          <span>Open to all skill levels</span>
+        </div>
+
+        <button class="w-full py-2 bg-terminal-green text-terminal-white font-bold rounded-lg hover:bg-terminal-green/80 transition-colors">
+          Set Reminder
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Tournament Statistics -->
+<section class="mb-8">
+  <div class="text-center mb-6">
+    <h2 class="text-3xl font-bold text-terminal-green mb-2 flex items-center justify-center gap-2">
+      <span class="text-yellow-500 animate-pulse">📊</span>
+      Tournament Stats
+      <span class="text-blue-500">📈</span>
+    </h2>
+    <p class="text-terminal-dim-green">Historical data and records</p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Top Performers -->
+    <div class="terminal-card relative overflow-hidden border-2 border-terminal-yellow">
+      <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-yellow opacity-10 rounded-full blur-2xl animate-pulse"></div>
+      <div class="p-6 relative z-10">
+        <h3 class="text-xl font-bold text-terminal-yellow mb-4 flex items-center gap-2">
+          <span class="animate-bounce">👑</span>
+          Tournament Legends
+        </h3>
+        <div class="space-y-3">
+          {% if tournament_legends is defined and tournament_legends %}
+            {% for legend in tournament_legends[:5] %}
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-terminal-black/30 hover:bg-terminal-black/50 transition-colors">
+              <div class="text-lg font-bold text-terminal-yellow w-8">
+                {% if loop.index0 == 0 %}🥇
+                {% elif loop.index0 == 1 %}🥈
+                {% elif loop.index0 == 2 %}🥉
+                {% else %}#{{ loop.index0 + 1 }}
+                {% endif %}
+              </div>
+              <div class="w-8 h-8 rounded-full border border-terminal-yellow/30 flex items-center justify-center text-terminal-yellow font-bold text-xs">
+                {{ (legend.display_name or legend.npub or 'L')[:1]|upper }}
+              </div>
+              <div class="flex-1">
+                <div class="font-bold text-terminal-green text-sm">{{ legend.display_name or 'Anonymous' }}</div>
+                <div class="text-xs text-terminal-dim-green">{% if legend.wins is defined %}{{ legend.wins }}{% else %}0{% endif %} wins</div>
+              </div>
+              <div class="text-right">
+                <div class="font-bold text-terminal-yellow">${% if legend.total_winnings is defined %}{{ legend.total_winnings }}{% else %}0{% endif %}</div>
+                <div class="text-xs text-terminal-dim-green">Won</div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <!-- Demo legends -->
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-terminal-black/30 hover:bg-terminal-black/50 transition-colors">
+              <div class="text-lg font-bold text-terminal-yellow w-8">🥇</div>
+              <div class="w-8 h-8 rounded-full border border-terminal-yellow/30 flex items-center justify-center text-terminal-yellow font-bold text-xs">T</div>
+              <div class="flex-1">
+                <div class="font-bold text-terminal-green text-sm">TournamentKing</div>
+                <div class="text-xs text-terminal-dim-green">12 wins</div>
+              </div>
+              <div class="text-right">
+                <div class="font-bold text-terminal-yellow">$45,000</div>
+                <div class="text-xs text-terminal-dim-green">Won</div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Records -->
+    <div class="terminal-card relative overflow-hidden border-2 border-terminal-purple">
+      <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-purple opacity-10 rounded-full blur-2xl animate-pulse"></div>
+      <div class="p-6 relative z-10">
+        <h3 class="text-xl font-bold text-terminal-purple mb-4 flex items-center gap-2">
+          <span class="animate-bounce">🏆</span>
+          Tournament Records
+        </h3>
+        <div class="space-y-4">
+          <div class="flex justify-between items-center p-3 rounded-lg bg-terminal-black/30">
+            <div>
+              <div class="font-bold text-terminal-green text-sm">Highest Single Score</div>
+              <div class="text-xs text-terminal-dim-green">TournamentKing - Summer Championship 2024</div>
+            </div>
+            <div class="text-2xl font-bold text-terminal-purple">8,450</div>
+          </div>
+          <div class="flex justify-between items-center p-3 rounded-lg bg-terminal-black/30">
+            <div>
+              <div class="font-bold text-terminal-green text-sm">Most Tournament Wins</div>
+              <div class="text-xs text-terminal-dim-green">TournamentKing</div>
+            </div>
+            <div class="text-2xl font-bold text-terminal-purple">12</div>
+          </div>
+          <div class="flex justify-between items-center p-3 rounded-lg bg-terminal-black/30">
+            <div>
+              <div class="font-bold text-terminal-green text-sm">Largest Prize Pool</div>
+              <div class="text-xs text-terminal-dim-green">World Championship 2024</div>
+            </div>
+            <div class="text-2xl font-bold text-terminal-purple">$100K</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Registration CTA -->
+<section class="mb-8">
+  <div class="terminal-card relative overflow-hidden border-2 border-terminal-green">
+    <div class="absolute top-0 right-0 w-32 h-32 bg-terminal-green opacity-10 rounded-full blur-2xl animate-pulse"></div>
+    <div class="p-8 relative z-10 text-center">
+      <h3 class="text-2xl font-bold text-terminal-green mb-4">Ready to Join the Battle?</h3>
+      <p class="text-terminal-dim-green mb-6 max-w-2xl mx-auto">Register for upcoming tournaments and prove you're the best creator on the platform</p>
+
+      <div class="flex flex-col md:flex-row gap-4 justify-center">
+        <button class="px-8 py-3 bg-terminal-green text-terminal-white font-bold rounded-xl hover:bg-terminal-green/80 transition-colors">
+          Register for Next Tournament
+        </button>
+        <button class="px-8 py-3 bg-terminal-black border border-terminal-green text-terminal-green font-bold rounded-xl hover:bg-terminal-green/10 transition-colors">
+          View Tournament Rules
+        </button>
+      </div>
+
+      <div class="mt-6 flex flex-wrap justify-center gap-6 text-sm text-terminal-dim-green">
+        <div class="flex items-center gap-2">
+          <span class="text-green-500">✓</span>
+          <span>Free to enter</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-green-500">✓</span>
+          <span>Fair matching system</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-green-500">✓</span>
+          <span>Instant prize payouts</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Tournament countdown timer
+  function updateTournamentTimer() {
+    const timerElement = document.getElementById('tournament-timer');
+    if (timerElement) {
+      // Demo countdown logic
+      let timeLeft = timerElement.textContent;
+      // In a real implementation, this would calculate from actual tournament end time
+      console.log('Tournament timer update:', timeLeft);
+    }
+  }
+
+  // Update timer every minute
+  setInterval(updateTournamentTimer, 60000);
+
+  // Add animations for cards
+  const cards = document.querySelectorAll('.terminal-card');
+  cards.forEach((card, index) => {
+    card.style.animationDelay = `${index * 0.1}s`;
+    card.classList.add('animate-fade-in-up');
+  });
+
+  // Add hover effects for match cards
+  const matchCards = document.querySelectorAll('.terminal-card.cursor-pointer');
+  matchCards.forEach(card => {
+    card.addEventListener('mouseenter', function() {
+      this.style.transform = 'translateY(-4px) scale(1.02)';
+    });
+
+    card.addEventListener('mouseleave', function() {
+      this.style.transform = '';
+    });
+  });
+
+  // Add CSS animations
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes fade-in-up {
+      0% {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-fade-in-up {
+      animation: fade-in-up 0.8s ease-out forwards;
+      opacity: 0;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% {
+        box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+      }
+      50% {
+        box-shadow: 0 0 40px rgba(34, 197, 94, 0.6);
+      }
+    }
+
+    .terminal-card.border-terminal-red {
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+  `;
+  document.head.appendChild(style);
+});
+</script>
+{% endblock %}
