@@ -30,8 +30,9 @@
         </div>
         <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52 border border-terminal-green">
           <li><a href="{{ url_for('web.tokens.tokens_list') }}" class="{% if request.endpoint == 'web.tokens.tokens_list' %}text-accent font-bold{% endif %}">Token</a></li>
-          <li><a href="{{ url_for('web.tokens.explore') }}" class="{% if request.endpoint == 'web.tokens.explore' %}text-accent font-bold{% endif %}">Explore</a></li>
-          <li><a href="{{ url_for('web.tokens.launchpad') }}" class="{% if request.endpoint == 'web.tokens.launchpad' %}text-accent font-bold{% endif %}">Launchpad</a></li>
+          <li><a href="{{ url_for('web.creator.creator') }}" class="{% if request.endpoint == 'web.creator.creator' %}text-accent font-bold{% endif %}">Creator</a></li>
+          <li><a href="{{ url_for('web.reward.reward') }}" class="{% if request.endpoint == 'web.reward.reward' %}text-accent font-bold{% endif %}">Reward</a></li>
+          <li><a href="{{ url_for('web.tournament.tournament') }}" class="{% if request.endpoint == 'web.tournament.tournament' %}text-accent font-bold{% endif %}">Tournament</a></li>
         </ul>
       </div>
       <a href="{{ url_for('web.main.home') }}" class="btn btn-ghost text-xl font-bold text-terminal-green hover:text-accent transition-colors">Postfun</a>
@@ -39,8 +40,9 @@
     <div class="navbar-center hidden lg:flex">
       <ul class="menu menu-horizontal px-1">
         <li><a href="{{ url_for('web.tokens.tokens_list') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tokens.tokens_list' %}text-accent font-bold underline{% endif %}">Token</a></li>
-        <li><a href="{{ url_for('web.tokens.explore') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tokens.explore' %}text-accent font-bold underline{% endif %}">Explore</a></li>
-        <li><a href="{{ url_for('web.tokens.launchpad') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tokens.launchpad' %}text-accent font-bold underline{% endif %}">Launchpad</a></li>
+        <li><a href="{{ url_for('web.creator.creator') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.creator.creator' %}text-accent font-bold underline{% endif %}">Creator</a></li>
+        <li><a href="{{ url_for('web.reward.reward') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.reward.reward' %}text-accent font-bold underline{% endif %}">Reward</a></li>
+        <li><a href="{{ url_for('web.tournament.tournament') }}" class="text-terminal-green hover:text-accent hover:underline transition-colors {% if request.endpoint == 'web.tournament.tournament' %}text-accent font-bold underline{% endif %}">Tournament</a></li>
       </ul>
     </div>
     <div class="navbar-end">

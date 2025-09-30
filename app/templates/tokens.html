@@ -1,118 +1,167 @@
 {% extends 'base.html' %}
 {% block title %}Tokens | Postfun{% endblock %}
 {% block content %}
-  <section class="card">
-    <h1>Tokens</h1>
+  <section class="mb-8">
+    <h1 class="text-3xl md:text-4xl font-bold text-terminal-green mb-8">All Tokens</h1>
 
-    <!-- Summary Section -->
-    <div class="stats shadow">
-      <div class="stat place-items-center">
-        <div class="stat-title">Total Tokens</div>
-        <div class="stat-value">{{ total }}</div>
-        <div class="stat-desc">All tokens</div>
+    <!-- Stats Section following home.html design -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto mb-8">
+      <div class="group relative">
+        <div class="absolute inset-0 bg-terminal-green/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        <div class="relative bg-terminal-black/50 backdrop-blur border border-terminal-green/30 rounded-3xl p-8">
+          <div class="text-5xl font-bold text-terminal-green mb-3 group-hover:scale-110 transition-transform">{{ total }}</div>
+          <div class="text-sm text-terminal-dim-green">Total Tokens</div>
+        </div>
       </div>
-      <div class="stat place-items-center">
-        <div class="stat-title">Showing</div>
-        <div class="stat-value">{{ tokens|length }}</div>
-        <div class="stat-desc">Current page</div>
+      <div class="group relative">
+        <div class="absolute inset-0 bg-terminal-green/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        <div class="relative bg-terminal-black/50 backdrop-blur border border-terminal-green/30 rounded-3xl p-8">
+          <div class="text-5xl font-bold text-terminal-green mb-3 group-hover:scale-110 transition-transform">0</div>
+          <div class="text-sm text-terminal-dim-green">24h Volume</div>
+        </div>
       </div>
-      <div class="stat place-items-center">
-        <div class="stat-title">Total Pages</div>
-        <div class="stat-value">{{ pages }}</div>
-        <div class="stat-desc">Available</div>
+      <div class="group relative">
+        <div class="absolute inset-0 bg-terminal-green/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        <div class="relative bg-terminal-black/50 backdrop-blur border border-terminal-green/30 rounded-3xl p-8">
+          <div class="text-5xl font-bold text-terminal-green mb-3 group-hover:scale-110 transition-transform">0</div>
+          <div class="text-sm text-terminal-dim-green">24h Trades</div>
+        </div>
       </div>
-      <div class="stat place-items-center">
-        <div class="stat-title">Current Page</div>
-        <div class="stat-value">{{ page }}</div>
-        <div class="stat-desc">of {{ pages }}</div>
+      <div class="group relative">
+        <div class="absolute inset-0 bg-terminal-green/20 rounded-3xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        <div class="relative bg-terminal-black/50 backdrop-blur border border-terminal-green/30 rounded-3xl p-8">
+          <div class="text-5xl font-bold text-terminal-green mb-3 group-hover:scale-110 transition-transform">0</div>
+          <div class="text-sm text-terminal-dim-green">Creators</div>
+        </div>
       </div>
     </div>
 
-    
+    <!-- Filters Section -->
+    <div class="terminal-card mb-6">
+      <div class="flex flex-col lg:flex-row gap-4 items-center">
+        <div class="flex-1 w-full">
+          <div class="join w-full">
+            <input type="text" placeholder="Search tokens..." class="input input-bordered join-item w-full bg-terminal-black border-terminal-green/50 text-terminal-green placeholder-terminal-dim-green" />
+            <button class="btn btn-active join-item bg-terminal-green text-terminal-black hover:bg-terminal-yellow hover:text-terminal-black">
+              Search
+            </button>
+          </div>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <select class="select select-bordered bg-terminal-black border-terminal-green/50 text-terminal-green">
+            <option>All Categories</option>
+            <option>Gaming</option>
+            <option>Art</option>
+            <option>Music</option>
+            <option>Technology</option>
+          </select>
+          <select class="select select-bordered bg-terminal-black border-terminal-green/50 text-terminal-green">
+            <option>Sort by Market Cap</option>
+            <option>Sort by Volume</option>
+            <option>Sort by Change</option>
+            <option>Sort by Newest</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+  
     <!-- Data Table -->
     <div class="overflow-x-auto">
-      <div class="flex justify-between items-center mb-4 px-4 py-2 bg-base-200 rounded-lg">
-        <span class="text-sm">Showing {{ tokens|length }} of {{ total }} tokens</span>
-        <span class="text-sm">Page {{ page }} of {{ pages }}</span>
+      <div class="flex justify-between items-center mb-4 px-4 py-2 bg-terminal-black/50 border border-terminal-green/30 rounded-lg">
+        <span class="text-sm text-terminal-green">Showing {{ tokens|length }} of {{ total }} tokens</span>
+        <span class="text-sm text-terminal-green">Page {{ page }} of {{ pages }}</span>
       </div>
 
-      <table class="table table-xs">
+      <table class="w-full">
         <thead>
-          <tr>
-            <th></th>
-            <th>Symbol</th>
-            <th>Name</th>
-            <th>Price</th>
-            <th>Market Cap</th>
-            <th>24h Change</th>
-            <th>Chart</th>
-            <th>Actions</th>
+          <tr class="border-b border-terminal-green/30">
+            <th class="text-left py-2 px-3 text-terminal-green font-semibold text-sm">Rank</th>
+            <th class="text-left py-2 px-3 text-terminal-green font-semibold text-sm">Poster</th>
+            <th class="text-left py-2 px-3 text-terminal-green font-semibold text-sm">Minter</th>
+            <th class="text-left py-2 px-3 text-terminal-green font-semibold text-sm">Tweet</th>
+            <th class="text-right py-2 px-3 text-terminal-green font-semibold text-sm">Market Cap</th>
+            <th class="text-right py-2 px-3 text-terminal-green font-semibold text-sm">24h Change</th>
+            <th class="text-center py-2 px-3 text-terminal-green font-semibold text-sm">Chart</th>
           </tr>
         </thead>
         <tbody>
           {% set start_index = ((page - 1) * per) + 1 %}
           {% for token in tokens %}
-            <tr>
-              <th>{{ start_index + loop.index0 }}</th>
-              <td><span class="badge">{{ token.symbol }}</span></td>
-              <td class="pf-token-name">{{ token.name }}</td>
-              <td class="pf-price">${{ '%.4f'|format((price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0)) }}</td>
-              <td class="pf-market-cap">${{ '%.2f'|format(token.market_cap or 0) }}</td>
-              <td class="pf-change {% if token.change_24h and token.change_24h > 0 %}pf-positive{% elif token.change_24h and token.change_24h < 0 %}pf-negative{% endif %}">
-                {{ '%.2f'|format(token.change_24h or 0) }}%
+            <tr class="border-b border-terminal-green/10 hover:bg-terminal-green/5 transition-colors cursor-pointer" onclick="window.location.href='{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}'">
+              <td class="py-2 px-3">
+                <div class="text-lg font-bold text-terminal-green">#{{ start_index + loop.index0 }}</div>
               </td>
-              <td>
-                <div class="pf-spark pf-spark-small" data-symbol="{{ token.symbol }}" data-price="{{ (price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0) }}"></div>
-              </td>
-              <td>
-                <div class="pf-action-buttons">
-                  <a class="retro-button retro-button-small" href="{{ url_for('web.tokens.token_detail', symbol=token.symbol) }}" title="View Details">
-                    Details
-                  </a>
-                  <a class="retro-button retro-button-small" href="{{ url_for('web.trading.pool', symbol=token.symbol) }}" title="View Pool">
-                    Pool
-                  </a>
+              <td class="py-2 px-3">
+                <div class="flex items-center gap-2">
+                  {% if token.creator_profile_image %}
+                    <img src="{{ token.creator_profile_image }}" alt="{{ token.creator_name or 'Creator' }}" class="w-6 h-6 object-cover rounded-full border border-terminal-green/30" />
+                  {% else %}
+                    <div class="w-6 h-6 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-xs">
+                      {{ (token.creator_name or 'Creator')[:1]|upper }}
+                    </div>
+                  {% endif %}
+                  <div class="font-bold text-terminal-green text-sm truncate">{{ token.creator_name or 'Anonymous' }}</div>
                 </div>
+              </td>
+              <td class="py-2 px-3">
+                <div class="text-sm text-terminal-dim-green">{{ token.minter_name or token.creator_name or 'Anonymous' }}</div>
+              </td>
+              <td class="py-2 px-3">
+                {% if token.tweet_content %}
+                  <div class="text-xs text-terminal-dim-green truncate max-w-xs" title="{{ token.tweet_content }}">
+                    "{{ token.tweet_content }}"
+                  </div>
+                {% else %}
+                  <div class="text-xs text-terminal-dim-green">No content</div>
+                {% endif %}
+              </td>
+              <td class="py-2 px-3 text-right">
+                <div class="text-terminal-green text-sm">${{ '%.0f'|format(token.market_cap or 0) }}</div>
+              </td>
+              <td class="py-2 px-3 text-right">
+                {% if token.change_24h and token.change_24h > 0 %}
+                  <div class="text-green-500 font-bold text-sm">+{{ '%.2f'|format(token.change_24h or 0) }}%</div>
+                {% elif token.change_24h and token.change_24h < 0 %}
+                  <div class="text-red-500 font-bold text-sm">{{ '%.2f'|format(token.change_24h or 0) }}%</div>
+                {% else %}
+                  <div class="text-terminal-dim-green text-sm">0.00%</div>
+                {% endif %}
+              </td>
+              <td class="py-2 px-3 text-center">
+                <div class="pf-spark pf-spark-small inline-block" data-symbol="{{ token.symbol }}" data-price="{{ (price_by_symbol.get(token.symbol) if price_by_symbol else None) or (token.price or 0) }}"></div>
               </td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="8" class="pf-no-data">
-                <div class="pf-no-data-content">
-                  <div>No tokens found</div>
-                  <div class="pf-no-data-subtitle">Try adjusting your search criteria</div>
-                </div>
+              <td colspan="7" class="text-center py-8 text-terminal-dim-green">
+                <div class="text-4xl mb-2">🏗️</div>
+                <div>No tokens found</div>
+                <div class="text-sm">Try adjusting your search criteria</div>
               </td>
             </tr>
           {% endfor %}
         </tbody>
-        <tfoot>
-          <tr>
-            <th></th>
-            <th>Symbol</th>
-            <th>Name</th>
-            <th>Price</th>
-            <th>Market Cap</th>
-            <th>24h Change</th>
-            <th>Chart</th>
-            <th>Actions</th>
-          </tr>
-        </tfoot>
       </table>
     </div>
-    <div class="pf-pagination">
-      <div>Page {{ page }} of {{ pages }} ({{ total }} results)</div>
-      <div class="pf-pagination-controls">
+    <!-- Pagination -->
+    <div class="flex justify-between items-center mt-6 px-4 py-3 bg-terminal-black/50 border border-terminal-green/30 rounded-lg">
+      <div class="text-sm text-terminal-green">Page {{ page }} of {{ pages }} ({{ total }} results)</div>
+      <div class="flex gap-2">
         {% set args = request.args.to_dict() %}
         {% if page > 1 %}
           {% set prev_args = args.copy() %}
           {% set _ = prev_args.update({'page': page - 1}) %}
-          <a class="retro-button" href="{{ url_for('web.tokens.tokens_list', **prev_args) }}">Prev</a>
+          <a class="px-4 py-2 bg-terminal-green text-terminal-black font-bold rounded-lg hover:bg-terminal-yellow hover:text-terminal-black transition-colors text-sm" href="{{ url_for('web.tokens.tokens_list', **prev_args) }}">
+            ← Previous
+          </a>
         {% endif %}
         {% if page < pages %}
           {% set next_args = args.copy() %}
           {% set _ = next_args.update({'page': page + 1}) %}
-          <a class="retro-button" href="{{ url_for('web.tokens.tokens_list', **next_args) }}">Next</a>
+          <a class="px-4 py-2 bg-terminal-green text-terminal-black font-bold rounded-lg hover:bg-terminal-yellow hover:text-terminal-black transition-colors text-sm" href="{{ url_for('web.tokens.tokens_list', **next_args) }}">
+            Next →
+          </a>
         {% endif %}
       </div>
     </div>
