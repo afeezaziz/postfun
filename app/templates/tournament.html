@@ -71,174 +71,148 @@
     <p class="text-terminal-dim-green">Watch the battles unfold in real-time</p>
   </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-    {% if live_matches is defined and live_matches %}
-      {% for match in live_matches[:6] %}
-      <div class="terminal-card relative overflow-hidden group cursor-pointer">
-        <div class="absolute top-0 right-0 w-24 h-24 bg-terminal-red opacity-10 rounded-full blur-xl animate-pulse"></div>
-        <div class="p-6 relative z-10">
-          <!-- Match Header -->
-          <div class="flex items-center justify-between mb-4">
-            <div class="terminal-badge terminal-badge-red animate-pulse">🔴 LIVE</div>
-            <div class="text-xs text-terminal-dim-green">Round {{ match.round }}</div>
-          </div>
-
-          <!-- Players -->
-          <div class="space-y-3">
-            <!-- Player 1 -->
-            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30 {% if match.player1_score > match.player2_score %}border border-terminal-green/30{% endif %}">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">
+  <div class="overflow-x-auto">
+    <table class="tournament-table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Round</th>
+          <th>Player 1</th>
+          <th>Player 2</th>
+          <th>Score</th>
+          <th>Progress</th>
+          <th>Time</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if live_matches is defined and live_matches %}
+          {% for match in live_matches[:10] %}
+          <tr class="cursor-pointer hover:bg-terminal-black/30 transition-colors">
+            <td>
+              <div class="terminal-badge terminal-badge-red animate-pulse">🔴 LIVE</div>
+            </td>
+            <td>
+              <div class="text-sm text-terminal-dim-green">{{ match.round|default(3) }}</div>
+            </td>
+            <td>
+              <div class="tournament-player">
+                <div class="tournament-player-avatar">
                   {{ (match.player1_name or 'P1')[:1]|upper }}
                 </div>
-                <div>
-                  <div class="font-bold text-terminal-green text-sm">{{ match.player1_name|default('Contestant 1') }}</div>
-                  <div class="text-xs text-terminal-dim-green">{{ match.player1_score|default(0) }} pts</div>
+                <div class="tournament-player-info">
+                  <div class="tournament-player-name">{{ match.player1_name|default('Contestant 1') }}</div>
+                  <div class="tournament-player-details">{{ match.player1_score|default(0) }} pts</div>
                 </div>
               </div>
-              <div class="text-lg font-bold text-terminal-green">{{ match.player1_score|default(0) }}</div>
-            </div>
-
-            <!-- VS Separator -->
-            <div class="text-center">
-              <div class="terminal-badge terminal-badge-yellow text-xs">VS</div>
-            </div>
-
-            <!-- Player 2 -->
-            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30 {% if match.player2_score > match.player1_score %}border border-terminal-green/30{% endif %}">
-              <div class="flex items-center justify-between w-full">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">
-                    {{ (match.player2_name or 'P2')[:1]|upper }}
-                  </div>
-                  <div>
-                    <div class="font-bold text-terminal-green text-sm">{{ match.player2_name|default('Contestant 2') }}</div>
-                    <div class="text-xs text-terminal-dim-green">{{ match.player2_score|default(0) }} pts</div>
-                  </div>
+            </td>
+            <td>
+              <div class="tournament-player">
+                <div class="tournament-player-avatar">
+                  {{ (match.player2_name or 'P2')[:1]|upper }}
                 </div>
-                <div class="text-lg font-bold text-terminal-green">{{ match.player2_score|default(0) }}</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Match Progress -->
-          <div class="mt-4">
-            <div class="bg-terminal-black/30 rounded-full h-2 overflow-hidden mb-2">
-              <div class="bg-gradient-to-r from-terminal-red to-terminal-yellow h-full rounded-full transition-all duration-500" style="width: {{ match.progress|default(65) }}%"></div>
-            </div>
-            <div class="flex justify-between text-xs text-terminal-dim-green">
-              <span>{{ match.time_elapsed|default('12:45') }} elapsed</span>
-              <span>{{ match.time_left|default('10:00') }} remaining</span>
-            </div>
-          </div>
-
-          <!-- Watch Button -->
-          <button class="w-full mt-4 py-2 bg-terminal-red text-terminal-white font-bold rounded-lg hover:bg-terminal-red/80 transition-colors">
-            Watch Match
-          </button>
-        </div>
-      </div>
-      {% endfor %}
-    {% else %}
-      <!-- Demo Live Matches -->
-      <div class="terminal-card relative overflow-hidden group cursor-pointer">
-        <div class="absolute top-0 right-0 w-24 h-24 bg-terminal-red opacity-10 rounded-full blur-xl animate-pulse"></div>
-        <div class="p-6 relative z-10">
-          <div class="flex items-center justify-between mb-4">
-            <div class="terminal-badge terminal-badge-red animate-pulse">🔴 LIVE</div>
-            <div class="text-xs text-terminal-dim-green">Round 3</div>
-          </div>
-          <div class="space-y-3">
-            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30 border border-terminal-green/30">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">A</div>
-                <div>
-                  <div class="font-bold text-terminal-green text-sm">AlphaTrader</div>
-                  <div class="text-xs text-terminal-dim-green">2,450 pts</div>
+                <div class="tournament-player-info">
+                  <div class="tournament-player-name">{{ match.player2_name|default('Contestant 2') }}</div>
+                  <div class="tournament-player-details">{{ match.player2_score|default(0) }} pts</div>
                 </div>
               </div>
-              <div class="text-lg font-bold text-terminal-green">2,450</div>
-            </div>
-            <div class="text-center">
-              <div class="terminal-badge terminal-badge-yellow text-xs">VS</div>
-            </div>
-            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30">
-              <div class="flex items-center justify-between w-full">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">B</div>
-                  <div>
-                    <div class="font-bold text-terminal-green text-sm">BetaCreator</div>
-                    <div class="text-xs text-terminal-dim-green">2,380 pts</div>
-                  </div>
-                </div>
-                <div class="text-lg font-bold text-terminal-green">2,380</div>
+            </td>
+            <td>
+              <div class="tournament-score {% if match.player1_score > match.player2_score %}tournament-score-winner{% endif %}">
+                {{ match.player1_score|default(0) }} - {{ match.player2_score|default(0) }}
               </div>
-            </div>
-          </div>
-          <div class="mt-4">
-            <div class="bg-terminal-black/30 rounded-full h-2 overflow-hidden mb-2">
-              <div class="bg-gradient-to-r from-terminal-red to-terminal-yellow h-full rounded-full transition-all duration-500" style="width: 65%"></div>
-            </div>
-            <div class="flex justify-between text-xs text-terminal-dim-green">
-              <span>12:45 elapsed</span>
-              <span>10:00 remaining</span>
-            </div>
-          </div>
-          <button class="w-full mt-4 py-2 bg-terminal-red text-terminal-white font-bold rounded-lg hover:bg-terminal-red/80 transition-colors">
-            Watch Match
-          </button>
-        </div>
-      </div>
-
-      <div class="terminal-card relative overflow-hidden group cursor-pointer">
-        <div class="absolute top-0 right-0 w-24 h-24 bg-terminal-red opacity-10 rounded-full blur-xl animate-pulse"></div>
-        <div class="p-6 relative z-10">
-          <div class="flex items-center justify-between mb-4">
-            <div class="terminal-badge terminal-badge-red animate-pulse">🔴 LIVE</div>
-            <div class="text-xs text-terminal-dim-green">Round 3</div>
-          </div>
-          <div class="space-y-3">
-            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30">
-              <div class="flex items-center justify-between w-full">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">C</div>
-                  <div>
-                    <div class="font-bold text-terminal-green text-sm">CryptoMaster</div>
-                    <div class="text-xs text-terminal-dim-green">1,920 pts</div>
-                  </div>
-                </div>
-                <div class="text-lg font-bold text-terminal-green">1,920</div>
+            </td>
+            <td>
+              <div class="tournament-progress">
+                <div class="tournament-progress-fill" style="width: {{ match.progress|default(65) }}%"></div>
               </div>
-            </div>
-            <div class="text-center">
-              <div class="terminal-badge terminal-badge-yellow text-xs">VS</div>
-            </div>
-            <div class="flex items-center justify-between p-3 rounded-lg bg-terminal-black/30 border border-terminal-green/30">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-sm">D</div>
-                <div>
-                  <div class="font-bold text-terminal-green text-sm">DiamondHands</div>
-                  <div class="text-xs text-terminal-dim-green">2,100 pts</div>
+            </td>
+            <td>
+              <div class="text-xs text-terminal-dim-green">
+                <div>{{ match.time_elapsed|default('12:45') }}</div>
+                <div>{{ match.time_left|default('10:00') }}</div>
+              </div>
+            </td>
+            <td>
+              <button class="terminal-badge terminal-badge-red hover:bg-terminal-red/80">Watch</button>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <!-- Demo matches -->
+          <tr class="cursor-pointer hover:bg-terminal-black/30 transition-colors">
+            <td><div class="terminal-badge terminal-badge-red animate-pulse">🔴 LIVE</div></td>
+            <td><div class="text-sm text-terminal-dim-green">3</div></td>
+            <td>
+              <div class="tournament-player">
+                <div class="tournament-player-avatar">A</div>
+                <div class="tournament-player-info">
+                  <div class="tournament-player-name">AlphaTrader</div>
+                  <div class="tournament-player-details">2,450 pts</div>
                 </div>
               </div>
-              <div class="text-lg font-bold text-terminal-green">2,100</div>
-            </div>
-          </div>
-          <div class="mt-4">
-            <div class="bg-terminal-black/30 rounded-full h-2 overflow-hidden mb-2">
-              <div class="bg-gradient-to-r from-terminal-red to-terminal-yellow h-full rounded-full transition-all duration-500" style="width: 45%"></div>
-            </div>
-            <div class="flex justify-between text-xs text-terminal-dim-green">
-              <span>8:30 elapsed</span>
-              <span>15:00 remaining</span>
-            </div>
-          </div>
-          <button class="w-full mt-4 py-2 bg-terminal-red text-terminal-white font-bold rounded-lg hover:bg-terminal-red/80 transition-colors">
-            Watch Match
-          </button>
-        </div>
-      </div>
-    {% endif %}
+            </td>
+            <td>
+              <div class="tournament-player">
+                <div class="tournament-player-avatar">B</div>
+                <div class="tournament-player-info">
+                  <div class="tournament-player-name">BetaCreator</div>
+                  <div class="tournament-player-details">2,380 pts</div>
+                </div>
+              </div>
+            </td>
+            <td><div class="tournament-score tournament-score-winner">2,450 - 2,380</div></td>
+            <td>
+              <div class="tournament-progress">
+                <div class="tournament-progress-fill" style="width: 65%"></div>
+              </div>
+            </td>
+            <td>
+              <div class="text-xs text-terminal-dim-green">
+                <div>12:45</div>
+                <div>10:00</div>
+              </div>
+            </td>
+            <td><button class="terminal-badge terminal-badge-red hover:bg-terminal-red/80">Watch</button></td>
+          </tr>
+          <tr class="cursor-pointer hover:bg-terminal-black/30 transition-colors">
+            <td><div class="terminal-badge terminal-badge-red animate-pulse">🔴 LIVE</div></td>
+            <td><div class="text-sm text-terminal-dim-green">3</div></td>
+            <td>
+              <div class="tournament-player">
+                <div class="tournament-player-avatar">C</div>
+                <div class="tournament-player-info">
+                  <div class="tournament-player-name">CryptoMaster</div>
+                  <div class="tournament-player-details">1,920 pts</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div class="tournament-player">
+                <div class="tournament-player-avatar">D</div>
+                <div class="tournament-player-info">
+                  <div class="tournament-player-name">DiamondHands</div>
+                  <div class="tournament-player-details">2,100 pts</div>
+                </div>
+              </div>
+            </td>
+            <td><div class="tournament-score">1,920 - 2,100</div></td>
+            <td>
+              <div class="tournament-progress">
+                <div class="tournament-progress-fill" style="width: 45%"></div>
+              </div>
+            </td>
+            <td>
+              <div class="text-xs text-terminal-dim-green">
+                <div>8:30</div>
+                <div>15:00</div>
+              </div>
+            </td>
+            <td><button class="terminal-badge terminal-badge-red hover:bg-terminal-red/80">Watch</button></td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
   </div>
 </section>
 
@@ -544,45 +518,95 @@
           <span class="animate-bounce">👑</span>
           Tournament Legends
         </h3>
-        <div class="space-y-3">
-          {% if tournament_legends is defined and tournament_legends %}
-            {% for legend in tournament_legends[:5] %}
-            <div class="flex items-center gap-3 p-3 rounded-lg bg-terminal-black/30 hover:bg-terminal-black/50 transition-colors">
-              <div class="text-lg font-bold text-terminal-yellow w-8">
-                {% if loop.index0 == 0 %}🥇
-                {% elif loop.index0 == 1 %}🥈
-                {% elif loop.index0 == 2 %}🥉
-                {% else %}#{{ loop.index0 + 1 }}
-                {% endif %}
-              </div>
-              <div class="w-8 h-8 rounded-full border border-terminal-yellow/30 flex items-center justify-center text-terminal-yellow font-bold text-xs">
-                {{ (legend.display_name or legend.npub or 'L')[:1]|upper }}
-              </div>
-              <div class="flex-1">
-                <div class="font-bold text-terminal-green text-sm">{{ legend.display_name or 'Anonymous' }}</div>
-                <div class="text-xs text-terminal-dim-green">{% if legend.wins is defined %}{{ legend.wins }}{% else %}0{% endif %} wins</div>
-              </div>
-              <div class="text-right">
-                <div class="font-bold text-terminal-yellow">${% if legend.total_winnings is defined %}{{ legend.total_winnings }}{% else %}0{% endif %}</div>
-                <div class="text-xs text-terminal-dim-green">Won</div>
-              </div>
-            </div>
-            {% endfor %}
-          {% else %}
-            <!-- Demo legends -->
-            <div class="flex items-center gap-3 p-3 rounded-lg bg-terminal-black/30 hover:bg-terminal-black/50 transition-colors">
-              <div class="text-lg font-bold text-terminal-yellow w-8">🥇</div>
-              <div class="w-8 h-8 rounded-full border border-terminal-yellow/30 flex items-center justify-center text-terminal-yellow font-bold text-xs">T</div>
-              <div class="flex-1">
-                <div class="font-bold text-terminal-green text-sm">TournamentKing</div>
-                <div class="text-xs text-terminal-dim-green">12 wins</div>
-              </div>
-              <div class="text-right">
-                <div class="font-bold text-terminal-yellow">$45,000</div>
-                <div class="text-xs text-terminal-dim-green">Won</div>
-              </div>
-            </div>
-          {% endif %}
+        <div class="overflow-x-auto">
+          <table class="tournament-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th class="text-center">Wins</th>
+                <th class="text-right">Total Winnings</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if tournament_legends is defined and tournament_legends %}
+                {% for legend in tournament_legends[:10] %}
+                <tr class="cursor-pointer hover:bg-terminal-black/30 transition-colors">
+                  <td>
+                    <div class="tournament-rank tournament-rank-{% if loop.index0 == 0 %}1{% elif loop.index0 == 1 %}2{% elif loop.index0 == 2 %}3{% else %}default{% endif %}">
+                      {% if loop.index0 == 0 %}🥇
+                      {% elif loop.index0 == 1 %}🥈
+                      {% elif loop.index0 == 2 %}🥉
+                      {% else %}#{{ loop.index0 + 1 }}
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="tournament-player">
+                      <div class="tournament-player-avatar" style="border-color: rgb(234 179 8); color: rgb(234 179 8);">
+                        {{ (legend.display_name or legend.npub or 'L')[:1]|upper }}
+                      </div>
+                      <div class="tournament-player-info">
+                        <div class="tournament-player-name">{{ legend.display_name or 'Anonymous' }}</div>
+                        <div class="tournament-player-details">{{ legend.wins|default(0) }} wins</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="text-center font-bold text-terminal-yellow">{{ legend.wins|default(0) }}</div>
+                  </td>
+                  <td>
+                    <div class="text-right font-bold text-terminal-yellow">${{ legend.total_winnings|default(0) }}</div>
+                  </td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <!-- Demo legends -->
+                <tr class="cursor-pointer hover:bg-terminal-black/30 transition-colors">
+                  <td><div class="tournament-rank tournament-rank-1">🥇</div></td>
+                  <td>
+                    <div class="tournament-player">
+                      <div class="tournament-player-avatar" style="border-color: rgb(234 179 8); color: rgb(234 179 8);">T</div>
+                      <div class="tournament-player-info">
+                        <div class="tournament-player-name">TournamentKing</div>
+                        <div class="tournament-player-details">12 wins</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><div class="text-center font-bold text-terminal-yellow">12</div></td>
+                  <td><div class="text-right font-bold text-terminal-yellow">$45,000</div></td>
+                </tr>
+                <tr class="cursor-pointer hover:bg-terminal-black/30 transition-colors">
+                  <td><div class="tournament-rank tournament-rank-2">🥈</div></td>
+                  <td>
+                    <div class="tournament-player">
+                      <div class="tournament-player-avatar" style="border-color: rgb(156 163 175); color: rgb(156 163 175);">C</div>
+                      <div class="tournament-player-info">
+                        <div class="tournament-player-name">CryptoMaster</div>
+                        <div class="tournament-player-details">8 wins</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><div class="text-center font-bold text-terminal-gray">8</div></td>
+                  <td><div class="text-right font-bold text-terminal-gray">$32,000</div></td>
+                </tr>
+                <tr class="cursor-pointer hover:bg-terminal-black/30 transition-colors">
+                  <td><div class="tournament-rank tournament-rank-3">🥉</div></td>
+                  <td>
+                    <div class="tournament-player">
+                      <div class="tournament-player-avatar" style="border-color: rgb(251 146 60); color: rgb(251 146 60);">D</div>
+                      <div class="tournament-player-info">
+                        <div class="tournament-player-name">DiamondHands</div>
+                        <div class="tournament-player-details">6 wins</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><div class="text-center font-bold text-terminal-orange">6</div></td>
+                  <td><div class="text-right font-bold text-terminal-orange">$28,000</div></td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

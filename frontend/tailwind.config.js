@@ -21,7 +21,11 @@ module.exports = {
           'gray-dark': '#1a1a1a',
           'gray-mid': '#333333',
           red: '#ff0000',
-          'dim-red': '#cc0000'
+          'dim-red': '#cc0000',
+          blue: '#0099ff',
+          purple: '#9933ff',
+          orange: '#ff9900',
+          white: '#ffffff'
         }
       },
       boxShadow: {

@@ -252,4 +252,99 @@
       @apply w-full;
     }
   }
+
+  /* Tournament-specific table styles */
+  .tournament-table {
+    @apply w-full border-collapse;
+  }
+
+  .tournament-table th {
+    @apply text-left py-3 px-4 border-b border-terminal-green/30 text-terminal-green font-semibold text-sm uppercase tracking-wide;
+  }
+
+  .tournament-table td {
+    @apply py-3 px-4 border-b border-terminal-green/10 align-middle;
+  }
+
+  .tournament-table tr:hover {
+    @apply bg-terminal-black/30 transition-colors duration-150;
+  }
+
+  /* Tournament-specific badge variants */
+  .terminal-badge-blue {
+    @apply border-terminal-blue text-terminal-blue bg-terminal-black/20;
+  }
+
+  .terminal-badge-purple {
+    @apply border-terminal-purple text-terminal-purple bg-terminal-black/20;
+  }
+
+  .terminal-badge-yellow {
+    @apply border-terminal-yellow text-terminal-yellow bg-terminal-black/20;
+  }
+
+  .terminal-badge-orange {
+    @apply border-terminal-orange text-terminal-orange bg-terminal-black/20;
+  }
+
+  .terminal-badge-gray {
+    @apply border-terminal-gray text-terminal-gray bg-terminal-black/20;
+  }
+
+  /* Tournament player card styles */
+  .tournament-player {
+    @apply flex items-center gap-3;
+  }
+
+  .tournament-player-avatar {
+    @apply w-8 h-8 rounded-full border border-terminal-green/30 flex items-center justify-center text-terminal-green font-bold text-xs flex-shrink-0;
+  }
+
+  .tournament-player-info {
+    @apply flex-1 min-w-0;
+  }
+
+  .tournament-player-name {
+    @apply font-bold text-terminal-green text-sm truncate;
+  }
+
+  .tournament-player-details {
+    @apply text-xs text-terminal-dim-green;
+  }
+
+  /* Tournament match progress */
+  .tournament-progress {
+    @apply w-full bg-terminal-black/30 rounded-full h-2 overflow-hidden;
+  }
+
+  .tournament-progress-fill {
+    @apply bg-gradient-to-r from-terminal-red to-terminal-yellow h-full rounded-full transition-all duration-500;
+  }
+
+  /* Tournament score display */
+  .tournament-score {
+    @apply text-lg font-bold text-terminal-green;
+  }
+
+  .tournament-score-winner {
+    @apply text-terminal-yellow;
+  }
+
+  /* Rank badges */
+  .tournament-rank {
+    @apply text-lg font-bold;
+  }
+
+  .tournament-rank-1 { @apply text-terminal-yellow; }
+  .tournament-rank-2 { @apply text-terminal-gray; }
+  .tournament-rank-3 { @apply text-terminal-orange; }
+
+  /* Tournament section headers */
+  .tournament-section-header {
+    @apply flex items-center justify-between mb-6;
+  }
+
+  .tournament-section-title {
+    @apply text-2xl font-bold text-terminal-green flex items-center gap-2;
+  }
 }
