@@ -2,6 +2,15 @@
 {% block title %}Wallet | Postfun{% endblock %}
 {% block content %}
   <section class="card">
+    <!-- Debug Info -->
+    <div class="alert alert-info mb-4">
+      <small>
+        <strong>DEBUG:</strong> Page loaded at <span id="debug-time"></span> |
+        Current balance: {{ user.sats // 1000 if user.sats else 0 }} sats |
+        Invoices: {{ lightning_invoices|length }} | Withdrawals: {{ lightning_withdrawals|length }}
+      </small>
+    </div>
+
     <!-- Summary Section -->
     <div class="stats shadow">
       <div class="stat place-items-center">
@@ -21,7 +30,7 @@
       </div>
       <div class="stat place-items-center">
         <div class="stat-title">Balance</div>
-        <div class="stat-value">{{ "{:,}".format((lightning_invoices|selectattr('status', 'equalto', 'paid')|sum(attribute='amount_sats') or 0) - (lightning_withdrawals|selectattr('status', 'equalto', 'confirmed')|sum(attribute='amount_sats') or 0)) }}</div>
+        <div class="stat-value">{{ "{:,}".format(user.sats // 1000 if user.sats else 0) }}</div>
         <div class="stat-desc">Sats</div>
       </div>
     </div>
@@ -33,6 +42,9 @@
       </button>
       <button class="btn btn-lg btn-secondary shadow-lg" onclick="openSendModal()">
         <span class="mr-2">📤</span> Send Lightning
+      </button>
+      <button class="btn btn-lg btn-accent shadow-lg" onclick="checkPendingTransactions()">
+        <span class="mr-2">🔄</span> Refresh Status
       </button>
     </div>
 
@@ -63,7 +75,17 @@
                   <span class="badge badge-success">Invoice</span>
                 </td>
                 <td>
-                  <span class="badge badge-{{ 'success' if invoice.status == 'paid' else 'warning' if invoice.status == 'pending' else 'error' }}">
+                  <span class="badge badge-{{
+                    'success' if invoice.status == 'paid'
+                    else 'warning' if invoice.status == 'pending'
+                    else 'error' if invoice.status == 'expired'
+                    else 'error' if invoice.status == 'failed'
+                    else 'neutral'
+                  }}">
+                    {% if invoice.status == 'paid' %}✅ {% endif %}
+                    {% if invoice.status == 'pending' %}⏳ {% endif %}
+                    {% if invoice.status == 'expired' %}⏰ {% endif %}
+                    {% if invoice.status == 'failed' %}❌ {% endif %}
                     {{ invoice.status|title }}
                   </span>
                 </td>
@@ -95,7 +117,17 @@
                   <span class="badge badge-error">Withdrawal</span>
                 </td>
                 <td>
-                  <span class="badge badge-{{ 'success' if withdrawal.status == 'confirmed' else 'warning' if withdrawal.status == 'pending' else 'error' }}">
+                  <span class="badge badge-{{
+                    'success' if withdrawal.status == 'confirmed'
+                    else 'warning' if withdrawal.status == 'pending'
+                    else 'error' if withdrawal.status == 'expired'
+                    else 'error' if withdrawal.status == 'failed'
+                    else 'neutral'
+                  }}">
+                    {% if withdrawal.status == 'confirmed' %}✅ {% endif %}
+                    {% if withdrawal.status == 'pending' %}⏳ {% endif %}
+                    {% if withdrawal.status == 'expired' %}⏰ {% endif %}
+                    {% if withdrawal.status == 'failed' %}❌ {% endif %}
                     {{ withdrawal.status|title }}
                   </span>
                 </td>
@@ -937,6 +969,17 @@
           }
         }
       });
+
+      // Add page load debug message
+      console.log('[DEBUG] Wallet page loaded at', new Date().toISOString());
+      var userBalance = {{ user.sats // 1000 if user.sats else 0 }};
+      console.log('[DEBUG] User balance displayed:', userBalance, 'sats');
+
+      // Update debug info on page
+      document.getElementById('debug-time').textContent = new Date().toLocaleString();
+
+      // Removed automatic check to prevent infinite refresh loop
+      // Users can manually check by clicking the "🔄 Refresh Status" button
     });
 
     async function sendPayment(event) {
@@ -955,25 +998,16 @@
       setLoading('sendPaymentBtn', true);
 
       try {
-        // Create Nostr authentication event
-        const nostrAuth = await createNostrAuthEvent();
-        if (!nostrAuth) {
-          showError('invoiceError', 'Nostr authentication failed. Please ensure your Nostr wallet is connected.');
-          return;
-        }
+        console.log('Sending withdrawal request (simple approach)...');
 
-        const headers = {
-          'Content-Type': 'application/json',
-          'Authorization': `Nostr ${nostrAuth}`
-        };
+        // Create form data for simple web route
+        const formData = new FormData();
+        formData.append('invoice', invoice);
+        formData.append('amount_sats', parseInt(document.getElementById('sendAmount').value) || 0);
 
-        console.log('Sending payment with Nostr authentication...');
-        const response = await fetch('/api/lightning/withdraw', {
+        const response = await fetch('/users/wallet/withdraw', {
           method: 'POST',
-          headers,
-          body: JSON.stringify({
-            invoice: invoice
-          })
+          body: formData
         });
 
         const result = await response.json();
@@ -1037,6 +1071,16 @@
           document.body.removeChild(notification);
         }, 300);
       }, 3000);
+    }
+
+    async function checkPendingTransactions() {
+      console.log('Refreshing page to check transaction status...');
+      showNotification('🔄 Refreshing transaction status...', 'info');
+
+      // Simple page refresh - backend will automatically check pending transactions
+      setTimeout(() => {
+        location.reload();
+      }, 1000);
     }
 
     async function cancelWithdrawal(withdrawalId) {

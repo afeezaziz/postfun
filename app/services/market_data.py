@@ -8,7 +8,7 @@ from typing import Iterable, Optional, List, Dict
 from datetime import datetime, timedelta
 
 from ..extensions import db
-from ..models import Token, SwapPool, SwapTrade, OHLCCandle
+from ..models import Token, SwapPool, SwapTrade
 
 
 @dataclass

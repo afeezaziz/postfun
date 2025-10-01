@@ -4,10 +4,6 @@ from flask import Blueprint, jsonify, abort, request, g, current_app
 from ..models import (
     Token,
     TokenInfo,
-    WatchlistItem,
-    AlertRule,
-    AlertEvent,
-    AccountBalance,
     LedgerEntry,
     LightningInvoice,
     LightningWithdrawal,
@@ -15,11 +11,7 @@ from ..models import (
     TokenBalance,
     SwapPool,
     SwapTrade,
-    BurnEvent,
-    FeeDistributionRule,
-    FeePayout,
     IdempotencyKey,
-    OHLCCandle,
 )
 from ..extensions import cache, db, limiter, csrf
 from ..utils.jwt_utils import require_auth
@@ -31,9 +23,21 @@ from urllib.parse import urlparse
 from decimal import Decimal
 from ..services.amm import quote_swap, execute_swap
 from sqlalchemy import case, func
-from ..services.reconcile import reconcile_invoices_once, reconcile_withdrawals_once, _get_or_create_balance
+# TODO: _get_or_create_balance uses AccountBalance which has been removed
+# from ..services.reconcile import reconcile_invoices_once, reconcile_withdrawals_once, _get_or_create_balance
 
 api_bp = Blueprint("api", __name__)
+
+
+@api_bp.before_request
+def log_api_request():
+    """Log all API requests for debugging"""
+    from flask import request, current_app
+    if request.endpoint and 'withdraw' in request.endpoint:
+        current_app.logger.info(f"[API DEBUG] Withdraw request: {request.method} {request.path}")
+        # Don't log the full body as it might cause issues with large requests
+        current_app.logger.info(f"[API DEBUG] Content-Type: {request.content_type}")
+        current_app.logger.info(f"[API DEBUG] Content-Length: {request.content_length}")
 
 
 def _validate_nostr_auth(auth_header: str) -> dict | None:
@@ -165,13 +169,14 @@ def _get_user_from_jwt() -> User | None:
     return user
 
 
-def _get_or_create_balance(user_id: int, asset: str = "BTC") -> AccountBalance:
-    bal = AccountBalance.query.filter_by(user_id=user_id, asset=asset).with_for_update().first()
-    if not bal:
-        bal = AccountBalance(user_id=user_id, asset=asset, balance_sats=0)
-        db.session.add(bal)
-        db.session.flush()
-    return bal
+# TODO: AccountBalance has been removed - rewrite using User.sats instead
+# def _get_or_create_balance(user_id: int, asset: str = "BTC") -> AccountBalance:
+#     bal = AccountBalance.query.filter_by(user_id=user_id, asset=asset).with_for_update().first()
+#     if not bal:
+#         bal = AccountBalance(user_id=user_id, asset=asset, balance_sats=0)
+#         db.session.add(bal)
+#         db.session.flush()
+#     return bal
 
 
 def _is_admin(user: User | None) -> bool:
@@ -835,8 +840,10 @@ def lightning_balance():
     user = _get_user_from_jwt()
     if not user:
         return jsonify({"error": "user_not_found"}), 404
-    bal = _get_or_create_balance(user.id)
-    return jsonify(bal.to_dict())
+    # TODO: Rewrite using User.sats instead of AccountBalance
+    # bal = _get_or_create_balance(user.id)
+    # return jsonify(bal.to_dict())
+    return jsonify({"error": "balance_endpoint_disabled_temporarily"}), 503
 
 
 @api_bp.post("/lightning/invoice")
@@ -1043,9 +1050,9 @@ def lightning_invoice_status(invoice_id: str):
             inv.paid_at = datetime.utcnow()
         # If paid and not credited, credit user's balance and write ledger
         if paid and not inv.credited:
-            bal = _get_or_create_balance(user.id)
-            bal.balance_sats = int(bal.balance_sats) + int(inv.amount_sats)
-            db.session.add(bal)
+            # Add to user's sats balance (convert sats to millisats)
+            user.sats += int(inv.amount_sats) * 1000
+            db.session.add(user)
             le = LedgerEntry(
                 user_id=user.id,
                 entry_type="deposit",
@@ -1088,7 +1095,11 @@ def lightning_withdraw():
     bolt11 = data.get("bolt11")
     amount_sats = data.get("amount_sats")  # optional; try to decode if missing
     idem_key = request.headers.get("Idempotency-Key") or data.get("idempotency_key")
+
+    current_app.logger.info(f"[WITHDRAWAL DEBUG] Request data: bolt11_prefix={bolt11[:20] if bolt11 else None}, amount_sats={amount_sats}")
+
     if not isinstance(bolt11, str) or not bolt11:
+        current_app.logger.error(f"[WITHDRAWAL DEBUG] Invalid bolt11: type={type(bolt11)}, value={bolt11}")
         return jsonify({"error": "invalid_bolt11"}), 400
 
     # Try to derive amount if not provided (best-effort)
@@ -1096,20 +1107,31 @@ def lightning_withdraw():
         amount_sats = data.get("amount")
     if amount_sats is None:
         # could call LNbits decode here if available; for now, require client-provided
+        current_app.logger.error("[WITHDRAWAL DEBUG] Amount required but not provided")
         return jsonify({"error": "amount_required"}), 400
     try:
         amount_sats = int(amount_sats)
-    except Exception:
+        current_app.logger.info(f"[WITHDRAWAL DEBUG] Parsed amount_sats: {amount_sats}")
+    except Exception as e:
+        current_app.logger.error(f"[WITHDRAWAL DEBUG] Invalid amount: {amount_sats}, error: {e}")
         return jsonify({"error": "invalid_amount"}), 400
     if amount_sats <= 0:
+        current_app.logger.error(f"[WITHDRAWAL DEBUG] Amount must be positive: {amount_sats}")
         return jsonify({"error": "amount_must_be_positive"}), 400
 
-    max_fee = int(current_app.config.get("LNBITS_MAX_FEE_SATS", 20))
+    # Calculate fee: 0.1% of amount or 10 sats, whichever is HIGHER (maximum)
+    percentage_fee = max(1, int(amount_sats * 0.001))  # 0.1% with minimum of 1 sat
+    max_fee = max(percentage_fee, 10)  # Use the maximum of 0.1% or 10 sats
 
-    # Reserve funds: deduct amount now; add fee later when known; refund on failure
-    bal = _get_or_create_balance(user.id)
-    if bal.balance_sats < amount_sats:
-        return jsonify({"error": "insufficient_funds", "balance_sats": int(bal.balance_sats)}), 400
+    current_app.logger.info(f"[WITHDRAWAL DEBUG] Fee calculation: amount={amount_sats}sats, 0.1%={percentage_fee}sats, max_fee={max_fee}sats")
+
+    # Check balance directly from User.sats column (in millisats)
+    required_millisats = amount_sats * 1000
+
+    if user.sats < required_millisats:
+        available_sats = int(user.sats // 1000)
+        current_app.logger.warning(f"Insufficient funds - User {user.id}: available={available_sats} sats, requested={amount_sats} sats")
+        return jsonify({"error": "insufficient_funds", "balance_sats": available_sats}), 400
 
     # Idempotency pre-insert (acts as a coarse lock)
     idem_row = None
@@ -1127,6 +1149,9 @@ def lightning_withdraw():
                     return jsonify(w0.to_dict())
             return jsonify({"error": "idempotency_in_progress"}), 409
 
+    # Deduct from user's sats balance immediately
+    user.sats -= required_millisats
+
     w = LightningWithdrawal(
         user_id=user.id,
         amount_sats=amount_sats,
@@ -1135,9 +1160,10 @@ def lightning_withdraw():
         provider="lnbits",
     )
     db.session.add(w)
-    # Deduct immediately
-    bal.balance_sats = int(bal.balance_sats) - amount_sats
-    db.session.add(bal)
+    db.session.add(user)
+    db.session.commit()
+
+    # Create ledger entry for tracking (in sats, not millisats)
     le = LedgerEntry(
         user_id=user.id,
         entry_type="withdrawal",
@@ -1150,14 +1176,22 @@ def lightning_withdraw():
 
     # Trigger payment with provider
     try:
+        current_app.logger.info(f"[WITHDRAWAL DEBUG] Attempting to pay invoice: amount_sats={amount_sats}, bolt11_length={len(bolt11)}")
         client = LNBitsClient()
+        current_app.logger.info(f"[WITHDRAWAL DEBUG] LNBits client created, max_fee={max_fee}")
         ok, res = client.pay_invoice(bolt11=bolt11, max_fee_sats=max_fee)
+        current_app.logger.info(f"[WITHDRAWAL DEBUG] LNBits pay_invoice result: ok={ok}, res={res}")
         if not ok:
-            raise RuntimeError(str(res))
+            error_msg = f"LNBits payment failed: {res}"
+            current_app.logger.error(f"[WITHDRAWAL DEBUG] Payment failed: {error_msg}")
+            raise RuntimeError(error_msg)
         w.payment_hash = res.get("payment_hash") or w.payment_hash
         w.checking_id = res.get("checking_id") or w.checking_id
+        w.status = "confirmed"  # Mark as confirmed for WalletService processing
+        w.processed_at = datetime.utcnow()
         db.session.add(w)
         db.session.commit()
+        current_app.logger.info(f"[WITHDRAWAL DEBUG] Withdrawal {w.id} confirmed successfully")
         # Save idempotency reference
         if idem_key:
             try:
@@ -1170,12 +1204,12 @@ def lightning_withdraw():
             except Exception:
                 db.session.rollback()
     except Exception as e:
-        # Refund on failure
-        bal = _get_or_create_balance(user.id)
-        bal.balance_sats = int(bal.balance_sats) + amount_sats
-        db.session.add(bal)
+        # Refund the sats to user's balance and mark withdrawal as failed
+        current_app.logger.error(f"[WITHDRAWAL DEBUG] Exception in payment processing: {type(e).__name__}: {e}")
+        user.sats += required_millisats
         w.status = "failed"
         db.session.add(w)
+        db.session.add(user)
         db.session.add(LedgerEntry(
             user_id=user.id,
             entry_type="adjustment",
@@ -1928,3 +1962,5 @@ def alerts_delete(rule_id: int):
     db.session.delete(r)
     db.session.commit()
     return jsonify({"ok": True})
+
+

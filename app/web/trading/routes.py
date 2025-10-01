@@ -17,10 +17,7 @@ from ...models import (
     SwapPool,
     SwapTrade,
     TokenBalance,
-    WatchlistItem,
     TokenInfo,
-    FeeDistributionRule,
-    FeePayout,
 )
 from ...services.amm import execute_swap, quote_swap
 

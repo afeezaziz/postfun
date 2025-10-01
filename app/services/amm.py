@@ -8,8 +8,7 @@ from flask import current_app
 from sqlalchemy.orm import Session
 
 from ..extensions import db
-from ..models import SwapPool, Token, TokenBalance, SwapTrade, BurnEvent
-from .wallet import WalletService
+from ..models import SwapPool, Token, TokenBalance, SwapTrade
 
 # Increase precision for AMM math
 getcontext().prec = 40
@@ -113,6 +112,9 @@ def quote_swap(pool: SwapPool, side: str, amount_in: Decimal) -> Quote:
 
 
 def _get_or_create_balance(session: Session, user_id: int, token_id: int) -> TokenBalance:
+    # Lazy import to avoid circular dependency
+    from .wallet import WalletService
+
     # Get token to check if it's BTC
     token = session.get(Token, token_id)
     is_btc = token and token.symbol == 'BTC'
@@ -180,6 +182,9 @@ def _maybe_progress_stage_and_burn(session: Session, pool: SwapPool) -> None:
 def execute_swap(session: Session, pool_id: int, user_id: int, side: str, amount_in: Decimal,
                  min_amount_out: Optional[Decimal] = None,
                  max_slippage_bps: Optional[int] = None) -> Tuple[SwapTrade, Quote, SwapPool]:
+    # Lazy import to avoid circular dependency
+    from .wallet import WalletService
+
     # Lock pool row (best-effort; ignored on SQLite)
     pool = session.query(SwapPool).filter_by(id=pool_id).with_for_update().first()
     if not pool:

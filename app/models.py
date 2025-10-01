@@ -13,6 +13,7 @@ class User(db.Model):
     display_name = db.Column(db.String(120), nullable=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     withdraw_frozen = db.Column(db.Boolean, nullable=False, default=False)
+    sats = db.Column(db.BigInteger, nullable=False, default=0)  # Balance in millisats
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
@@ -28,52 +29,8 @@ class User(db.Model):
         }
 
 
-class WatchlistItem(db.Model):
-    __tablename__ = "watchlist_items"
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
-    token_id = db.Column(db.Integer, db.ForeignKey("tokens.id"), nullable=False, index=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    user = db.relationship("User", backref=db.backref("watchlist", lazy="dynamic", cascade="all, delete-orphan"))
-    token = db.relationship("Token")
-
-    __table_args__ = (
-        db.UniqueConstraint("user_id", "token_id", name="uq_watchlist_user_token"),
-    )
 
 
-class AlertRule(db.Model):
-    __tablename__ = "alert_rules"
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
-    token_id = db.Column(db.Integer, db.ForeignKey("tokens.id"), nullable=False, index=True)
-    # condition: 'price_above' or 'price_below'
-    condition = db.Column(db.String(32), nullable=False)
-    threshold = db.Column(db.Numeric(20, 8), nullable=False)
-    active = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    last_triggered_at = db.Column(db.DateTime, nullable=True)
-
-    user = db.relationship("User", backref=db.backref("alert_rules", lazy="dynamic", cascade="all, delete-orphan"))
-    token = db.relationship("Token")
-
-    __table_args__ = (
-        db.UniqueConstraint("user_id", "token_id", "condition", "threshold", name="uq_alert_unique"),
-    )
-
-
-class AlertEvent(db.Model):
-    __tablename__ = "alert_events"
-
-    id = db.Column(db.Integer, primary_key=True)
-    rule_id = db.Column(db.Integer, db.ForeignKey("alert_rules.id"), nullable=False, index=True)
-    triggered_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    price = db.Column(db.Numeric(20, 8), nullable=False)
-
-    rule = db.relationship("AlertRule", backref=db.backref("events", lazy="dynamic", cascade="all, delete-orphan"))
 
 
 class AuditLog(db.Model):
@@ -200,30 +157,6 @@ class TokenInfo(db.Model):
         }
 
 
-class AccountBalance(db.Model):
-    __tablename__ = "account_balances"
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
-    # Single asset for now (BTC on Lightning); keep column for future multi-asset support
-    asset = db.Column(db.String(16), nullable=False, default="BTC")
-    balance_sats = db.Column(db.BigInteger, nullable=False, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    user = db.relationship("User")
-
-    __table_args__ = (
-        db.UniqueConstraint("user_id", "asset", name="uq_balance_user_asset"),
-    )
-
-    def to_dict(self):
-        return {
-            "user_id": self.user_id,
-            "asset": self.asset,
-            "balance_sats": int(self.balance_sats or 0),
-            "updated_at": self.updated_at.isoformat() + "Z",
-        }
 
 
 class LedgerEntry(db.Model):
@@ -239,6 +172,11 @@ class LedgerEntry(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     user = db.relationship("User")
+
+    # Add unique constraint to prevent duplicate ledger entries for the same reference
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'ref_type', 'ref_id', name='uq_ledger_reference'),
+    )
 
 
 class LightningInvoice(db.Model):
@@ -424,109 +362,6 @@ class SwapTrade(db.Model):
         }
 
 
-class OHLCCandle(db.Model):
-    __tablename__ = "ohlc_candles"
-
-    id = db.Column(db.Integer, primary_key=True)
-    token_id = db.Column(db.Integer, db.ForeignKey("tokens.id"), nullable=False, index=True)
-    interval = db.Column(db.String(8), nullable=False)  # '1m' | '5m' | '1h'
-    ts = db.Column(db.DateTime, nullable=False)  # start of bucket in UTC
-    o = db.Column(db.Numeric(20, 8), nullable=False)
-    h = db.Column(db.Numeric(20, 8), nullable=False)
-    l = db.Column(db.Numeric(20, 8), nullable=False)
-    c = db.Column(db.Numeric(20, 8), nullable=False)
-    v = db.Column(db.Numeric(30, 18), nullable=True)  # optional gUSD volume for bucket
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    token = db.relationship("Token")
-
-    __table_args__ = (
-        db.UniqueConstraint("token_id", "interval", "ts", name="uq_ohlc_token_interval_ts"),
-        db.Index('ix_ohlc_token_interval_ts', 'token_id', 'interval', 'ts'),
-    )
-
-
-class BurnEvent(db.Model):
-    __tablename__ = "burn_events"
-
-    id = db.Column(db.Integer, primary_key=True)
-    pool_id = db.Column(db.Integer, db.ForeignKey("swap_pools.id"), nullable=False, index=True)
-    stage = db.Column(db.Integer, nullable=False)
-    token_id = db.Column(db.Integer, db.ForeignKey("tokens.id"), nullable=False)
-    amount = db.Column(db.Numeric(30, 18), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    pool = db.relationship("SwapPool")
-    token = db.relationship("Token")
-
-    __table_args__ = (
-        db.Index('ix_burn_events_created', 'created_at'),
-        db.Index('ix_burn_events_pool_created', 'pool_id', 'created_at'),
-    )
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "pool_id": self.pool_id,
-            "stage": int(self.stage),
-            "token_id": self.token_id,
-            "amount": float(self.amount),
-            "created_at": self.created_at.isoformat() + "Z",
-        }
-
-
-class CreatorFollow(db.Model):
-    __tablename__ = "creator_follows"
-
-    id = db.Column(db.Integer, primary_key=True)
-    follower_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
-    creator_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    follower = db.relationship("User", foreign_keys=[follower_user_id])
-    creator = db.relationship("User", foreign_keys=[creator_user_id])
-
-    __table_args__ = (
-        db.UniqueConstraint("follower_user_id", "creator_user_id", name="uq_creator_follow"),
-    )
-
-
-class FeeDistributionRule(db.Model):
-    __tablename__ = "fee_distribution_rules"
-
-    id = db.Column(db.Integer, primary_key=True)
-    pool_id = db.Column(db.Integer, db.ForeignKey("swap_pools.id"), nullable=False, unique=True, index=True)
-    creator_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
-    minter_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
-    treasury_account = db.Column(db.String(120), nullable=True)
-    bps_creator = db.Column(db.Integer, nullable=False, default=5000)
-    bps_minter = db.Column(db.Integer, nullable=False, default=3000)
-    bps_treasury = db.Column(db.Integer, nullable=False, default=2000)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    pool = db.relationship("SwapPool")
-    creator = db.relationship("User", foreign_keys=[creator_user_id])
-    minter = db.relationship("User", foreign_keys=[minter_user_id])
-
-
-class FeePayout(db.Model):
-    __tablename__ = "fee_payouts"
-
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    pool_id = db.Column(db.Integer, db.ForeignKey("swap_pools.id"), nullable=False, index=True)
-    entity = db.Column(db.String(16), nullable=False)  # 'creator' | 'minter' | 'treasury'
-    asset = db.Column(db.String(1), nullable=False)  # 'A' | 'B'
-    amount = db.Column(db.Numeric(30, 18), nullable=False)
-    note = db.Column(db.String(255), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    pool = db.relationship("SwapPool")
-
-    __table_args__ = (
-        db.Index('ix_fee_payouts_pool_entity_asset_created', 'pool_id', 'entity', 'asset', 'created_at'),
-    )
 
 
 class IdempotencyKey(db.Model):
@@ -695,19 +530,3 @@ class UserTwitterConnection(db.Model):
         }
 
 
-class FeatureFlag(db.Model):
-    __tablename__ = "feature_flags"
-
-    id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(64), unique=True, nullable=False, index=True)
-    value = db.Column(db.String(255), nullable=True)
-    enabled = db.Column(db.Boolean, nullable=False, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    def to_dict(self):
-        return {
-            "key": self.key,
-            "value": self.value,
-            "enabled": bool(self.enabled),
-        }

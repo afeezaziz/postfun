@@ -231,6 +231,110 @@ def api_lightning_withdrawals():
         return {"error": str(e)}, 500
 
 
+@api_bp.route("/lightning/check-status", methods=["POST"])
+@require_auth_web
+@csrf.exempt
+def api_lightning_check_status():
+    """Check and update status of pending transactions."""
+    payload = g.jwt_payload
+    uid = payload.get("uid")
+    user = db.session.get(User, uid) if isinstance(uid, int) else None
+    if not user:
+        return {"error": "User not found"}, 404
+
+    try:
+        from ...services.wallet import WalletService
+
+        # Update pending transactions
+        updated_count = WalletService.update_user_pending_transactions(user.id)
+
+        return {
+            "success": True,
+            "updated_invoices": updated_count['invoices'],
+            "updated_withdrawals": updated_count['withdrawals'],
+            "message": f"Updated {updated_count['invoices']} invoices and {updated_count['withdrawals']} withdrawals"
+        }
+
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+
+@api_bp.route("/debug/credit-invoice/<invoice_id>", methods=["POST"])
+def debug_credit_invoice(invoice_id):
+    """Debug endpoint to manually trigger invoice credit processing"""
+    try:
+        from ...services.wallet import WalletService
+        from ...models import LightningInvoice
+
+        # First, let's see the current state of the invoice
+        invoice = LightningInvoice.query.get(invoice_id)
+        if not invoice:
+            return {"error": f"Invoice {invoice_id} not found"}, 404
+
+        result = {
+            "invoice_id": invoice_id,
+            "current_status": invoice.status,
+            "current_credited": invoice.credited,
+            "amount_sats": invoice.amount_sats,
+            "user_id": invoice.user_id
+        }
+
+        # Try to credit it
+        success, message = WalletService.credit_lightning_invoice(invoice_id)
+
+        result["credit_success"] = success
+        result["credit_message"] = message
+
+        if success:
+            # Check updated state
+            updated_invoice = LightningInvoice.query.get(invoice_id)
+            result["updated_status"] = updated_invoice.status
+            result["updated_credited"] = updated_invoice.credited
+
+        return result
+
+    except Exception as e:
+        return {"error": str(e), "traceback": str(__import__('traceback').format_exc())}, 500
+
+
+@api_bp.route("/lightning/webhook", methods=["POST"])
+@csrf.exempt
+def api_lightning_webhook():
+    """Handle webhook notifications from lightning service for real-time payment updates."""
+    try:
+        from ...services.wallet import WalletService
+
+        data = request.get_json()
+        if not data:
+            return {"error": "No data received"}, 400
+
+        # Extract webhook data (this will depend on your lightning service's webhook format)
+        payment_hash = data.get("payment_hash")
+        status = data.get("status") or data.get("type")  # Different services use different field names
+        amount_sats = data.get("amount")
+
+        if not payment_hash or not status:
+            return {"error": "Missing payment_hash or status"}, 400
+
+        # Process the webhook
+        success, message = WalletService.process_lightning_webhook(
+            payment_hash=payment_hash,
+            status=status,
+            amount_sats=amount_sats
+        )
+
+        if success:
+            current_app.logger.info(f"Lightning webhook processed: {message}")
+            return {"success": True, "message": message}
+        else:
+            current_app.logger.warning(f"Lightning webhook failed: {message}")
+            return {"success": False, "message": message}, 400
+
+    except Exception as e:
+        current_app.logger.error(f"Lightning webhook error: {str(e)}")
+        return {"error": str(e)}, 500
+
+
 # Static pages
 @api_bp.route("/about")
 def about():

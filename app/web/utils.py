@@ -10,10 +10,6 @@ from app.models import (
     TokenInfo,
     SwapPool,
     SwapTrade,
-    WatchlistItem,
-    CreatorFollow,
-    FeeDistributionRule,
-    FeePayout,
 )
 from sqlalchemy import case, func
 
@@ -188,44 +184,11 @@ def cached_stats():
                             volume_24h_gusd += float(t.amount_out)
     else:
         trades_24h = SwapTrade.query.filter(SwapTrade.created_at >= since_24h).count()
-    watchlists_count = WatchlistItem.query.count()
     return {
         "tokens": int(tokens_count or 0),
         "pools": int(pools_count or 0),
         "creators": int(creators_count or 0),
         "trades_24h": int(trades_24h or 0),
         "volume_24h": float(volume_24h_gusd or 0.0),
-        "watchlists": int(watchlists_count or 0),
     }
 
-
-@cache.memoize(timeout=5)
-def fee_summary_for_pool_cached(pool_id: int):
-    from decimal import Decimal as _D
-    pool = db.session.get(SwapPool, pool_id)
-    if not pool:
-        return None
-    rule = FeeDistributionRule.query.filter_by(pool_id=pool.id).first()
-    bps_c = int(rule.bps_creator if rule else 5000)
-    bps_m = int(rule.bps_minter if rule else 3000)
-    bps_t = int(rule.bps_treasury if rule else 2000)
-    fa = _D(pool.fee_accum_a or 0)
-    fb = _D(pool.fee_accum_b or 0)
-    def _allocs(bps: int):
-        return {"A": (fa * _D(bps) / _D(10000)), "B": (fb * _D(bps) / _D(10000))}
-    def _paid(entity: str):
-        rows = FeePayout.query.filter_by(pool_id=pool.id, entity=entity).all()
-        totA = _D("0"); totB = _D("0")
-        for p in rows:
-            if p.asset == "A": totA += _D(p.amount or 0)
-            elif p.asset == "B": totB += _D(p.amount or 0)
-        return {"A": totA, "B": totB}
-    summary = {}
-    for ent, bps in (("creator", bps_c), ("minter", bps_m), ("treasury", bps_t)):
-        a = _allocs(bps); p = _paid(ent)
-        summary[ent] = {
-            "alloc": {"A": float(a["A"]), "B": float(a["B"])},
-            "paid": {"A": float(p["A"]), "B": float(p["B"])},
-            "pending": {"A": float(max(_D("0"), a["A"] - p["A"])), "B": float(max(_D("0"), a["B"] - p["B"]))},
-        }
-    return summary

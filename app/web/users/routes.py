@@ -24,9 +24,6 @@ from ...models import (
     SwapTrade,
     SwapPool,
     TokenBalance,
-    CreatorFollow,
-    FeeDistributionRule,
-    FeePayout,
     TwitterUser,
     UserTwitterConnection,
     LightningInvoice,
@@ -317,14 +314,105 @@ def creator_unfollow(user_id: int):
 @users_bp.route("/wallet")
 @require_auth_web
 def wallet():
+    print(f"[DEBUG] Wallet route called at {datetime.utcnow()}")
     payload = g.jwt_payload
     uid = payload.get("uid")
     user = db.session.get(User, uid) if isinstance(uid, int) else None
     if not user:
+        print(f"[DEBUG] User {uid} not found, redirecting to home")
         return redirect(url_for("web.main.home"))
 
+    print(f"[DEBUG] NEW CODE VERSION - Found user {user.id}, processing invoices directly")
     # Use WalletService for integrated balance management
     from app.services.wallet import WalletService
+
+    try:
+        # Simple approach: Check for paid but uncredited invoices and credit them directly
+        from app.models import LightningInvoice, LedgerEntry
+        print(f"[DEBUG] CHECKING FOR PAID INVOICES - user {user.id}")
+
+        # Find paid invoices that haven't been credited yet, with additional safeguards
+        paid_invoices = LightningInvoice.query.filter_by(
+            user_id=user.id,
+            status='paid',
+            credited=False
+        ).all()
+
+        print(f"[DEBUG] Found {len(paid_invoices)} paid but uncredited invoices")
+
+        for invoice in paid_invoices:
+            print(f"[DEBUG] Processing invoice {invoice.id} - amount: {invoice.amount_sats}")
+
+            # Double-check invoice hasn't been processed and no ledger entry exists
+            if invoice.credited:
+                print(f"[DEBUG] Invoice {invoice.id} already credited, skipping")
+                continue
+
+            # Check if ledger entry already exists for this invoice
+            existing_ledger = LedgerEntry.query.filter_by(
+                user_id=user.id,
+                ref_type='invoice',
+                ref_id=invoice.id
+            ).first()
+
+            if existing_ledger:
+                print(f"[DEBUG] Ledger entry already exists for invoice {invoice.id}, marking as credited and skipping")
+                invoice.credited = True
+                db.session.add(invoice)
+                continue
+
+            try:
+                # Use database transaction with FOR UPDATE to prevent race conditions
+                # Lock the invoice row to prevent concurrent processing
+                locked_invoice = LightningInvoice.query.filter_by(
+                    id=invoice.id,
+                    user_id=user.id,
+                    status='paid',
+                    credited=False
+                ).with_for_update().first()
+
+                if not locked_invoice:
+                    print(f"[DEBUG] Invoice {invoice.id} was already processed by another transaction, skipping")
+                    continue
+
+                # Simple direct credit logic
+                user.sats += int(invoice.amount_sats) * 1000  # Convert sats to millisats
+                invoice.credited = True
+
+                # Create ledger entry
+                ledger = LedgerEntry(
+                    user_id=user.id,
+                    entry_type='deposit',
+                    delta_sats=invoice.amount_sats,
+                    ref_type='invoice',
+                    ref_id=invoice.id,
+                    meta=f'Lightning deposit: {invoice.amount_sats} sats'
+                )
+                db.session.add(ledger)
+
+                print(f"[DEBUG] Credited {invoice.amount_sats} sats to user {user.id}. New balance: {user.sats}")
+
+            except Exception as credit_error:
+                print(f"[DEBUG] Error crediting invoice {invoice.id}: {credit_error}")
+                db.session.rollback()
+                continue
+
+        # Commit all changes
+        db.session.commit()
+
+        # Update BTC token balance as well
+        try:
+            WalletService.update_user_btc_token_balance(user.id)
+        except Exception as btc_error:
+            print(f"[DEBUG] Error updating BTC token balance: {btc_error}")
+
+    except Exception as e:
+        print(f"[DEBUG] ERROR in invoice processing: {str(e)}")
+        import traceback
+        print(f"[DEBUG] Traceback: {traceback.format_exc()}")
+        db.session.rollback()
+        # Continue without crashing the page
+
     wallet_summary = WalletService.get_wallet_summary(user.id)
 
     # Get user's token balances (excluding BTC which is handled by WalletService)
@@ -383,6 +471,122 @@ def wallet():
         meta_description="Your wallet balances and activity on Postfun.",
         meta_url=url_for("web.users.wallet", _external=True),
     )
+
+
+# Simple withdrawal route (like deposit approach)
+@users_bp.route("/wallet/withdraw", methods=["POST"])
+@require_auth_web
+def simple_withdraw():
+    """Simple withdrawal without complex Nostr authentication"""
+    print(f"[WITHDRAWAL DEBUG] Simple withdrawal called at {datetime.utcnow()}")
+
+    payload = g.jwt_payload
+    uid = payload.get("uid")
+    user = db.session.get(User, uid) if isinstance(uid, int) else None
+
+    if not user:
+        print(f"[WITHDRAWAL DEBUG] User {uid} not found")
+        return jsonify({"error": "user_not_found"}), 404
+
+    try:
+        # Get form data
+        bolt11 = request.form.get("invoice", "").strip()
+        amount_sats = request.form.get("amount_sats", "").strip()
+
+        print(f"[WITHDRAWAL DEBUG] Request: bolt11_prefix={bolt11[:20] if bolt11 else None}, amount_sats={amount_sats}")
+
+        if not bolt11:
+            print(f"[WITHDRAWAL DEBUG] Missing bolt11 invoice")
+            return jsonify({"error": "invoice_required"}), 400
+
+        if not amount_sats:
+            print(f"[WITHDRAWAL DEBUG] Missing amount")
+            return jsonify({"error": "amount_required"}), 400
+
+        try:
+            amount_sats = int(amount_sats)
+        except ValueError:
+            print(f"[WITHDRAWAL DEBUG] Invalid amount: {amount_sats}")
+            return jsonify({"error": "invalid_amount"}), 400
+
+        if amount_sats <= 0:
+            print(f"[WITHDRAWAL DEBUG] Amount must be positive: {amount_sats}")
+            return jsonify({"error": "amount_must_be_positive"}), 400
+
+        # Calculate fee: 0.1% of amount or 10 sats, whichever is HIGHER
+        percentage_fee = max(1, int(amount_sats * 0.001))  # 0.1% with minimum of 1 sat
+        max_fee = max(percentage_fee, 10)  # Use the maximum of 0.1% or 10 sats
+
+        print(f"[WITHDRAWAL DEBUG] Fee calculation: amount={amount_sats}sats, 0.1%={percentage_fee}sats, max_fee={max_fee}sats")
+
+        # Check balance
+        required_millisats = amount_sats * 1000
+
+        if user.sats < required_millisats:
+            available_sats = int(user.sats // 1000)
+            print(f"[WITHDRAWAL DEBUG] Insufficient funds - User {user.id}: available={available_sats} sats, requested={amount_sats} sats")
+            return jsonify({"error": "insufficient_funds", "balance_sats": available_sats}), 400
+
+        # Simple LNBits withdrawal
+        print(f"[WITHDRAWAL DEBUG] Attempting LNBits payment...")
+        from app.services.lightning import LNBitsClient
+
+        client = LNBitsClient()
+        ok, res = client.pay_invoice(bolt11=bolt11, max_fee_sats=max_fee)
+
+        print(f"[WITHDRAWAL DEBUG] LNBits result: ok={ok}, res={res}")
+
+        if not ok:
+            error_msg = f"LNBits payment failed: {res}"
+            print(f"[WITHDRAWAL DEBUG] Payment failed: {error_msg}")
+            return jsonify({"error": "withdraw_failed", "detail": str(res)}), 502
+
+        # Deduct from user balance
+        user.sats -= required_millisats
+
+        # Create withdrawal record
+        withdrawal = LightningWithdrawal(
+            user_id=user.id,
+            amount_sats=amount_sats,
+            bolt11=bolt11,
+            status="confirmed",
+            provider="lnbits",
+            payment_hash=res.get("payment_hash"),
+            checking_id=res.get("checking_id"),
+            processed_at=datetime.utcnow()
+        )
+
+        # Create ledger entry
+        ledger = LedgerEntry(
+            user_id=user.id,
+            entry_type="withdrawal",
+            delta_sats=-amount_sats,
+            ref_type="withdrawal",
+            ref_id=withdrawal.id,
+            meta=f"Lightning withdrawal: {amount_sats} sats"
+        )
+
+        db.session.add(withdrawal)
+        db.session.add(ledger)
+        db.session.add(user)
+        db.session.commit()
+
+        print(f"[WITHDRAWAL DEBUG] Withdrawal successful: {withdrawal.id}")
+
+        return jsonify({
+            "success": True,
+            "withdrawal_id": withdrawal.id,
+            "amount_sats": amount_sats,
+            "payment_hash": withdrawal.payment_hash,
+            "status": withdrawal.status
+        })
+
+    except Exception as e:
+        print(f"[WITHDRAWAL DEBUG] Exception: {type(e).__name__}: {e}")
+        import traceback
+        print(f"[WITHDRAWAL DEBUG] Traceback: {traceback.format_exc()}")
+        db.session.rollback()
+        return jsonify({"error": "withdraw_failed", "detail": str(e)}), 500
 
 
 # Dashboard route

@@ -14,11 +14,6 @@ from ...models import (
     TokenInfo,
     SwapPool,
     SwapTrade,
-    OHLCCandle,
-    CreatorFollow,
-    FeeDistributionRule,
-    FeePayout,
-    BurnEvent,
 )
 from sqlalchemy import case, exists, or_, func
 

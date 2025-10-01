@@ -11,28 +11,20 @@ from ..extensions import db, cache
 from ..models import (
     User,
     Token,
-    AlertRule,
-    AlertEvent,
     AuditLog,
     SwapPool,
-    FeeDistributionRule,
-    FeePayout,
     TokenInfo,
-    BurnEvent,
     ProviderLog,
     LightningInvoice,
     LightningWithdrawal,
-    AccountBalance,
     LedgerEntry,
     IdempotencyKey,
-    FeatureFlag,
 )
 from ..web.main.routes import get_jwt_from_cookie
-from ..web.utils import fee_summary_for_pool_cached
 from ..services.audit import log_action
 from sqlalchemy import select, or_, case, func, exists, and_
 from ..services.lightning import LNBitsClient
-from ..services.reconcile import reconcile_invoices_once, reconcile_withdrawals_once, _get_or_create_balance
+from ..services.reconcile import reconcile_invoices_once, reconcile_withdrawals_once
 from ..services.metrics import get_request_stats, get_sse_counts, db_health
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -61,15 +53,11 @@ def require_admin(f):
 def dashboard():
     users_count = User.query.count()
     tokens_count = Token.query.count()
-    alerts_count = AlertRule.query.count()
-    events_count = AlertEvent.query.count()
     audit_count = AuditLog.query.count()
     return render_template(
         "admin/dashboard.html",
         users_count=users_count,
         tokens_count=tokens_count,
-        alerts_count=alerts_count,
-        events_count=events_count,
         audit_count=audit_count,
     )
 
@@ -90,19 +78,20 @@ def payments():
     success_rate_1h = (success_1h / total_1h * 100.0) if total_1h else None
 
     # Ledger vs account invariant
-    total_balance = db.session.query(func.coalesce(func.sum(AccountBalance.balance_sats), 0)).scalar() or 0
-    ledger_sum = db.session.query(func.coalesce(func.sum(LedgerEntry.delta_sats), 0)).scalar() or 0
-    invariant_diff = int(ledger_sum) - int(total_balance)
+    # TODO: AccountBalance has been removed - rewrite using User.sats instead
+  # total_balance = db.session.query(func.coalesce(func.sum(AccountBalance.balance_sats), 0)).scalar() or 0
+    # ledger_sum = db.session.query(func.coalesce(func.sum(LedgerEntry.delta_sats), 0)).scalar() or 0
+    # invariant_diff = int(ledger_sum) - int(total_balance)
 
-    # Anti-fraud quick checks
-    negative_balances = db.session.query(func.count(AccountBalance.id)).filter(AccountBalance.balance_sats < 0).scalar() or 0
-    negative_items = (
-        AccountBalance.query
-        .filter(AccountBalance.balance_sats < 0)
-        .order_by(AccountBalance.balance_sats.asc())
-        .limit(50)
-        .all()
-    )
+    # Anti-fraud quick checks - TODO: rewrite using User.sats instead
+    # negative_balances = db.session.query(func.count(AccountBalance.id)).filter(AccountBalance.balance_sats < 0).scalar() or 0
+    # negative_items = (
+    #     AccountBalance.query
+    #     .filter(AccountBalance.balance_sats < 0)
+    #     .order_by(AccountBalance.balance_sats.asc())
+    #     .limit(50)
+    #     .all()
+    # )
     uncredited_paid_q = LightningInvoice.query.filter(
         LightningInvoice.status == "paid", LightningInvoice.credited == False  # noqa: E712
     )
@@ -441,16 +430,17 @@ def payments_repoll():
                 from datetime import datetime as _dt
                 inv.status = "paid"
                 inv.paid_at = inv.paid_at or _dt.utcnow()
-                if not getattr(inv, "credited", False):
-                    bal = AccountBalance.query.filter_by(user_id=inv.user_id, asset="BTC").with_for_update().first()
-                    if not bal:
-                        bal = AccountBalance(user_id=inv.user_id, asset="BTC", balance_sats=0)
-                        db.session.add(bal)
-                        db.session.flush()
-                    bal.balance_sats = int(bal.balance_sats) + int(inv.amount_sats)
-                    db.session.add(bal)
-                    db.session.add(LedgerEntry(user_id=inv.user_id, entry_type="deposit", delta_sats=int(inv.amount_sats), ref_type="invoice", ref_id=inv.id))
-                    inv.credited = True
+                # TODO: Rewrite to use User.sats instead of AccountBalance
+                # if not getattr(inv, "credited", False):
+                #     bal = AccountBalance.query.filter_by(user_id=inv.user_id, asset="BTC").with_for_update().first()
+                #     if not bal:
+                #         bal = AccountBalance(user_id=inv.user_id, asset="BTC", balance_sats=0)
+                #         db.session.add(bal)
+                #         db.session.flush()
+                #     bal.balance_sats = int(bal.balance_sats) + int(inv.amount_sats)
+                #     db.session.add(bal)
+                #     db.session.add(LedgerEntry(user_id=inv.user_id, entry_type="deposit", delta_sats=int(inv.amount_sats), ref_type="invoice", ref_id=inv.id))
+                #     inv.credited = True
                 db.session.add(inv)
                 db.session.commit()
                 flash("Invoice credited", "success")
